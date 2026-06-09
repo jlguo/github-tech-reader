@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ repo.name }} — 迭代与技术演进分析报告</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<script>
+mermaid.initialize({
+  startOnLoad: true,
+  theme: 'neutral',
+  useMaxWidth: false,
+  securityLevel: 'loose',
+  suppressErrorRendering: false,
+});
+mermaid.parseError = function(err, hash) {
+  var el = document.querySelector('[data-mermaid-hash="' + hash + '"]');
+  if (el) {
+    el.style.border = '2px dashed #ef4444';
+    el.style.padding = '16px';
+    el.innerHTML = '<span style="color:#ef4444;font-size:12px;font-family:monospace;">⚠ Mermaid 语法错误: ' + (err.message || err).replace(/</g,'&lt;') + '</span>';
+  }
+};</script>
+<style>
+/* =============================================
+   CSS Variables — Design Tokens
+   ============================================= */
+:root {
+  --bg: #f9fafb;
+  --card: #ffffff;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --text: #111827;
+  --text-secondary: #4b5563;
+  --text-muted: #6b7280;
+  --text-subtle: #9ca3af;
+  --border: #e5e7eb;
+  --border-light: #f3f4f6;
+  --blue-bg: rgba(37, 99, 235, 0.1);
+  --green-bg: rgba(16, 185, 129, 0.1);
+  --orange-bg: rgba(245, 158, 11, 0.1);
+  --green: #059669;
+  --orange: #d97706;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+/* =============================================
+   Reset & Base
+   ============================================= */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; font-size: 16px; }
+body {
+  font-family: 'Noto Sans SC', 'Inter', -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* =============================================
+   Layout Container
+   ============================================= */
+.container {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 32px;
+}
+
+/* =============================================
+   Page Header — Sticky White
+   ============================================= */
+.page-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: #ffffff;
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  padding: 24px 32px;
+}
+.page-header .header-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+}
+.page-header .header-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.page-header .github-icon {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  fill: #24292f;
+}
+.page-header h1 {
+  font-family: 'Noto Sans SC', 'Inter', -apple-system, sans-serif;
+  font-size: 24px;
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1.3;
+}
+.page-header .meta-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.page-header .repo-url {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  color: var(--text-muted);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 0.15s;
+}
+.page-header .repo-url:hover {
+  color: var(--primary);
+}
+.page-header .meta-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 14px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.page-header .meta-item svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.page-header .repo-desc {
+  font-size: 14px;
+  color: var(--text-muted);
+  max-width: 900px;
+  line-height: 1.7;
+}
+.page-header .meta-stats {
+  font-size: 13px;
+  color: var(--text-subtle);
+  margin-top: 4px;
+}
+
+/* =============================================
+   Page Body — Sidebar + Content Layout
+   ============================================= */
+.page-body {
+  display: flex;
+  min-height: calc(100vh - 200px);
+}
+
+/* =============================================
+   Timeline Sidebar — Vertical Left Column
+   ============================================= */
+.timeline-sidebar {
+  width: 220px;
+  min-width: 220px;
+  background: var(--card);
+  border-right: 1px solid var(--border);
+  padding: 24px 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  z-index: 50;
+}
+.timeline-sidebar .sidebar-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 0 0 16px 0;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+}
+.timeline-sidebar .sidebar-track {
+  padding: 8px 0;
+}
+.timeline-node {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+  border-left: 3px solid transparent;
+  transition: all 0.2s;
+  position: relative;
+}
+.timeline-node:hover {
+  background: #f8fafc;
+  border-left-color: #d1d5db;
+}
+.timeline-node.active {
+  background: #eff6ff;
+  border-left-color: var(--primary);
+}
+.timeline-node .node-circle {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #d1d5db;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+.timeline-node:hover .node-circle {
+  background: #60a5fa;
+}
+.timeline-node.active .node-circle {
+  background: var(--primary);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.2);
+}
+.timeline-node .node-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.timeline-node .node-version {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.timeline-node.active .node-version {
+  color: var(--primary);
+}
+.timeline-node .node-date {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* =============================================
+   Content Area — Right Main Column
+   ============================================= */
+.content-area {
+  flex: 1;
+  padding: 32px 40px 60px;
+  min-width: 0;
+}
+.content-area > * + *,
+.content-area .spacer + * {
+  margin-top: 32px;
+}
+
+/* =============================================
+   Timeline Card
+   ============================================= */
+.timeline-section {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 32px;
+  box-shadow: var(--shadow-sm);
+}
+.timeline-section .section-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 24px;
+}
+.timeline-track {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  position: relative;
+  padding: 16px 0 0;
+}
+.timeline-track::before {
+  content: '';
+  position: absolute;
+  top: 40px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--border);
+  border-radius: 1px;
+}
+.timeline-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  position: relative;
+  z-index: 2;
+  text-decoration: none;
+  color: inherit;
+  transition: transform 0.2s;
+  min-width: 80px;
+}
+.timeline-node:hover {
+  transform: translateY(-2px);
+}
+.timeline-node .node-circle {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--card);
+  border: 2px solid #d1d5db;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  margin-bottom: 12px;
+}
+.timeline-node:hover .node-circle {
+  border-color: #60a5fa;
+  transform: scale(1.05);
+}
+.timeline-node .node-circle .inner-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #9ca3af;
+  transition: background 0.2s;
+}
+.timeline-node:hover .node-circle .inner-dot {
+  background: var(--primary);
+}
+/* Active timeline node */
+.timeline-node.active .node-circle {
+  background: var(--primary);
+  border-color: var(--primary);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+  transform: scale(1.1);
+}
+.timeline-node.active .node-circle .inner-dot {
+  background: #ffffff;
+}
+.timeline-node .node-version {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  margin-bottom: 2px;
+  transition: color 0.2s;
+}
+.timeline-node.active .node-version {
+  color: var(--primary);
+}
+.timeline-node .node-date {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* =============================================
+   Iteration Card
+   ============================================= */
+.iteration-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+.iteration-card + .iteration-card {
+  margin-top: 24px;
+}
+
+/* Card Header */
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+}
+.card-header:hover {
+  background: rgba(249, 250, 251, 0.5);
+}
+.card-header .card-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.card-header .title-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--primary);
+  flex-shrink: 0;
+}
+.card-header h3 {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text);
+}
+.card-header .badge {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 12px;
+  border-radius: 16px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+.badge-architecture {
+  background: var(--blue-bg);
+  color: var(--primary);
+  border-color: rgba(37, 99, 235, 0.2);
+}
+.badge-performance {
+  background: var(--green-bg);
+  color: var(--green);
+  border-color: rgba(16, 185, 129, 0.2);
+}
+.badge-feature {
+  background: var(--orange-bg);
+  color: var(--orange);
+  border-color: rgba(245, 158, 11, 0.2);
+}
+.badge-breaking {
+  background: rgba(239, 68, 68, 0.08);
+  color: #dc2626;
+  border-color: rgba(239, 68, 68, 0.2);
+}
+.badge-dependency {
+  background: rgba(139, 92, 246, 0.08);
+  color: #7c3aed;
+  border-color: rgba(139, 92, 246, 0.2);
+}
+/* Default fallback badge */
+.badge {
+  background: rgba(107, 114, 128, 0.08);
+  color: var(--text-muted);
+  border-color: rgba(107, 114, 128, 0.15);
+}
+.card-header .card-date {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-left: 8px;
+}
+
+/* Card Toggle (Chevron) */
+.card-toggle {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s;
+  padding: 4px;
+}
+.card-toggle:hover {
+  background: var(--border-light);
+}
+.card-toggle .arrow {
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid var(--text-muted);
+  border-bottom: 2px solid var(--text-muted);
+  transform: rotate(45deg);
+  transition: transform 0.25s;
+  margin-top: -3px;
+}
+.iteration-card.expanded .card-toggle .arrow {
+  transform: rotate(-135deg);
+  margin-top: 3px;
+}
+
+/* Card Body */
+.card-body {
+  display: none;
+}
+.iteration-card.expanded .card-body {
+  display: block;
+}
+.card-body-inner {
+  padding: 0 24px 24px;
+  border-top: 1px solid var(--border);
+}
+
+/* =============================================
+   Section: Core Changes Summary
+   ============================================= */
+.block-summary {
+  padding-top: 24px;
+}
+.block-summary .section-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.block-summary .section-heading .accent-bar {
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--primary);
+  flex-shrink: 0;
+}
+.block-summary .section-heading h4 {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.block-summary .summary-text {
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.7;
+  margin-bottom: 16px;
+}
+/* Info metadata row */
+.block-summary .info-meta {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: var(--text-subtle);
+}
+.block-summary .info-meta span {
+  white-space: nowrap;
+}
+.block-summary .tag-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.tag {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 12px;
+  border-radius: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.tag-architecture { background: var(--blue-bg); color: var(--primary); }
+.tag-performance  { background: var(--green-bg); color: var(--green); }
+.tag-feature      { background: var(--orange-bg); color: var(--orange); }
+.tag-breaking     { background: rgba(239, 68, 68, 0.08); color: #dc2626; }
+.tag-dependency   { background: rgba(139, 92, 246, 0.08); color: #7c3aed; }
+
+/* =============================================
+   Section: Architecture Comparison
+   ============================================= */
+.block-arch {
+  padding-top: 24px;
+}
+.block-arch .section-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.block-arch .section-heading .accent-bar {
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--primary);
+  flex-shrink: 0;
+}
+.block-arch .section-heading h4 {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.arch-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+.arch-box {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 24px;
+}
+.arch-box--old {
+  background: rgba(249, 250, 251, 0.3);
+}
+.arch-box--new {
+  border-color: #bfdbfe;
+  background: rgba(239, 246, 255, 0.3);
+}
+.arch-box .arch-label {
+  font-size: 12px;
+  margin-bottom: 12px;
+  font-family: 'JetBrains Mono', monospace;
+}
+.arch-box--old .arch-label {
+  color: var(--text-subtle);
+}
+.arch-box--new .arch-label {
+  color: var(--primary);
+}
+.arch-box .arch-canvas {
+  border: 2px dashed #d1d5db;
+  border-radius: 6px;
+  padding: 32px;
+  background: var(--card);
+  min-height: 200px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+.arch-box--new .arch-canvas {
+  border-color: #93c5fd;
+}
+
+/* =============================================
+   Section: Sequence Diagram
+   ============================================= */
+.block-seq {
+  padding-top: 24px;
+}
+.block-seq .section-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.block-seq .section-heading .accent-bar {
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--primary);
+  flex-shrink: 0;
+}
+.block-seq .section-heading h4 {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.seq-container {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 24px;
+  background: rgba(249, 250, 251, 0.3);
+}
+.seq-canvas {
+  border: 2px dashed #d1d5db;
+  border-radius: 6px;
+  padding: 48px;
+  background: var(--card);
+  min-height: 240px;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.arch-canvas, .seq-canvas, .chart-canvas {
+  overflow: hidden;
+}
+
+.arch-canvas.zoomable, .seq-canvas.zoomable {
+  cursor: grab;
+}
+.arch-canvas.zoomable:active, .seq-canvas.zoomable:active {
+  cursor: grabbing;
+}
+
+.diagram-zoom-hint {
+  position: absolute;
+  bottom: 8px;
+  right: 12px;
+  font-size: 11px;
+  color: #94a3b8;
+  font-family: 'JetBrains Mono', monospace;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.arch-canvas:hover .diagram-zoom-hint,
+.seq-canvas:hover .diagram-zoom-hint { opacity: 1; }
+
+.chart-canvas {
+  position: relative;
+}
+
+/* =============================================
+   Section: Performance Charts
+   ============================================= */
+.block-perf {
+  padding-top: 24px;
+}
+.block-perf .section-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.block-perf .section-heading .accent-bar {
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--primary);
+  flex-shrink: 0;
+}
+.block-perf .section-heading h4 {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.perf-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+.perf-chart-box {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 24px;
+  background: rgba(249, 250, 251, 0.3);
+}
+.perf-chart-box .chart-inner {
+  border: 2px dashed #bbf7d0;
+  border-radius: 6px;
+  padding: 48px;
+  background: var(--card);
+  min-height: 220px;
+}
+.perf-chart-box .chart-label {
+  font-size: 12px;
+  color: var(--text-subtle);
+  margin-bottom: 16px;
+}
+.perf-chart-box .chart-canvas {
+  min-height: 220px;
+  width: 100%;
+}
+
+/* =============================================
+   Section: Major Changes List
+   ============================================= */
+.block-changes {
+  padding-top: 24px;
+}
+.block-changes .section-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.block-changes .section-heading .accent-bar {
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--primary);
+  flex-shrink: 0;
+}
+.block-changes .section-heading h4 {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.changes-container {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.changes-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.change-category {
+  padding: 0;
+}
+.change-category + .change-category {
+  border-left: 1px solid var(--border-light);
+}
+.change-category h5 {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  padding: 12px 16px;
+  background: rgba(249, 250, 251, 0.5);
+  border-bottom: 1px solid var(--border-light);
+  margin: 0;
+}
+.change-list {
+  list-style: none;
+}
+.change-list li {
+  font-size: 13px;
+  padding: 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  transition: background 0.15s;
+}
+.change-list li + li {
+  border-top: 1px solid var(--border-light);
+}
+.change-list li:hover {
+  background: rgba(249, 250, 251, 0.5);
+}
+.change-list li::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+  flex-shrink: 0;
+  margin-top: 5px;
+}
+.change-list li.breaking::before {
+  background: #ef4444;
+}
+.change-list li.improve::before {
+  background: var(--green);
+}
+
+/* =============================================
+   Page Footer
+   ============================================= */
+.page-footer {
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  margin-top: 64px;
+}
+.page-footer .footer-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.page-footer .footer-meta {
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.page-footer .footer-meta .footer-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.page-footer .footer-actions {
+  display: flex;
+  gap: 12px;
+}
+.btn {
+  font-family: 'Noto Sans SC', 'Inter', -apple-system, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 8px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+.btn-outline {
+  background: var(--card);
+  color: var(--text-secondary);
+  border: 1px solid #d1d5db;
+}
+.btn-outline:hover {
+  background: #f9fafb;
+}
+.btn-primary {
+  background: var(--primary);
+  color: #ffffff;
+  border: 1px solid var(--primary);
+}
+.btn-primary:hover {
+  background: var(--primary-hover);
+}
+</style>
+</head>
+<body>
+
+<!-- =============================================
+     Page Header — Sticky White
+     ============================================= -->
+<header class="page-header">
+  <div class="header-inner">
+    <div class="header-row">
+      <svg class="github-icon" viewBox="0 0 16 16">
+        <path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+      </svg>
+      <h1>{{ repo.name }}</h1>
+    </div>
+    <div class="meta-row">
+      <a class="repo-url" href="{{ repo.url }}" target="_blank" rel="noopener">{{ repo.url }}</a>
+      <span class="meta-item">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        分析时间：{{ analysis_time }}
+      </span>
+    </div>
+    <p class="repo-desc">{{ repo.description }}</p>
+    <div class="meta-stats">覆盖 {{ iterations|length }} 个版本 · 分析维度：架构 / 性能 / 时序 / 变更</div>
+  </div>
+</header>
+
+<!-- =============================================
+     Page Body — Sidebar Timeline + Content
+     ============================================= -->
+<div class="page-body">
+
+  <!-- ============================================
+       Timeline Sidebar (Left Column, Sticky)
+       ============================================ -->
+  <aside class="timeline-sidebar" id="timelineSidebar">
+    <div class="sidebar-title">迭代时间轴</div>
+    <nav class="sidebar-track" id="sidebarTrack">
+      {% for it in iterations %}
+      <a class="timeline-node" href="#card-{{ it.id }}">
+        <span class="node-circle"></span>
+        <span class="node-info">
+          <span class="node-version">{{ it.version }}</span>
+          <span class="node-date">{{ it.date }}</span>
+        </span>
+      </a>
+      {% endfor %}
+    </nav>
+  </aside>
+
+  <!-- =============================================
+       Iteration Cards
+       ============================================= -->
+  <main class="content-area">
+  {% for it in iterations %}
+  <section class="iteration-card expanded" id="card-{{ it.id }}">
+    <!-- Card Header -->
+    <div class="card-header" onclick="toggleCard(this)">
+      <div>
+        <div class="card-title-group">
+          <span class="title-dot"></span>
+          <h3>{{ it.version }} — {{ it.title }}</h3>
+          <span class="badge badge-{{ it.change_type }}">{{ it.change_type_label }}</span>
+          <span class="card-date">{{ it.date }}</span>
+        </div>
+      </div>
+      <button class="card-toggle" aria-label="折叠/展开"><span class="arrow"></span></button>
+    </div>
+
+    <!-- Card Body -->
+    <div class="card-body">
+      <div class="card-body-inner">
+
+        <!-- Core Changes Summary -->
+        <div class="block-summary">
+          <div class="section-heading">
+            <span class="accent-bar"></span>
+            <h4>核心变更说明</h4>
+          </div>
+          <p class="summary-text">{{ it.summary }}</p>
+          <div class="info-meta">
+            <span>版本号：{{ it.version }}</span>
+            <span>发布日期：{{ it.date }}</span>
+            <span>变更类型：{{ it.change_type }}</span>
+            <span>提交数：{{ it.commit_count }} commits</span>
+          </div>
+          <div class="tag-row">
+            {% for tag in it.tags %}<span class="tag tag-{{ tag.type }}">{{ tag.icon }} {{ tag.label }}</span>{% endfor %}
+          </div>
+        </div>
+
+        <!-- Architecture Comparison -->
+        {% if it.old_arch_diagram or it.new_arch_diagram %}
+        <div class="block-arch">
+          <div class="section-heading">
+            <span class="accent-bar"></span>
+            <h4>架构对比</h4>
+          </div>
+          <div class="arch-compare">
+            <div class="arch-box arch-box--old">
+              <div class="arch-label">{{ it.old_arch_label }}</div>
+              <div class="arch-canvas">
+                {% if it.old_arch_diagram %}<pre class="mermaid">{{ it.old_arch_diagram | safe }}</pre>{% else %}<span style="color:var(--text-subtle);padding:40px">无旧架构数据</span>{% endif %}
+              </div>
+            </div>
+            <div class="arch-box arch-box--new">
+              <div class="arch-label">{{ it.new_arch_label }}</div>
+              <div class="arch-canvas">
+                {% if it.new_arch_diagram %}<pre class="mermaid">{{ it.new_arch_diagram | safe }}</pre>{% else %}<span style="color:var(--text-subtle);padding:40px">无新架构数据</span>{% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- Sequence Diagram -->
+        {% if it.sequence_diagram %}
+        <div class="block-seq">
+          <div class="section-heading">
+            <span class="accent-bar"></span>
+            <h4>逻辑时序图</h4>
+          </div>
+          <div class="seq-container">
+            <div class="seq-canvas"><pre class="mermaid">{{ it.sequence_diagram | safe }}</pre></div>
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- Performance Charts -->
+        {% if it.charts %}
+        <div class="block-perf">
+          <div class="section-heading">
+            <span class="accent-bar"></span>
+            <h4>性能指标对比</h4>
+          </div>
+          <div class="perf-grid">
+            {% for chart in it.charts %}
+            <div class="perf-chart-box">
+              <div class="chart-label">{{ chart.title }}</div>
+              <div class="chart-canvas" id="chart-{{ it.id }}-{{ loop.index0 }}" style="min-height:220px;"></div>
+              <script>
+              (function() {
+                var dom = document.getElementById('chart-{{ it.id }}-{{ loop.index0 }}');
+                if (dom) { var c = echarts.init(dom); var opt = {{ chart.option_json | safe }}; opt.dataZoom = opt.dataZoom || [{ type: 'inside', zoomOnMouseWheel: true, moveOnMouseMove: true }, { type: 'slider', bottom: 0 }]; opt.toolbox = opt.toolbox || { feature: { dataZoom: { yAxisIndex: 'none' }, restore: {} }, right: 10 }; opt.tooltip = opt.tooltip || { trigger: 'axis' }; c.setOption(opt); window.addEventListener('resize', function() { c.resize(); }); }
+              })();
+              </script>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- Major Changes List -->
+        {% if it.changes %}
+        <div class="block-changes">
+          <div class="section-heading">
+            <span class="accent-bar"></span>
+            <h4>重大变更清单</h4>
+          </div>
+          <div class="changes-container">
+            <div class="changes-grid">
+              {% for cat in it.changes %}
+              <div class="change-category">
+                <h5>{{ cat.category }}</h5>
+                <ul class="change-list">
+                  {% for entry in cat.entries %}
+                  <li{% if entry.severity %} class="{{ entry.severity }}"{% endif %}>{{ entry.description }}</li>
+                  {% endfor %}
+                </ul>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
+      </div>
+    </div>
+  </section>
+  {% endfor %}
+</main>
+
+</div><!-- .page-body -->
+
+<!-- =============================================
+     Page Footer
+     ============================================= -->
+<footer class="page-footer">
+  <div class="footer-inner">
+    <div class="footer-meta">
+      <div>{{ repo.name }} — 技术演进分析报告 · 生成时间 {{ analysis_time }}</div>
+      <div class="footer-sub">数据来源：git log 分析 + LLM 结构化输出 · 本报告仅供技术参考</div>
+    </div>
+    <div class="footer-actions">
+      <button class="btn btn-outline" onclick="window.scrollTo({ top: 0, behavior: 'smooth' })">重新分析</button>
+      <button class="btn btn-primary" onclick="alert('按 Ctrl+P 打印为 PDF')">导出报告</button>
+    </div>
+  </div>
+</footer>
+
+<!-- =============================================
+     JavaScript — Card Toggle & Timeline Active State
+     ============================================= -->
+<script>
+function toggleCard(h) { h.parentElement.classList.toggle('expanded'); }
+(function() {
+  var nodes = document.querySelectorAll('.timeline-node');
+  var cards = document.querySelectorAll('.iteration-card');
+  var sidebar = document.getElementById('timelineSidebar');
+
+  var observer = new IntersectionObserver(function(entries) {
+    var visible = entries.filter(function(e) { return e.isIntersecting; });
+    if (!visible.length) return;
+    visible.sort(function(a, b) { return a.boundingClientRect.top - b.boundingClientRect.top; });
+    var activeId = visible[0].target.id;
+    nodes.forEach(function(n) {
+      var isActive = n.getAttribute('href') === '#' + activeId;
+      n.classList.toggle('active', isActive);
+      if (isActive && sidebar) {
+        var nTop = n.offsetTop;
+        var sTop = sidebar.scrollTop;
+        var sH = sidebar.clientHeight;
+        if (nTop < sTop || nTop > sTop + sH - 50) {
+          sidebar.scrollTo({ top: nTop - sH / 3, behavior: 'smooth' });
+        }
+      }
+    });
+  }, { rootMargin: '-20% 0px -60% 0px', threshold: 0 });
+
+  cards.forEach(function(c) { observer.observe(c); });
+
+  nodes.forEach(function(n) { n.addEventListener('click', function(e) { e.preventDefault();
+    var t = document.getElementById(this.getAttribute('href').substring(1));
+    if (t) { t.classList.add('expanded'); t.scrollIntoView({ behavior: 'smooth', block: 'start' }); t.style.boxShadow = '0 0 0 3px rgba(37,99,235,.3)'; setTimeout(function() { t.style.boxShadow = ''; }, 1500); }
+  })});
+})();
+
+(function() {
+  function makeZoomable(el) {
+    el.classList.add('zoomable');
+    el.style.position = 'relative';
+    el.style.overflow = 'hidden';
+    var svg = el.querySelector('svg');
+    if (!svg) return;
+    svg.style.transformOrigin = '0 0';
+    svg.style.transition = 'none';
+    var scale = 1, tx = 0, ty = 0, dragging = false, sx = 0, sy = 0, startTx = 0, startTy = 0;
+
+    var hint = document.createElement('span');
+    hint.className = 'diagram-zoom-hint';
+    hint.textContent = 'Ctrl+滚轮缩放 · 拖拽平移 · 双击复位';
+    el.appendChild(hint);
+
+    function apply() {
+      svg.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + scale + ')';
+      svg.style.display = 'block';
+    }
+
+    el.addEventListener('wheel', function(e) {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      var ds = e.deltaY > 0 ? 0.9 : 1.1;
+      var ns = Math.min(5, Math.max(0.2, scale * ds));
+      var mx = e.clientX - el.getBoundingClientRect().left;
+      var my = e.clientY - el.getBoundingClientRect().top;
+      tx = mx - (mx - tx) * (ns / scale);
+      ty = my - (my - ty) * (ns / scale);
+      scale = ns;
+      apply();
+    }, { passive: false });
+
+    el.addEventListener('mousedown', function(e) {
+      if (e.button !== 0) return;
+      dragging = true;
+      sx = e.clientX; sy = e.clientY;
+      startTx = tx; startTy = ty;
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove', function(e) {
+      if (!dragging) return;
+      tx = startTx + e.clientX - sx;
+      ty = startTy + e.clientY - sy;
+      apply();
+    });
+    window.addEventListener('mouseup', function() { dragging = false; });
+
+    el.addEventListener('dblclick', function() {
+      scale = 1; tx = 0; ty = 0; apply();
+    });
+  }
+
+  function setupCharts() {
+    document.querySelectorAll('.chart-canvas').forEach(function(dom) {
+      dom.style.position = 'relative';
+    });
+  }
+
+  function observeAndZoomDiagrams() {
+    document.querySelectorAll('.arch-canvas, .seq-canvas').forEach(function(el) {
+      if (el.classList.contains('zoomable')) return;
+      if (el.querySelector('svg')) makeZoomable(el);
+    });
+    // Re-check after Mermaid renders (it replaces pre.mermaid with SVG)
+    setTimeout(function() {
+      document.querySelectorAll('.arch-canvas, .seq-canvas').forEach(function(el) {
+        if (!el.classList.contains('zoomable') && el.querySelector('svg')) makeZoomable(el);
+      });
+    }, 1000);
+  }
+
+  setupCharts();
+  observeAndZoomDiagrams();
+})();
+</script>
+
+</body>
+</html>

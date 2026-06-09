@@ -1,0 +1,28 @@
+# Runtime artifacts
+repo_cache/
+report_output/
+cache_json/
+__pycache__/
+*.pyc
+
+# Cache / temp
+.mypy_cache/
+.ruff_cache/
+.sisyphus/
+*.zip
+
+# Config
+.env
+.python-version
+
+# Node
+node_modules/
+
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
