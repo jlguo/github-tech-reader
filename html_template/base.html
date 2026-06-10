@@ -668,26 +668,119 @@ body {
   overflow: hidden;
 }
 
-.arch-canvas.zoomable, .seq-canvas.zoomable {
-  cursor: grab;
+.arch-canvas, .seq-canvas {
+  cursor: pointer;
+  transition: box-shadow 0.15s;
 }
-.arch-canvas.zoomable:active, .seq-canvas.zoomable:active {
-  cursor: grabbing;
+.arch-canvas:hover, .seq-canvas:hover {
+  box-shadow: 0 0 0 2px var(--primary);
 }
 
-.diagram-zoom-hint {
-  position: absolute;
-  bottom: 8px;
-  right: 12px;
-  font-size: 11px;
-  color: #94a3b8;
-  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Monaco', monospace;
-  pointer-events: none;
+/* =============================================
+   Diagram Lightbox — Fullscreen Viewer
+   ============================================= */
+.diagram-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.85);
+  display: none;
+  flex-direction: column;
   opacity: 0;
   transition: opacity 0.2s;
 }
-.arch-canvas:hover .diagram-zoom-hint,
-.seq-canvas:hover .diagram-zoom-hint { opacity: 1; }
+.diagram-lightbox.open {
+  display: flex;
+  opacity: 1;
+}
+.lightbox-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: rgba(30, 30, 30, 0.95);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+.lightbox-toolbar .toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.lightbox-toolbar .toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.lightbox-toolbar .toolbar-title {
+  color: #e5e7eb;
+  font-size: 13px;
+  font-weight: 500;
+  margin-left: 8px;
+}
+.lightbox-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #d1d5db;
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.15s;
+  user-select: none;
+}
+.lightbox-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+.lightbox-btn-close {
+  font-size: 20px;
+  width: 40px;
+  height: 40px;
+}
+.lightbox-zoom-level {
+  color: #9ca3af;
+  font-size: 12px;
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Monaco', monospace;
+  min-width: 48px;
+  text-align: center;
+}
+.lightbox-canvas {
+  flex: 1;
+  overflow: auto;
+  cursor: grab;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lightbox-canvas:active {
+  cursor: grabbing;
+}
+.lightbox-canvas svg {
+  transform-origin: 0 0;
+  display: block;
+  max-width: none;
+  max-height: none;
+}
+.lightbox-hint {
+  position: absolute;
+  bottom: 16px;
+  right: 20px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Monaco', monospace;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+.lightbox-canvas:hover .lightbox-hint {
+  opacity: 0;
+}
 
 .chart-canvas {
   position: relative;
@@ -1047,13 +1140,13 @@ body {
             <div class="arch-box arch-box--old">
               <div class="arch-label">{{ it.old_arch_label }}</div>
               <div class="arch-canvas">
-                {% if it.old_arch_diagram %}<div class="arch-canvas">{{ it.old_arch_diagram | safe }}</div>{% else %}<span style="color:var(--text-subtle);padding:40px">无旧架构数据</span>{% endif %}
+                {% if it.old_arch_diagram %}{{ it.old_arch_diagram | safe }}{% else %}<span style="color:var(--text-subtle);padding:40px">无旧架构数据</span>{% endif %}
               </div>
             </div>
             <div class="arch-box arch-box--new">
               <div class="arch-label">{{ it.new_arch_label }}</div>
               <div class="arch-canvas">
-                {% if it.new_arch_diagram %}<div class="arch-canvas">{{ it.new_arch_diagram | safe }}</div>{% else %}<span style="color:var(--text-subtle);padding:40px">无新架构数据</span>{% endif %}
+                {% if it.new_arch_diagram %}{{ it.new_arch_diagram | safe }}{% else %}<span style="color:var(--text-subtle);padding:40px">无新架构数据</span>{% endif %}
               </div>
             </div>
           </div>
@@ -1151,6 +1244,28 @@ body {
 </footer>
 
 <!-- =============================================
+     Diagram Lightbox
+     ============================================= -->
+<div class="diagram-lightbox" id="diagram-lightbox">
+  <div class="lightbox-toolbar">
+    <div class="toolbar-left">
+      <button class="lightbox-btn" id="lb-zoom-out" title="缩小 (Ctrl+-)">−</button>
+      <span class="lightbox-zoom-level" id="lb-zoom-level">100%</span>
+      <button class="lightbox-btn" id="lb-zoom-in" title="放大 (Ctrl+=)">+</button>
+      <button class="lightbox-btn" id="lb-fit" title="适应窗口 (F)">⊡</button>
+      <button class="lightbox-btn" id="lb-reset" title="原始大小 (0)">1:1</button>
+      <span class="toolbar-title" id="lb-title"></span>
+    </div>
+    <div class="toolbar-right">
+      <button class="lightbox-btn lightbox-btn-close" id="lb-close" title="关闭 (Esc)">✕</button>
+    </div>
+  </div>
+  <div class="lightbox-canvas" id="lb-canvas">
+    <span class="lightbox-hint">Ctrl+滚轮缩放 · 拖拽平移 · 双击复位 · Esc 关闭</span>
+  </div>
+</div>
+
+<!-- =============================================
      JavaScript — Card Toggle & Timeline Active State
      ============================================= -->
 <script>
@@ -1194,80 +1309,165 @@ function loadMoreVersions() {
 })();
 
 (function() {
-  function makeZoomable(el) {
-    el.classList.add('zoomable');
-    el.style.position = 'relative';
-    el.style.overflow = 'hidden';
+  var lightbox = document.getElementById('diagram-lightbox');
+  var lbCanvas = document.getElementById('lb-canvas');
+  var lbTitle = document.getElementById('lb-title');
+  var lbZoomLevel = document.getElementById('lb-zoom-level');
+  var scale = 1, tx = 0, ty = 0, dragging = false, sx = 0, sy = 0, startTx = 0, startTy = 0;
+
+  function updateZoomLabel() {
+    lbZoomLevel.textContent = Math.round(scale * 100) + '%';
+  }
+
+  function applyTransform() {
+    var svg = lbCanvas.querySelector('svg');
+    if (svg) {
+      svg.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + scale + ')';
+    }
+  }
+
+  function fitToWindow(sw, sh) {
+    if (sw === undefined) {
+      var svg = lbCanvas.querySelector('svg');
+      if (!svg) return;
+      var vb = svg.viewBox.baseVal;
+      sw = vb.width; sh = vb.height;
+      if (!sw || !sh) {
+        var bbox = svg.getBBox();
+        sw = bbox.width; sh = bbox.height;
+      }
+    }
+    var cw = lbCanvas.clientWidth - 80, ch = lbCanvas.clientHeight - 80;
+    scale = Math.min(cw / sw, ch / sh, 2);
+    tx = (lbCanvas.clientWidth - sw * scale) / 2;
+    ty = (lbCanvas.clientHeight - sh * scale) / 2;
+    applyTransform();
+    updateZoomLabel();
+  }
+
+  function resetToOriginal() {
+    scale = 1; tx = 0; ty = 0;
+    applyTransform();
+    updateZoomLabel();
+  }
+
+  function openLightbox(el, title) {
     var svg = el.querySelector('svg');
     if (!svg) return;
-    svg.style.transformOrigin = '0 0';
-    svg.style.transition = 'none';
-    var scale = 1, tx = 0, ty = 0, dragging = false, sx = 0, sy = 0, startTx = 0, startTy = 0;
+    var vb = svg.viewBox.baseVal;
+    var origW = vb && vb.width ? vb.width : 800;
+    var origH = vb && vb.height ? vb.height : 600;
+    var clone = svg.cloneNode(true);
+    clone.removeAttribute('width');
+    clone.removeAttribute('height');
+    clone.style.maxWidth = 'none';
+    clone.style.maxHeight = 'none';
+    clone.style.width = 'auto';
+    clone.style.height = 'auto';
+    lbCanvas.innerHTML = '';
+    lbCanvas.appendChild(clone);
+    lbTitle.textContent = title || '';
+    lightbox.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    fitToWindow(origW, origH);
+  }
 
-    var hint = document.createElement('span');
-    hint.className = 'diagram-zoom-hint';
-    hint.textContent = 'Ctrl+滚轮缩放 · 拖拽平移 · 双击复位';
-    el.appendChild(hint);
+  function closeLightbox() {
+    lightbox.classList.remove('open');
+    document.body.style.overflow = '';
+    lbCanvas.innerHTML = '';
+  }
 
-    function apply() {
-      svg.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + scale + ')';
-      svg.style.display = 'block';
+  // Wire click on all diagram canvases
+  document.querySelectorAll('.arch-canvas, .seq-canvas').forEach(function(el) {
+    el.addEventListener('click', function(e) {
+      if (e.target.closest('button') || e.target.closest('a')) return;
+      var card = el.closest('.iteration-card');
+      var ver = card ? card.querySelector('.version-badge') : null;
+      var section = el.closest('.arch-box') ? '架构图' : '时序图';
+      var title = ver ? ver.textContent.trim() + ' · ' + section : section;
+      openLightbox(el, title);
+    });
+  });
+
+  // Toolbar buttons
+  document.getElementById('lb-zoom-in').addEventListener('click', function() {
+    scale = Math.min(5, scale * 1.25);
+    applyTransform();
+    updateZoomLabel();
+  });
+  document.getElementById('lb-zoom-out').addEventListener('click', function() {
+    scale = Math.max(0.1, scale / 1.25);
+    applyTransform();
+    updateZoomLabel();
+  });
+  document.getElementById('lb-fit').addEventListener('click', fitToWindow);
+  document.getElementById('lb-reset').addEventListener('click', resetToOriginal);
+  document.getElementById('lb-close').addEventListener('click', closeLightbox);
+
+  // Click overlay background to close
+  lightbox.addEventListener('click', function(e) {
+    if (e.target === lightbox) closeLightbox();
+  });
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', function(e) {
+    if (!lightbox.classList.contains('open')) return;
+    if (e.key === 'Escape') { closeLightbox(); return; }
+    if (e.key === '0' || e.key === '1') { resetToOriginal(); return; }
+    if (e.key === 'f' || e.key === 'F') { fitToWindow(); return; }
+    if (e.key === '=' || e.key === '+') {
+      scale = Math.min(5, scale * 1.25);
+      applyTransform();
+      updateZoomLabel();
     }
+    if (e.key === '-') {
+      scale = Math.max(0.1, scale / 1.25);
+      applyTransform();
+      updateZoomLabel();
+    }
+  });
 
-    el.addEventListener('wheel', function(e) {
-      if (!e.ctrlKey && !e.metaKey) return;
-      e.preventDefault();
-      var ds = e.deltaY > 0 ? 0.9 : 1.1;
-      var ns = Math.min(5, Math.max(0.2, scale * ds));
-      var mx = e.clientX - el.getBoundingClientRect().left;
-      var my = e.clientY - el.getBoundingClientRect().top;
-      tx = mx - (mx - tx) * (ns / scale);
-      ty = my - (my - ty) * (ns / scale);
-      scale = ns;
-      apply();
-    }, { passive: false });
+  // Mouse wheel zoom (centered on cursor)
+  lbCanvas.addEventListener('wheel', function(e) {
+    e.preventDefault();
+    var ds = e.deltaY > 0 ? 0.9 : 1.1;
+    var ns = Math.min(5, Math.max(0.1, scale * ds));
+    var rect = lbCanvas.getBoundingClientRect();
+    var mx = e.clientX - rect.left;
+    var my = e.clientY - rect.top;
+    tx = mx - (mx - tx) * (ns / scale);
+    ty = my - (my - ty) * (ns / scale);
+    scale = ns;
+    applyTransform();
+    updateZoomLabel();
+  }, { passive: false });
 
-    el.addEventListener('mousedown', function(e) {
-      if (e.button !== 0) return;
-      dragging = true;
-      sx = e.clientX; sy = e.clientY;
-      startTx = tx; startTy = ty;
-      e.preventDefault();
-    });
-    window.addEventListener('mousemove', function(e) {
-      if (!dragging) return;
-      tx = startTx + e.clientX - sx;
-      ty = startTy + e.clientY - sy;
-      apply();
-    });
-    window.addEventListener('mouseup', function() { dragging = false; });
+  // Pan via drag
+  lbCanvas.addEventListener('mousedown', function(e) {
+    if (e.button !== 0) return;
+    dragging = true;
+    sx = e.clientX; sy = e.clientY;
+    startTx = tx; startTy = ty;
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', function(e) {
+    if (!dragging) return;
+    tx = startTx + e.clientX - sx;
+    ty = startTy + e.clientY - sy;
+    applyTransform();
+  });
+  window.addEventListener('mouseup', function() { dragging = false; });
 
-    el.addEventListener('dblclick', function() {
-      scale = 1; tx = 0; ty = 0; apply();
-    });
-  }
+  // Double-click to reset
+  lbCanvas.addEventListener('dblclick', function() {
+    resetToOriginal();
+  });
 
-  function setupCharts() {
-    document.querySelectorAll('.chart-canvas').forEach(function(dom) {
-      dom.style.position = 'relative';
-    });
-  }
-
-  function observeAndZoomDiagrams() {
-    document.querySelectorAll('.arch-canvas, .seq-canvas').forEach(function(el) {
-      if (el.classList.contains('zoomable')) return;
-      if (el.querySelector('svg')) makeZoomable(el);
-    });
-    // Re-check after Mermaid renders (it replaces pre.mermaid with SVG)
-    setTimeout(function() {
-      document.querySelectorAll('.arch-canvas, .seq-canvas').forEach(function(el) {
-        if (!el.classList.contains('zoomable') && el.querySelector('svg')) makeZoomable(el);
-      });
-    }, 1000);
-  }
-
-  setupCharts();
-  observeAndZoomDiagrams();
+  // Setup ECharts containers
+  document.querySelectorAll('.chart-canvas').forEach(function(dom) {
+    dom.style.position = 'relative';
+  });
 })();
 </script>
 

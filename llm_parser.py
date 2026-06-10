@@ -32,6 +32,10 @@ def _sanitize_mermaid(code: str | None) -> str | None:
     code = code.replace("&gt;", ">")
     code = code.replace("&amp;", "&")
 
+    # Replace parentheses inside square-bracket labels to avoid mermaid parse errors.
+    # e.g. [AI请求(Gemini3.5默认)] → [AI请求（Gemini3.5默认）]
+    code = re.sub(r'\[([^\]]*?)\(([^\)]*?)\)([^\]]*?)\]', r'[\1（\2）\3]', code)
+
     lines = [line for line in code.split("\n") if line.strip() and not line.strip().startswith("%%") and not line.strip().startswith("//")]
     code = "\n".join(lines)
 
