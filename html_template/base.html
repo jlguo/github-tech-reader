@@ -3,28 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{{ repo.name }} — 迭代与技术演进分析报告</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
-<script>
-mermaid.initialize({
-  startOnLoad: true,
-  theme: 'neutral',
-  useMaxWidth: false,
-  securityLevel: 'loose',
-  suppressErrorRendering: false,
-});
-mermaid.parseError = function(err, hash) {
-  var el = document.querySelector('[data-mermaid-hash="' + hash + '"]');
-  if (el) {
-    el.style.border = '2px dashed #ef4444';
-    el.style.padding = '16px';
-    el.innerHTML = '<span style="color:#ef4444;font-size:12px;font-family:monospace;">⚠ Mermaid 语法错误: ' + (err.message || err).replace(/</g,'&lt;') + '</span>';
-  }
-};</script>
+<title>{{ repo.name }} — 迭代与技术演进分析报告{% if page_info %} ({{ page_info }}){% endif %}</title>
+<!-- ECharts JS (inlined at build time) -->
 <style>
 /* =============================================
    CSS Variables — Design Tokens
@@ -54,7 +34,7 @@ mermaid.parseError = function(err, hash) {
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; font-size: 16px; }
 body {
-  font-family: 'Noto Sans SC', 'Inter', -apple-system, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   background: var(--bg);
   color: var(--text);
   line-height: 1.7;
@@ -100,7 +80,7 @@ body {
   fill: #24292f;
 }
 .page-header h1 {
-  font-family: 'Noto Sans SC', 'Inter', -apple-system, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   font-size: 24px;
   font-weight: 500;
   color: var(--text);
@@ -114,7 +94,7 @@ body {
   flex-wrap: wrap;
 }
 .page-header .repo-url {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Monaco', monospace;
   font-size: 14px;
   color: var(--text-muted);
   text-decoration: none;
@@ -232,7 +212,7 @@ body {
   min-width: 0;
 }
 .timeline-node .node-version {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Monaco', monospace;
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
@@ -244,6 +224,26 @@ body {
   font-size: 11px;
   color: var(--text-muted);
   white-space: nowrap;
+}
+
+.timeline-node--hidden { display: none; }
+
+.sidebar-load-more {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--primary);
+  border-top: 1px solid var(--border);
+  transition: background 0.2s;
+}
+.sidebar-load-more:hover {
+  background: #eff6ff;
+}
+.sidebar-load-more .load-more-icon {
+  font-size: 14px;
 }
 
 /* =============================================
@@ -344,7 +344,7 @@ body {
   background: #ffffff;
 }
 .timeline-node .node-version {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Monaco', monospace;
   font-size: 14px;
   font-weight: 500;
   color: var(--text);
@@ -601,7 +601,7 @@ body {
 .arch-box .arch-label {
   font-size: 12px;
   margin-bottom: 12px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Monaco', monospace;
 }
 .arch-box--old .arch-label {
   color: var(--text-subtle);
@@ -681,7 +681,7 @@ body {
   right: 12px;
   font-size: 11px;
   color: #94a3b8;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Monaco', monospace;
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.2s;
@@ -857,7 +857,7 @@ body {
   gap: 12px;
 }
 .btn {
-  font-family: 'Noto Sans SC', 'Inter', -apple-system, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   font-size: 14px;
   font-weight: 500;
   padding: 8px 20px;
@@ -885,9 +885,63 @@ body {
 .btn-primary:hover {
   background: var(--primary-hover);
 }
+
+/* =============================================
+   Page Navigation Bar
+   ============================================= */
+.page-nav {
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.page-nav-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 8px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.page-nav-info {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.page-nav-link {
+  font-size: 13px;
+  color: var(--primary);
+  text-decoration: none;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  transition: all 0.15s;
+}
+.page-nav-link:hover {
+  background: #eff6ff;
+  border-color: var(--primary);
+}
+.page-nav-links {
+  display: flex;
+  gap: 8px;
+}
 </style>
 </head>
 <body>
+
+{% if nav_pages %}
+<div class="page-nav">
+  <div class="page-nav-inner">
+    <a class="page-nav-link" href="index.html">← 索引</a>
+    <span class="page-nav-info">第 {{ nav_current }} / {{ nav_total }} 页 · {{ nav_label }}</span>
+    <div class="page-nav-links">
+      {% if nav_prev %}<a class="page-nav-link" href="{{ nav_prev }}">← 上一页</a>{% endif %}
+      {% if nav_next %}<a class="page-nav-link" href="{{ nav_next }}">下一页 →</a>{% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <!-- =============================================
      Page Header — Sticky White
@@ -924,7 +978,7 @@ body {
     <div class="sidebar-title">迭代时间轴</div>
     <nav class="sidebar-track" id="sidebarTrack">
       {% for it in iterations %}
-      <a class="timeline-node" href="#card-{{ it.id }}">
+      <a class="timeline-node{% if loop.index0 >= 10 %} timeline-node--hidden{% endif %}" href="#card-{{ it.id }}">
         <span class="node-circle"></span>
         <span class="node-info">
           <span class="node-version">{{ it.version }}</span>
@@ -932,6 +986,12 @@ body {
         </span>
       </a>
       {% endfor %}
+      {% if iterations|length > 10 %}
+      <div class="sidebar-load-more" id="sidebarLoadMore" onclick="loadMoreVersions()">
+        <span class="load-more-icon">↓</span>
+        <span>加载更早版本 ({{ iterations|length - 10 }} 个)</span>
+      </div>
+      {% endif %}
     </nav>
   </aside>
 
@@ -987,13 +1047,13 @@ body {
             <div class="arch-box arch-box--old">
               <div class="arch-label">{{ it.old_arch_label }}</div>
               <div class="arch-canvas">
-                {% if it.old_arch_diagram %}<pre class="mermaid">{{ it.old_arch_diagram | safe }}</pre>{% else %}<span style="color:var(--text-subtle);padding:40px">无旧架构数据</span>{% endif %}
+                {% if it.old_arch_diagram %}<div class="arch-canvas">{{ it.old_arch_diagram | safe }}</div>{% else %}<span style="color:var(--text-subtle);padding:40px">无旧架构数据</span>{% endif %}
               </div>
             </div>
             <div class="arch-box arch-box--new">
               <div class="arch-label">{{ it.new_arch_label }}</div>
               <div class="arch-canvas">
-                {% if it.new_arch_diagram %}<pre class="mermaid">{{ it.new_arch_diagram | safe }}</pre>{% else %}<span style="color:var(--text-subtle);padding:40px">无新架构数据</span>{% endif %}
+                {% if it.new_arch_diagram %}<div class="arch-canvas">{{ it.new_arch_diagram | safe }}</div>{% else %}<span style="color:var(--text-subtle);padding:40px">无新架构数据</span>{% endif %}
               </div>
             </div>
           </div>
@@ -1008,7 +1068,7 @@ body {
             <h4>逻辑时序图</h4>
           </div>
           <div class="seq-container">
-            <div class="seq-canvas"><pre class="mermaid">{{ it.sequence_diagram | safe }}</pre></div>
+            <div class="seq-canvas">{{ it.sequence_diagram | safe }}</div>
           </div>
         </div>
         {% endif %}
@@ -1079,8 +1139,13 @@ body {
       <div class="footer-sub">数据来源：git log 分析 + LLM 结构化输出 · 本报告仅供技术参考</div>
     </div>
     <div class="footer-actions">
-      <button class="btn btn-outline" onclick="window.scrollTo({ top: 0, behavior: 'smooth' })">重新分析</button>
-      <button class="btn btn-primary" onclick="alert('按 Ctrl+P 打印为 PDF')">导出报告</button>
+      {% if nav_pages %}
+      <div class="page-nav-links">
+        {% if nav_prev %}<a class="page-nav-link" href="{{ nav_prev }}">← 上一页</a>{% endif %}
+        {% if nav_next %}<a class="page-nav-link" href="{{ nav_next }}">下一页 →</a>{% endif %}
+      </div>
+      {% endif %}
+      <button class="btn btn-outline" onclick="window.scrollTo({ top: 0, behavior: 'smooth' })">回到顶部</button>
     </div>
   </div>
 </footer>
@@ -1090,6 +1155,12 @@ body {
      ============================================= -->
 <script>
 function toggleCard(h) { h.parentElement.classList.toggle('expanded'); }
+function loadMoreVersions() {
+  var hidden = document.querySelectorAll('.timeline-node--hidden');
+  hidden.forEach(function(n) { n.style.display = 'flex'; });
+  var btn = document.getElementById('sidebarLoadMore');
+  if (btn) btn.style.display = 'none';
+}
 (function() {
   var nodes = document.querySelectorAll('.timeline-node');
   var cards = document.querySelectorAll('.iteration-card');

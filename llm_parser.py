@@ -39,6 +39,13 @@ def _sanitize_mermaid(code: str | None) -> str | None:
     if not any(code.strip().startswith(kw) for kw in valid_starts):
         return None
 
+    lines = code.strip().split("\n")
+
+    if code.strip().startswith("sequenceDiagram") and len(lines) > 30:
+        return None
+    if code.strip().startswith("graph") and len(lines) > 30:
+        return None
+
     last_line = code.strip().split("\n")[-1].strip()
     if last_line.endswith("[") or last_line.endswith("(") or last_line.endswith("{") or \
        last_line.endswith("-->") or last_line.endswith("->") or last_line.endswith("|"):
@@ -88,6 +95,7 @@ ARCH_PROMPT = """你是一位系统架构师。根据 Git 版本差异，推断�
 
 Mermaid 规则：
 - 使用 graph TD 开头
+- 节点不超过10个，聚焦核心架构变化，忽略细节
 - 节点格式：A[名称]（矩形）、B(名称)（圆角）、C{名称}（菱形决策）
 - 箭头用 --> 或 -->|标签|
 - 不要用 HTML entities（&lt; &gt; &amp;）
@@ -100,7 +108,7 @@ SEQ_PROMPT = """你是一位技术文档工程师。根据 Git 版本差异，�
 
 输出格式：
 {
-  "sequence_diagram": "Mermaid sequenceDiagram 时序图，参与者不超过6个"
+  "sequence_diagram": "Mermaid sequenceDiagram 时序图，参与者不超过10个"
 }
 
 Mermaid 规则：
@@ -280,13 +288,15 @@ class LLMParser:
         self.api_key = api_key or os.environ.get(dk, "ollama")
         self.base_url = base_url or os.environ.get(f"{provider.upper()}_BASE_URL", du)
 
-    def _call(self, system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> str:
+    def _call(self, system_prompt: str, user_prompt: str, max_tokens: int = 4096,
+              label: str = "") -> str:
         import openai
         client = openai.OpenAI(api_key=self.api_key, base_url=self.base_url)
         last_error = ""
 
         for retry in range(3):
             try:
+                t0 = time.time()
                 resp = client.chat.completions.create(
                     model=self.model,
                     messages=[
@@ -302,6 +312,9 @@ class LLMParser:
                     LLMParser.total_input_tokens += usage.prompt_tokens or 0
                     LLMParser.total_output_tokens += usage.completion_tokens or 0
                 LLMParser.total_calls += 1
+                elapsed = time.time() - t0
+                if elapsed > 5:
+                    print(f"    {label} done in {elapsed:.0f}s ({usage.completion_tokens} tokens)" if usage else f"    {label} done in {elapsed:.0f}s")
                 return resp.choices[0].message.content or ""
             except openai.RateLimitError as e:
                 last_error = f"Rate limit: {e}"
@@ -324,16 +337,16 @@ class LLMParser:
         user = _build_section_prompt(diff_text, metadata)
         sections = {
             "summary":  (SUMMARY_PROMPT, 4096),
-            "arch":     (ARCH_PROMPT, 16384),
-            "sequence": (SEQ_PROMPT, 8192),
-            "charts":   (CHARTS_PROMPT, 4096),
+            "arch":     (ARCH_PROMPT, 49152),
+            "sequence": (SEQ_PROMPT, 24576),
+            "charts":   (CHARTS_PROMPT, 8192),
         }
 
         results = {}
 
         def _run_section(name, prompt, max_tok):
             try:
-                raw = self._call(prompt, user, max_tok)
+                raw = self._call(prompt, user, max_tok, label=name)
                 return name, _parse_json(raw)
             except Exception:
                 return name, None

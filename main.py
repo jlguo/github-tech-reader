@@ -31,6 +31,7 @@ from diff_preprocessor import (
 )
 from llm_parser import LLMParser, _generate_mock_analysis
 from html_generator import HTMLGenerator
+from manifest import build_manifest, manifest_cache_key, MANIFEST_SCORER_VERSION
 
 
 load_dotenv()
@@ -67,6 +68,16 @@ def parse_args():
                         help="Merge adjacent patch/minor versions (default: on)")
     parser.add_argument("--no-merge-patch", dest="merge_patch", action="store_false",
                         help="Don't merge patch versions")
+    parser.add_argument("--limit", type=int, default=0,
+                        help="Limit to N most recent iterations (0 = all)")
+    parser.add_argument("--strategy", choices=["full", "minor-only", "major-only"], default="full",
+                        help="Iteration strategy: full (all versions), minor-only (per X.Y), major-only (per X)")
+    parser.add_argument("--use-manifest", action="store_true",
+                        help="Use manifest-based selective patch extraction before LLM analysis")
+    parser.add_argument("--manifest-max-files", type=int, default=30,
+                        help="Max changed files to extract when --use-manifest is enabled")
+    parser.add_argument("--no-fetch", action="store_true",
+                        help="Skip git fetch on existing cached repos")
     return parser.parse_args()
 
 
@@ -142,25 +153,71 @@ def _merge_adjacent_patch_versions(iterations: list[dict], min_commits: int = 10
 def process_single_iteration(repo: GitRepo, it: dict, llm_parser: LLMParser,
                               use_llm: bool, max_diff_chars: int,
                               cache_dir: str, repo_url: str,
-                              no_cache: bool) -> dict | None:
+                              no_cache: bool, use_manifest: bool = False,
+                              manifest_max_files: int = 30) -> dict | None:
     """Process one iteration — used by both serial and parallel paths."""
     version = it["version"]
     from_rev = it["prev_hash"] or it["tag_hash"]
     to_rev = it["tag_hash"]
+    os.makedirs(cache_dir, exist_ok=True)
 
-    diff_text = repo.get_diff(from_rev, to_rev)
-    if not diff_text.strip() and not it.get("prev_hash"):
-        from_rev = repo._get_root_commit()
-        if from_rev:
+    if use_manifest:
+        diff_stat = repo.get_diff_stat(from_rev, to_rev)
+        commits = repo.get_commits_between(from_rev, to_rev)
+        file_statuses = repo.get_name_status(from_rev, to_rev)
+        manifest = build_manifest(
+            repo_url=repo_url,
+            from_ref=it.get("prev_tag", from_rev) or from_rev,
+            to_ref=version,
+            from_commit=from_rev,
+            to_commit=to_rev,
+            version=version,
+            date=it["date"],
+            commit_count=it["commit_count"],
+            commits=commits,
+            file_stats=diff_stat,
+            max_files=manifest_max_files,
+            file_statuses=file_statuses,
+        )
+        extraction_plan = manifest.extraction_plan
+        selected_hash = hashlib.sha256(
+            "|".join(extraction_plan.files).encode()
+        ).hexdigest()[:12]
+        cache_key = manifest_cache_key(
+            repo_url,
+            from_rev,
+            to_rev,
+            config_hash=f"{MANIFEST_SCORER_VERSION}|max_files={manifest_max_files}|max_chars={max_diff_chars}|selected={selected_hash}",
+        )
+        if use_llm and not no_cache:
+            cached = _load_cache(cache_dir, cache_key)
+            if cached:
+                cached["id"] = version.replace(".", "-")
+                cached["version"] = version
+                cached["date"] = it["date"]
+                cached["commit_count"] = it["commit_count"]
+                return cached
+
+        diff_text = repo.get_diff_for_files(from_rev, to_rev, extraction_plan.files)
+        if not diff_text.strip():
             diff_text = repo.get_diff(from_rev, to_rev)
-    diff_stat = repo.get_diff_stat(from_rev, to_rev)
+        summary_info = get_diff_summary(diff_text)
+        file_list = extraction_plan.files[:50]
+    else:
+        diff_text = repo.get_diff(from_rev, to_rev)
+        if not diff_text.strip() and not it.get("prev_hash"):
+            root_rev = repo._get_root_commit()
+            if root_rev:
+                from_rev = root_rev
+                diff_text = repo.get_diff(from_rev, to_rev)
+        diff_stat = repo.get_diff_stat(from_rev, to_rev)
+        summary_info = get_diff_summary(diff_text)
+        file_list = repo.get_file_list(from_rev, to_rev)[:50]
+        cache_key = _cache_key(repo_url, version, diff_text)
+        manifest = None
 
     code_diff = extract_code_changes(diff_text)
     dep_diff = extract_dependency_changes(diff_text)
-
-    summary_info = get_diff_summary(diff_text)
-    file_list = repo.get_file_list(from_rev, to_rev)[:50]
-
     combined = strip_comment_lines(code_diff + "\n" + dep_diff)
 
     metadata = {
@@ -172,12 +229,12 @@ def process_single_iteration(repo: GitRepo, it: dict, llm_parser: LLMParser,
         "files_changed": summary_info.get("files_changed", 0),
         "changed_files": file_list,
     }
-
-    cache_key = _cache_key(repo_url, version, combined)
-    os.makedirs(cache_dir, exist_ok=True)
+    if use_manifest and manifest is not None:
+        metadata["manifest"] = manifest.to_dict()
+        metadata["manifest_selected_files"] = file_list
 
     if use_llm and combined.strip():
-        if not no_cache:
+        if not use_manifest and not no_cache:
             cached = _load_cache(cache_dir, cache_key)
             if cached:
                 cached["id"] = version.replace(".", "-")
@@ -213,6 +270,8 @@ def build_report_data(
     repo_url: str,
     no_cache: bool,
     workers: int,
+    use_manifest: bool = False,
+    manifest_max_files: int = 30,
 ) -> dict:
     """Process all iterations and build the complete report data structure."""
     total = len(iterations_data)
@@ -225,7 +284,8 @@ def build_report_data(
                 executor.submit(
                     process_single_iteration,
                     repo, it, llm_parser, use_llm, max_diff_chars,
-                    cache_dir, repo_url, no_cache,
+                    cache_dir, repo_url, no_cache, use_manifest,
+                    manifest_max_files,
                 ): it["version"]
                 for it in iterations_data
             }
@@ -245,7 +305,8 @@ def build_report_data(
             try:
                 result = process_single_iteration(
                     repo, it, llm_parser, use_llm, max_diff_chars,
-                    cache_dir, repo_url, no_cache,
+                    cache_dir, repo_url, no_cache, use_manifest,
+                    manifest_max_files,
                 )
                 if result:
                     results[version] = result
@@ -296,16 +357,22 @@ def main():
     t_start = time.time()
 
     print("[1/4] Cloning bare repository...")
-    repo = GitRepo.clone_bare(repo_url, cache_dir)
-    repo.fetch()
+    repo = GitRepo.clone_bare(repo_url, cache_dir, skip_fetch=args.no_fetch)
+    if not args.no_fetch:
+        repo.fetch()
     print(f"  ✓ Bare repo at {repo.path}")
 
     print("[2/4] Extracting iterations...")
     all_tags = repo.get_tags()
-    iterations_raw = repo.extract_iterations()
+
+    if args.strategy != "full":
+        iterations_raw = repo.filter_by_strategy(args.strategy)
+        print(f"  ✓ Strategy: {args.strategy} → {len(iterations_raw)} iterations")
+    else:
+        iterations_raw = repo.extract_iterations()
 
     if not iterations_raw:
-        print("  ⚠ No tags found. Creating single-iteration from HEAD...")
+        print("  ⚠ No iterations found. Creating single-iteration from HEAD...")
         default_branch = repo.get_default_branch()
         iterations_raw = [{
             "version": "HEAD",
@@ -316,13 +383,17 @@ def main():
             "commit_count": repo.get_commit_count(),
         }]
 
-    if args.merge_patch:
+    if args.merge_patch and args.strategy == "full":
         iterations_data = _merge_adjacent_patch_versions(iterations_raw)
         merged_count = len(iterations_raw) - len(iterations_data)
         if merged_count:
             print(f"  ✓ Merged {merged_count} small patch versions → {len(iterations_data)} iterations")
     else:
         iterations_data = iterations_raw
+
+    if args.limit and args.limit < len(iterations_data):
+        iterations_data = iterations_data[-args.limit:]
+        print(f"  ✓ Limited to {args.limit} most recent iterations")
 
     print(f"  ✓ Tags: {len(all_tags)}, Iterations: {len(iterations_data)}")
 
@@ -344,6 +415,7 @@ def main():
         repo, repo_meta, iterations_data, llm_parser,
         use_llm, args.max_diff_chars, json_cache_dir,
         repo_url, args.no_cache, args.workers,
+        args.use_manifest, args.manifest_max_files,
     )
 
     if use_llm:
