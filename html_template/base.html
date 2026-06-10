@@ -3,29 +3,30 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{{ repo.name }} — 迭代与技术演进分析报告{% if page_info %} ({{ page_info }}){% endif %}</title>
+<title>{{ repo.name }} — 技术演进分析项目{% if page_info %} ({{ page_info }}){% endif %}</title>
 <!-- ECharts JS (inlined at build time) -->
 <style>
 /* =============================================
    CSS Variables — Design Tokens
    ============================================= */
 :root {
-  --bg: #f9fafb;
+  --bg: #f8f5f2;
   --card: #ffffff;
-  --primary: #2563eb;
-  --primary-hover: #1d4ed8;
-  --text: #111827;
+  --paper: #faf7f4;
+  --primary: #8b7355;
+  --primary-hover: #6f5c44;
+  --text: #1f2937;
   --text-secondary: #4b5563;
   --text-muted: #6b7280;
   --text-subtle: #9ca3af;
-  --border: #e5e7eb;
-  --border-light: #f3f4f6;
-  --blue-bg: rgba(37, 99, 235, 0.1);
-  --green-bg: rgba(16, 185, 129, 0.1);
-  --orange-bg: rgba(245, 158, 11, 0.1);
-  --green: #059669;
-  --orange: #d97706;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --border: #e8ded2;
+  --border-light: #f0e7de;
+  --blue-bg: rgba(139, 115, 85, 0.12);
+  --green-bg: rgba(95, 158, 110, 0.12);
+  --orange-bg: rgba(193, 127, 89, 0.12);
+  --green: #5f9e6e;
+  --orange: #c17f59;
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 /* =============================================
@@ -57,32 +58,39 @@ body {
 .page-header {
   position: sticky;
   top: 0;
-  z-index: 50;
+  z-index: 60;
   background: #ffffff;
-  border-bottom: 1px solid var(--border);
   box-shadow: var(--shadow-sm);
-  padding: 24px 32px;
+  height: 72px;
+  padding: 0 40px;
+  display: flex;
+  align-items: center;
 }
 .page-header .header-inner {
-  max-width: 1280px;
-  margin: 0 auto;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 .page-header .header-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 6px;
+  gap: 16px;
+  min-width: 0;
 }
 .page-header .github-icon {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   flex-shrink: 0;
-  fill: #24292f;
+  fill: var(--primary);
+  background: var(--primary);
+  border-radius: 8px;
+  padding: 10px;
 }
 .page-header h1 {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  font-size: 24px;
-  font-weight: 500;
+  font-size: 18px;
+  font-weight: 600;
   color: var(--text);
   line-height: 1.3;
 }
@@ -90,16 +98,11 @@ body {
   display: flex;
   align-items: center;
   gap: 16px;
-  margin-bottom: 6px;
-  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
 }
 .page-header .repo-url {
-  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Monaco', monospace;
-  font-size: 14px;
-  color: var(--text-muted);
-  text-decoration: none;
-  white-space: nowrap;
-  transition: color 0.15s;
+  display: none;
 }
 .page-header .repo-url:hover {
   color: var(--primary);
@@ -108,30 +111,29 @@ body {
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 14px;
+  font-size: 12px;
   color: var(--text-muted);
   white-space: nowrap;
 }
 .page-header .meta-item svg {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  display: none;
 }
 .page-header .repo-desc {
-  font-size: 14px;
-  color: var(--text-muted);
-  max-width: 900px;
-  line-height: 1.7;
+  display: none;
 }
 .page-header .meta-stats {
-  font-size: 13px;
-  color: var(--text-subtle);
-  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.page-header .library-link {
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.page-header .library-link:hover {
+  color: var(--primary-hover);
 }
 
 /* =============================================
@@ -139,7 +141,7 @@ body {
    ============================================= */
 .page-body {
   display: flex;
-  min-height: calc(100vh - 200px);
+  min-height: calc(100vh - 144px);
 }
 
 /* =============================================
@@ -148,25 +150,20 @@ body {
 .timeline-sidebar {
   width: 220px;
   min-width: 220px;
-  background: var(--card);
-  border-right: 1px solid var(--border);
+  background: var(--paper);
   padding: 24px 0;
   position: sticky;
-  top: 0;
-  height: 100vh;
+  top: 72px;
+  height: calc(100vh - 144px);
   overflow-y: auto;
   scrollbar-width: thin;
-  z-index: 50;
+  z-index: 40;
 }
 .timeline-sidebar .sidebar-title {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  padding: 0 0 16px 0;
-  text-align: center;
-  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 0 24px 16px;
 }
 .timeline-sidebar .sidebar-track {
   padding: 8px 0;
@@ -184,11 +181,11 @@ body {
   position: relative;
 }
 .timeline-node:hover {
-  background: #f8fafc;
-  border-left-color: #d1d5db;
+  background: #f5ebe3;
+  border-left-color: #d4c4b0;
 }
 .timeline-node.active {
-  background: #eff6ff;
+  background: #f5ebe3;
   border-left-color: var(--primary);
 }
 .timeline-node .node-circle {
@@ -251,7 +248,7 @@ body {
    ============================================= */
 .content-area {
   flex: 1;
-  padding: 32px 40px 60px;
+  padding: 48px 48px 60px;
   min-width: 0;
 }
 .content-area > * + *,
@@ -367,9 +364,9 @@ body {
 .iteration-card {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 12px;
   overflow: hidden;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 .iteration-card + .iteration-card {
   margin-top: 24px;
@@ -924,29 +921,31 @@ body {
    ============================================= */
 .page-footer {
   background: var(--card);
-  border-top: 1px solid var(--border);
-  margin-top: 64px;
+  height: 72px;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.04);
 }
 .page-footer .footer-inner {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 32px;
+  height: 72px;
+  padding: 0 48px;
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 .page-footer .footer-meta {
-  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
   color: var(--text-muted);
   line-height: 1.5;
 }
 .page-footer .footer-meta .footer-sub {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-top: 2px;
+  font-size: 13px;
+  color: var(--text-subtle);
 }
 .page-footer .footer-actions {
   display: flex;
+  align-items: center;
   gap: 12px;
 }
 .btn {
@@ -963,12 +962,13 @@ body {
   align-items: center;
 }
 .btn-outline {
-  background: var(--card);
+  background: #f5ebe3;
   color: var(--text-secondary);
-  border: 1px solid #d1d5db;
+  border: 1px solid transparent;
 }
 .btn-outline:hover {
-  background: #f9fafb;
+  background: var(--primary);
+  color: #ffffff;
 }
 .btn-primary {
   background: var(--primary);
@@ -1004,15 +1004,18 @@ body {
 }
 .page-nav-link {
   font-size: 13px;
+  font-weight: 500;
   color: var(--primary);
   text-decoration: none;
-  padding: 4px 12px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  padding: 8px 16px;
+  background: #f5ebe3;
+  border: 1px solid transparent;
+  border-radius: 8px;
   transition: all 0.15s;
 }
 .page-nav-link:hover {
-  background: #eff6ff;
+  background: var(--primary);
+  color: #ffffff;
   border-color: var(--primary);
 }
 .page-nav-links {
@@ -1023,39 +1026,22 @@ body {
 </head>
 <body>
 
-{% if nav_pages %}
-<div class="page-nav">
-  <div class="page-nav-inner">
-    <a class="page-nav-link" href="index.html">← 索引</a>
-    <span class="page-nav-info">第 {{ nav_current }} / {{ nav_total }} 页 · {{ nav_label }}</span>
-    <div class="page-nav-links">
-      {% if nav_prev %}<a class="page-nav-link" href="{{ nav_prev }}">← 上一页</a>{% endif %}
-      {% if nav_next %}<a class="page-nav-link" href="{{ nav_next }}">下一页 →</a>{% endif %}
-    </div>
-  </div>
-</div>
-{% endif %}
-
 <!-- =============================================
      Page Header — Sticky White
      ============================================= -->
 <header class="page-header">
   <div class="header-inner">
     <div class="header-row">
-      <svg class="github-icon" viewBox="0 0 16 16">
-        <path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+      <svg class="github-icon" viewBox="0 0 16 16" aria-hidden="true">
+        <path fill="#ffffff" fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
       </svg>
-      <h1>{{ repo.name }}</h1>
+      <div>
+        <h1>{{ repo.name }}</h1>
+        <div class="meta-stats">技术演进分析项目 · {{ analysis_time }} · 覆盖 {{ iterations|length }} 个版本</div>
+      </div>
     </div>
-    <div class="meta-row">
-      <a class="repo-url" href="{{ repo.url }}" target="_blank" rel="noopener">{{ repo.url }}</a>
-      <span class="meta-item">
-        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-        分析时间：{{ analysis_time }}
-      </span>
-    </div>
-    <p class="repo-desc">{{ repo.description }}</p>
-    <div class="meta-stats">覆盖 {{ iterations|length }} 个版本 · 分析维度：架构 / 性能 / 时序 / 变更</div>
+    <div class="meta-row"></div>
+    <a class="library-link" href="../library.html">← 返回项目库</a>
   </div>
 </header>
 
@@ -1068,7 +1054,7 @@ body {
        Timeline Sidebar (Left Column, Sticky)
        ============================================ -->
   <aside class="timeline-sidebar" id="timelineSidebar">
-    <div class="sidebar-title">迭代时间轴</div>
+    <div class="sidebar-title">目录</div>
     <nav class="sidebar-track" id="sidebarTrack">
       {% for it in iterations %}
       <a class="timeline-node{% if loop.index0 >= 10 %} timeline-node--hidden{% endif %}" href="#card-{{ it.id }}">
@@ -1228,8 +1214,12 @@ body {
 <footer class="page-footer">
   <div class="footer-inner">
     <div class="footer-meta">
-      <div>{{ repo.name }} — 技术演进分析报告 · 生成时间 {{ analysis_time }}</div>
-      <div class="footer-sub">数据来源：git log 分析 + LLM 结构化输出 · 本报告仅供技术参考</div>
+      {% if nav_pages %}
+      <a class="page-nav-link" href="index.html">← 索引</a>
+      <span class="footer-sub">第 {{ nav_current }} / {{ nav_total }} 页 · {{ nav_label }}</span>
+      {% else %}
+      <span>{{ repo.name }} — 技术演进分析项目 · 生成时间 {{ analysis_time }}</span>
+      {% endif %}
     </div>
     <div class="footer-actions">
       {% if nav_pages %}

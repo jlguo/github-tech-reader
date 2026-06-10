@@ -52,7 +52,7 @@ class HTMLGenerator:
         output_dir = os.path.join(self.output_dir, f"{safe_name}_{timestamp}")
         os.makedirs(output_dir, exist_ok=True)
 
-        filepath = output_path or os.path.join(output_dir, "report.html")
+        filepath = output_path or os.path.join(output_dir, "index.html")
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(html)
 
@@ -127,16 +127,6 @@ class HTMLGenerator:
         filepath = os.path.join(output_dir, "index.html")
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(html)
-
-    def _save_metadata(self, output_dir: str, data: dict, pages: int) -> None:
-        meta = {
-            "repo": data.get("repo", {}).get("name", ""),
-            "iterations": len(data.get("iterations", [])),
-            "pages": pages,
-            "generated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        }
-        with open(os.path.join(output_dir, "meta.json"), "w") as f:
-            json.dump(meta, f, ensure_ascii=False)
 
     def _save_metadata(self, output_dir: str, data: dict, pages: int) -> None:
         meta = {

@@ -3,117 +3,190 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GitHub Tech Reader — 报告库</title>
+<title>GitHub Tech Reader — 项目库</title>
 <style>
-:root {
-  --bg: #f9fafb;
-  --card: #ffffff;
-  --primary: #2563eb;
-  --text: #111827;
-  --text-secondary: #4b5563;
-  --text-muted: #6b7280;
-  --border: #e5e7eb;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  background: var(--bg);
-  color: var(--text);
-  line-height: 1.7;
+  background: #f8f5f2;
+  color: #1f2937;
+  min-height: 100vh;
 }
-.container {
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 48px 32px;
-}
-h1 {
-  font-size: 24px;
-  font-weight: 600;
-  margin-bottom: 4px;
-}
-.subtitle {
-  font-size: 14px;
-  color: var(--text-muted);
-  margin-bottom: 32px;
-}
-.report-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.report-card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 20px 24px;
-  text-decoration: none;
-  color: inherit;
-  transition: all 0.15s;
+header {
+  background: #ffffff;
+  height: 72px;
+  padding: 0 40px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 }
-.report-card:hover {
-  border-color: var(--primary);
-  box-shadow: var(--shadow-sm);
-}
-.report-info {
-  min-width: 0;
-}
-.report-name {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text);
-  margin-bottom: 4px;
-}
-.report-meta {
-  font-size: 13px;
-  color: var(--text-muted);
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-.report-meta span {
-  white-space: nowrap;
-}
-.report-arrow {
-  color: var(--text-muted);
-  font-size: 18px;
+.logo-icon {
+  width: 40px;
+  height: 40px;
+  background: #8b7355;
+  border-radius: 8px;
   flex-shrink: 0;
+}
+.title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.title-text {
+  font-size: 22px;
+  font-weight: 600;
+  color: #1f2937;
+}
+.subtitle-text {
+  font-size: 16px;
+  color: #6b7280;
+}
+.header-spacer {
+  flex: 1;
+}
+.search-hint {
+  font-size: 13px;
+  color: #9ca3af;
+}
+.bookshelf {
+  padding: 0;
+  position: relative;
+}
+.shelf {
+  position: relative;
+  height: 240px;
+  padding: 0 40px;
+}
+.shelf:nth-child(2) {
+  height: 260px;
+}
+.shelf:nth-child(3) {
+  height: 260px;
+}
+.shelf-board {
+  position: absolute;
+  bottom: 0;
+  left: 40px;
+  right: 40px;
+  height: 8px;
+  background: #d4c4b0;
+  border-radius: 2px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.25);
+}
+.books {
+  position: absolute;
+  bottom: 8px;
+  left: 100px;
+  display: flex;
+  gap: 24px;
+  align-items: flex-end;
+}
+.book {
+  position: relative;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border-radius: 4px 4px 0 0;
+  box-shadow: inset -3px 0 6px rgba(0,0,0,0.2);
+}
+.book:hover {
+  transform: translateY(-8px);
+  box-shadow: inset -3px 0 6px rgba(0,0,0,0.2), 0 8px 24px rgba(0,0,0,0.4);
+}
+.book a {
+  display: block;
+  width: 100%;
+  height: 100%;
+  text-decoration: none;
+  color: inherit;
+}
+.book-spine {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px;
+  height: 100%;
+}
+.book-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.8);
+  white-space: nowrap;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+}
+.book-ver {
+  font-size: 9px;
+  color: rgba(255,255,255,0.5);
+  white-space: nowrap;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+}
+.bookmark {
+  position: absolute;
+  top: 0;
+  width: 6px;
+  background: #c2410c;
+  border-radius: 0 0 2px 2px;
+  z-index: 10;
+}
+.hint {
+  text-align: right;
+  padding: 16px 48px;
+  font-size: 13px;
+  color: #6b7280;
 }
 .empty {
   text-align: center;
-  padding: 64px 0;
-  color: var(--text-muted);
-  font-size: 14px;
+  padding: 120px 40px;
+  color: #6b7280;
+  font-size: 15px;
 }
 </style>
 </head>
 <body>
-<div class="container">
-  <h1>GitHub Tech Reader — 报告库</h1>
-  <p class="subtitle">所有已生成的技术演进分析报告</p>
-  <div class="report-list">
-    {% if reports %}
-    {% for r in reports %}
-    <a class="report-card" href="{{ r.path }}/index.html">
-      <div class="report-info">
-        <div class="report-name">{{ r.repo }}</div>
-        <div class="report-meta">
-          <span>{{ r.iterations }} 个版本</span>
-          <span>{{ r.pages }} 页</span>
-          <span>{{ r.generated }}</span>
-        </div>
-      </div>
-      <span class="report-arrow">→</span>
-    </a>
-    {% endfor %}
-    {% else %}
-    <div class="empty">暂无报告。运行 <code>python main.py &lt;repo_url&gt;</code> 生成第一份报告。</div>
-    {% endif %}
+<header>
+  <div class="logo-icon"></div>
+  <div class="title-group">
+    <div class="title-text">GitHub Tech Reader</div>
+    <div class="subtitle-text">项目库</div>
   </div>
+  <div class="header-spacer"></div>
+  <div class="search-hint">搜索项目...</div>
+</header>
+
+{% if reports %}
+<div class="bookshelf">
+  {% for batch in reports|batch(5) %}
+  <div class="shelf">
+    <div class="books">
+      {% for r in batch %}
+      <div class="book" style="width: {{ 80 if loop.index0 == 0 else 70 if loop.index0 == 1 else 90 if loop.index0 == 2 else 65 if loop.index0 == 3 else 75 }}px; height: {{ 200 if loop.index0 == 0 else 180 if loop.index0 == 1 else 220 if loop.index0 == 2 else 170 if loop.index0 == 3 else 195 }}px; background: {{ '#4a6fa5' if loop.index0 == 0 else '#5f9e6e' if loop.index0 == 1 else '#c17f59' if loop.index0 == 2 else '#b05f5f' if loop.index0 == 3 else '#8a6fa5' }}">
+        <a href="{{ r.path }}/index.html">
+          {% if loop.index0 in [0, 2, 7, 9] %}
+          <div class="bookmark" style="left: {{ 74 if loop.index0 == 0 else 84 if loop.index0 == 2 else 89 if loop.index0 == 7 else 74 }}px; height: {{ 28 if loop.index0 == 0 else 32 if loop.index0 == 2 else 30 if loop.index0 == 7 else 34 }}px;"></div>
+          {% endif %}
+          <div class="book-spine">
+            <div class="book-label">{{ r.repo }}</div>
+            <div class="book-ver">{{ r.iterations }} ver · {{ r.generated }}</div>
+          </div>
+        </a>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="shelf-board"></div>
+  </div>
+  {% endfor %}
 </div>
+<div class="hint">点击书籍查看项目 →</div>
+{% else %}
+<div class="empty">暂无项目。运行 <code>python main.py <repo-url></code> 生成第一个项目。</div>
+{% endif %}
 </body>
 </html>
