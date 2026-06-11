@@ -34,7 +34,10 @@ def _sanitize_mermaid(code: str | None) -> str | None:
 
     # Replace parentheses inside square-bracket labels to avoid mermaid parse errors.
     # e.g. [AI请求(Gemini3.5默认)] → [AI请求（Gemini3.5默认）]
-    code = re.sub(r'\[([^\]]*?)\(([^\)]*?)\)([^\]]*?)\]', r'[\1（\2）\3]', code)
+    def replace_label_parens(match: re.Match[str]) -> str:
+        return "[" + match.group(1).replace("(", "（").replace(")", "）") + "]"
+
+    code = re.sub(r'\[([^\]]*)\]', replace_label_parens, code)
 
     lines = [line for line in code.split("\n") if line.strip() and not line.strip().startswith("%%") and not line.strip().startswith("//")]
     code = "\n".join(lines)

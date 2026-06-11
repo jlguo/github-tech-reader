@@ -27,6 +27,7 @@ def _save_svg_cache(code_hash: str, svg: str) -> None:
 
 
 def render_mermaid_batch(mermaid_codes: list[str]) -> dict[str, str]:
+    from llm_parser import _sanitize_mermaid
     from playwright.sync_api import sync_playwright
 
     result: dict[str, str] = {}
@@ -35,12 +36,15 @@ def render_mermaid_batch(mermaid_codes: list[str]) -> dict[str, str]:
     for code in mermaid_codes:
         if not code or not code.strip():
             continue
-        h = _mermaid_code_hash(code)
+        sanitized = _sanitize_mermaid(code)
+        if not sanitized:
+            continue
+        h = _mermaid_code_hash(sanitized)
         cached = _load_svg_cache(h)
         if cached:
             result[h] = cached
         else:
-            uncached.append((h, code))
+            uncached.append((h, sanitized))
 
     if not uncached:
         return result
@@ -86,12 +90,16 @@ mermaid.initialize({{ startOnLoad: false, theme: 'neutral', securityLevel: 'loos
 
 
 def pre_render_iterations(iterations: list[dict]) -> dict[str, str]:
+    from llm_parser import _sanitize_mermaid
     codes: list[str] = []
     for it in iterations:
         for key in ("old_arch_diagram", "new_arch_diagram", "sequence_diagram"):
             code = it.get(key)
             if code and code.strip():
-                codes.append(code)
+                sanitized = _sanitize_mermaid(code)
+                if sanitized:
+                    it[key] = sanitized
+                    codes.append(sanitized)
 
     if not codes:
         return {}

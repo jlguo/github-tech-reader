@@ -24,16 +24,18 @@ class HTMLGenerator:
             autoescape=select_autoescape(["html"]),
         )
 
-    def generate(self, data: dict, output_path: Optional[str] = None) -> str:
+    def generate(self, data: dict, output_path: Optional[str] = None,
+                 existing_dir: Optional[str] = None) -> str:
         iterations = data.get("iterations", [])
         total = len(iterations)
 
         if total <= ITEMS_PER_PAGE:
-            return self._generate_single(data, output_path)
+            return self._generate_single(data, output_path, existing_dir)
 
-        return self._generate_paginated(data, iterations, total, output_path)
+        return self._generate_paginated(data, iterations, total, output_path, existing_dir)
 
-    def _generate_single(self, data: dict, output_path: Optional[str] = None) -> str:
+    def _generate_single(self, data: dict, output_path: Optional[str] = None,
+                         existing_dir: Optional[str] = None) -> str:
         iterations = data.get("iterations", [])
         svg_map = pre_render_iterations(iterations)
         self._inject_svgs(iterations, svg_map)
@@ -48,8 +50,13 @@ class HTMLGenerator:
 
         repo_name = data.get("repo", {}).get("name", "report")
         safe_name = repo_name.replace("/", "_").replace(" ", "_")
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = os.path.join(self.output_dir, f"{safe_name}_{timestamp}")
+
+        if existing_dir:
+            output_dir = existing_dir
+            self._clear_html_files(output_dir)
+        else:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_dir = os.path.join(self.output_dir, f"{safe_name}_{timestamp}")
         os.makedirs(output_dir, exist_ok=True)
 
         filepath = output_path or os.path.join(output_dir, "index.html")
@@ -61,7 +68,8 @@ class HTMLGenerator:
         return os.path.abspath(filepath)
 
     def _generate_paginated(self, data: dict, iterations: list, total: int,
-                            output_path: Optional[str] = None) -> str:
+                            output_path: Optional[str] = None,
+                            existing_dir: Optional[str] = None) -> str:
         pages = []
         for i in range(0, total, ITEMS_PER_PAGE):
             pages.append(iterations[i:i + ITEMS_PER_PAGE])
@@ -70,9 +78,15 @@ class HTMLGenerator:
 
         repo_name = data.get("repo", {}).get("name", "report")
         safe_name = repo_name.replace("/", "_").replace(" ", "_")
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        report_dir_name = f"{safe_name}_{timestamp}"
-        output_dir = os.path.dirname(output_path) if output_path else os.path.join(self.output_dir, report_dir_name)
+
+        if existing_dir:
+            output_dir = existing_dir
+            self._clear_html_files(output_dir)
+        elif output_path:
+            output_dir = os.path.dirname(output_path)
+        else:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_dir = os.path.join(self.output_dir, f"{safe_name}_{timestamp}")
         os.makedirs(output_dir, exist_ok=True)
 
         page_files = []
@@ -140,6 +154,7 @@ class HTMLGenerator:
 
     def _update_library_index(self) -> None:
         reports = []
+        seen_repos = set()
         if os.path.isdir(self.output_dir):
             for entry in sorted(os.listdir(self.output_dir), reverse=True):
                 entry_path = os.path.join(self.output_dir, entry)
@@ -153,12 +168,37 @@ class HTMLGenerator:
                 if os.path.isfile(meta_path):
                     with open(meta_path) as f:
                         meta = json.load(f)
+                repo_name = meta.get("repo", entry)
+                if repo_name in seen_repos:
+                    continue
+                seen_repos.add(repo_name)
+                iterations = meta.get("iterations", 0) or 0
+                pages = meta.get("pages", 1) or 1
+                # Book dimensions proportional to project size
+                book_height = min(130 + iterations * 4, 220)
+                book_width = min(50 + pages * 6, 100)
+                # Strip owner prefix for spine display
+                spine_label = repo_name.split("/", 1)[-1]
+                # Font size: book height is visual text width after rotation
+                label_fs = min(14, max(8, int(book_height / max(len(spine_label), 1))))
+                # Deterministic color from repo name
+                palette = ["#4a6fa5","#5f9e6e","#c17f59","#b05f5f","#8a6fa5",
+                           "#6f9e8f","#b87f5f","#9f6f6f","#6f6fa5","#c17f8f"]
+                color_idx = sum(ord(c) for c in repo_name) % len(palette)
+                tilt_raw = sum(ord(c) for c in repo_name) % 7
+                tilt_deg = 0 if tilt_raw < 3 else [-5, 3, -7, 4][tilt_raw - 3]
                 reports.append({
-                    "repo": meta.get("repo", entry),
+                    "repo": repo_name,
                     "path": entry,
-                    "pages": meta.get("pages", "—"),
-                    "iterations": meta.get("iterations", "—"),
+                    "pages": pages,
+                    "iterations": iterations,
                     "generated": meta.get("generated", ""),
+                    "book_height": book_height,
+                    "book_width": book_width,
+                    "color": palette[color_idx],
+                    "spine_label": spine_label,
+                    "label_font_size": label_fs,
+                    "tilt_deg": tilt_deg,
                 })
 
         template = self._env.get_template("library.html")
@@ -166,6 +206,14 @@ class HTMLGenerator:
         filepath = os.path.join(self.output_dir, "library.html")
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(html)
+
+    @staticmethod
+    def _clear_html_files(output_dir: str) -> None:
+        """Remove index.html and page_*.html from existing report dir before regenerating."""
+        import glob
+        for pattern in ["index.html", "page_*.html"]:
+            for f in glob.glob(os.path.join(output_dir, pattern)):
+                os.remove(f)
 
     def _inject_svgs(self, iterations: list, svg_map: dict) -> None:
         from svg_renderer import _mermaid_code_hash

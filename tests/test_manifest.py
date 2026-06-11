@@ -189,3 +189,33 @@ def test_plan_patch_extraction_sorts_dependency_files_by_priority() -> None:
     plan = manifest.extraction_plan.to_dict()
     assert plan["total_files"] <= 3
     assert plan["files"][0] in ("requirements.txt", "go.mod", "package.json")
+
+
+def test_mermaid_sanitizer_converts_parentheses_in_labels():
+    from llm_parser import _sanitize_mermaid
+
+    # Single paren
+    code = "graph TD\n  C --> F[AI请求(Gemini3.5默认)]"
+    result = _sanitize_mermaid(code)
+    assert result is not None
+    assert "AI请求（Gemini3.5默认）" in result
+    assert "(" not in result
+
+    # Multiple parens in one label
+    code2 = "graph TD\n  A[foo(a)bar(b)] --> B[baz(c)]"
+    result2 = _sanitize_mermaid(code2)
+    assert result2 is not None
+    assert "foo（a）bar（b）" in result2
+    assert "baz（c）" in result2
+    assert "(" not in result2
+
+    # Already sanitized → unchanged
+    code3 = "graph TD\n  A[foo（a）] --> B[bar]"
+    result3 = _sanitize_mermaid(code3)
+    assert result3 is not None
+    assert "foo（a）" in result3
+
+    # Brackets without parens → unchanged
+    code4 = "graph TD\n  A --> B"
+    result4 = _sanitize_mermaid(code4)
+    assert result4 == code4

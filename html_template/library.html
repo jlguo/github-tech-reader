@@ -59,14 +59,8 @@ header {
 }
 .shelf {
   position: relative;
-  height: 240px;
+  height: 280px;
   padding: 0 40px;
-}
-.shelf:nth-child(2) {
-  height: 260px;
-}
-.shelf:nth-child(3) {
-  height: 260px;
 }
 .shelf-board {
   position: absolute;
@@ -92,9 +86,12 @@ header {
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   border-radius: 4px 4px 0 0;
   box-shadow: inset -3px 0 6px rgba(0,0,0,0.2);
+  overflow: hidden;
+  transform: var(--tilt);
+  transform-origin: bottom center;
 }
 .book:hover {
-  transform: translateY(-8px);
+  transform: var(--tilt) translateY(-8px);
   box-shadow: inset -3px 0 6px rgba(0,0,0,0.2), 0 8px 24px rgba(0,0,0,0.4);
 }
 .book a {
@@ -105,28 +102,25 @@ header {
   color: inherit;
 }
 .book-spine {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-90deg);
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   gap: 8px;
-  padding: 8px;
-  height: 100%;
+  white-space: nowrap;
 }
 .book-label {
-  font-size: 14px;
   font-weight: 600;
-  color: rgba(255,255,255,0.8);
+  color: rgba(255,255,255,0.85);
   white-space: nowrap;
-  writing-mode: vertical-rl;
-  text-orientation: mixed;
 }
 .book-ver {
   font-size: 9px;
-  color: rgba(255,255,255,0.5);
+  color: rgba(255,255,255,0.4);
   white-space: nowrap;
-  writing-mode: vertical-rl;
-  text-orientation: mixed;
 }
 .bookmark {
   position: absolute;
@@ -167,14 +161,15 @@ header {
   <div class="shelf">
     <div class="books">
       {% for r in batch %}
-      <div class="book" style="width: {{ 80 if loop.index0 == 0 else 70 if loop.index0 == 1 else 90 if loop.index0 == 2 else 65 if loop.index0 == 3 else 75 }}px; height: {{ 200 if loop.index0 == 0 else 180 if loop.index0 == 1 else 220 if loop.index0 == 2 else 170 if loop.index0 == 3 else 195 }}px; background: {{ '#4a6fa5' if loop.index0 == 0 else '#5f9e6e' if loop.index0 == 1 else '#c17f59' if loop.index0 == 2 else '#b05f5f' if loop.index0 == 3 else '#8a6fa5' }}">
+      <div class="book" style="width: {{ r.book_width }}px; height: {{ r.book_height }}px; background: {{ r.color }}; --tilt: rotate({{ r.tilt_deg }}deg)">
         <a href="{{ r.path }}/index.html">
           {% if loop.index0 in [0, 2, 7, 9] %}
           <div class="bookmark" style="left: {{ 74 if loop.index0 == 0 else 84 if loop.index0 == 2 else 89 if loop.index0 == 7 else 74 }}px; height: {{ 28 if loop.index0 == 0 else 32 if loop.index0 == 2 else 30 if loop.index0 == 7 else 34 }}px;"></div>
           {% endif %}
           <div class="book-spine">
-            <div class="book-label">{{ r.repo }}</div>
-            <div class="book-ver">{{ r.iterations }} ver · {{ r.generated }}</div>
+            <div class="book-label" style="font-size: {{ r.label_font_size }}px;">{{ r.spine_label }}</div>
+            <div class="book-ver">{{ r.iterations }} ver</div>
+            <div class="book-ver">{{ r.generated }}</div>
           </div>
         </a>
       </div>

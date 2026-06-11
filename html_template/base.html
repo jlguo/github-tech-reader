@@ -752,9 +752,6 @@ body {
   overflow: auto;
   cursor: grab;
   position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 .lightbox-canvas:active {
   cursor: grabbing;
@@ -762,6 +759,9 @@ body {
 .lightbox-canvas svg {
   transform-origin: 0 0;
   display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
   max-width: none;
   max-height: none;
 }
@@ -1391,7 +1391,7 @@ function loadMoreVersions() {
     applyTransform();
     updateZoomLabel();
   });
-  document.getElementById('lb-fit').addEventListener('click', fitToWindow);
+  document.getElementById('lb-fit').addEventListener('click', function() { fitToWindow(); });
   document.getElementById('lb-reset').addEventListener('click', resetToOriginal);
   document.getElementById('lb-close').addEventListener('click', closeLightbox);
 

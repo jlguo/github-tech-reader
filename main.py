@@ -42,6 +42,18 @@ DEFAULT_JSON_CACHE_DIR = os.path.join(BASE_DIR, "cache_json")
 DEFAULT_OUTPUT_DIR = os.path.join(BASE_DIR, "report_output")
 
 
+def _find_existing_report(output_dir: str, safe_repo_name: str) -> str | None:
+    """Return existing report directory for a repo, or None."""
+    if not os.path.isdir(output_dir):
+        return None
+    for entry in os.listdir(output_dir):
+        if entry.startswith(safe_repo_name + "_"):
+            path = os.path.join(output_dir, entry)
+            if os.path.isdir(path) and os.path.isfile(os.path.join(path, "index.html")):
+                return path
+    return None
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Analyze GitHub repo iterations and generate an HTML tech-evolution report."
@@ -427,8 +439,9 @@ def main():
 
     # Step 4: Generate HTML
     print("[4/4] Generating HTML report...")
+    existing_dir = _find_existing_report(DEFAULT_OUTPUT_DIR, f"{owner}_{repo_name}")
     generator = HTMLGenerator(output_dir=DEFAULT_OUTPUT_DIR)
-    output_path = generator.generate(report_data, args.output)
+    output_path = generator.generate(report_data, args.output, existing_dir=existing_dir)
 
     elapsed = time.time() - t_start
     print(f"\n{'='*60}")
