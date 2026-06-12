@@ -1,7 +1,6 @@
 import json
 import os
 from datetime import datetime
-from typing import Optional
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
@@ -10,13 +9,14 @@ from svg_renderer import pre_render_iterations
 TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "html_template")
 ASSETS_DIR = os.path.join(TEMPLATE_DIR, "assets")
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "report_output")
+BOOK_OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "book_output")
 
 ITEMS_PER_PAGE = 20
 
 
 class HTMLGenerator:
 
-    def __init__(self, template_dir: Optional[str] = None, output_dir: Optional[str] = None):
+    def __init__(self, template_dir: str | None = None, output_dir: str | None = None):
         self.template_dir = template_dir or TEMPLATE_DIR
         self.output_dir = output_dir or OUTPUT_DIR
         self._env = Environment(
@@ -24,8 +24,8 @@ class HTMLGenerator:
             autoescape=select_autoescape(["html"]),
         )
 
-    def generate(self, data: dict, output_path: Optional[str] = None,
-                 existing_dir: Optional[str] = None) -> str:
+    def generate(self, data: dict, output_path: str | None = None,
+                 existing_dir: str | None = None) -> str:
         iterations = data.get("iterations", [])
         total = len(iterations)
 
@@ -34,8 +34,79 @@ class HTMLGenerator:
 
         return self._generate_paginated(data, iterations, total, output_path, existing_dir)
 
-    def _generate_single(self, data: dict, output_path: Optional[str] = None,
-                         existing_dir: Optional[str] = None) -> str:
+    def generate_structural(self, data: dict, output_path: str | None = None,
+                            existing_dir: str | None = None) -> str:
+        modules = data.get("modules", [])
+        overview = data.get("overview", {})
+        synthesis = data.get("synthesis", {})
+        diagrams = []
+
+        for m in modules:
+            diag = (m.get("analysis", {}) or {}).get("diagram")
+            if diag and diag.strip():
+                diagrams.append(diag)
+
+        def _collect_diagrams(obj, keys=("diagram",)):
+            if isinstance(obj, dict):
+                for k in keys:
+                    v = obj.get(k)
+                    if isinstance(v, str) and v.strip():
+                        diagrams.append(v)
+                for v in obj.values():
+                    _collect_diagrams(v, keys)
+
+        _collect_diagrams(overview)
+        _collect_diagrams(synthesis)
+
+        if diagrams:
+            from svg_renderer import _mermaid_code_hash, render_mermaid_batch
+            svg_map = render_mermaid_batch(diagrams)
+            for m in modules:
+                diag = (m.get("analysis", {}) or {}).get("diagram")
+                if diag and diag.strip():
+                    h = _mermaid_code_hash(diag)
+                    if h in svg_map:
+                        m["analysis"]["diagram_svg"] = svg_map[h]
+
+            def _inject_svgs(obj, keys=("diagram",)):
+                if isinstance(obj, dict):
+                    for k in keys:
+                        v = obj.get(k)
+                        if isinstance(v, str) and v.strip():
+                            h = _mermaid_code_hash(v)
+                            if h in svg_map:
+                                obj[k] = svg_map[h]
+                    for v in obj.values():
+                        _inject_svgs(v, keys)
+
+            _inject_svgs(overview)
+            _inject_svgs(synthesis)
+
+        template = self._env.get_template("structural.html")
+        html = template.render(**data)
+        html = self._inline_echarts(html)
+
+        repo_name = data.get("repo", {}).get("name", "report")
+        safe_name = repo_name.replace("/", "_").replace(" ", "_")
+
+        if existing_dir:
+            output_dir = existing_dir
+            self._clear_html_files(output_dir)
+        else:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_dir = os.path.join(self.output_dir, f"{safe_name}_{timestamp}")
+        os.makedirs(output_dir, exist_ok=True)
+
+        filepath = output_path or os.path.join(output_dir, "index.html")
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(html)
+
+        self._save_metadata(output_dir, data, 1)
+        self._update_library_index()
+        return os.path.abspath(filepath)
+
+    def _generate_single(self, data: dict, output_path: str | None = None,
+                         existing_dir: str | None = None) -> str:
         iterations = data.get("iterations", [])
         svg_map = pre_render_iterations(iterations)
         self._inject_svgs(iterations, svg_map)
@@ -68,8 +139,8 @@ class HTMLGenerator:
         return os.path.abspath(filepath)
 
     def _generate_paginated(self, data: dict, iterations: list, total: int,
-                            output_path: Optional[str] = None,
-                            existing_dir: Optional[str] = None) -> str:
+                            output_path: str | None = None,
+                            existing_dir: str | None = None) -> str:
         pages = []
         for i in range(0, total, ITEMS_PER_PAGE):
             pages.append(iterations[i:i + ITEMS_PER_PAGE])
@@ -145,61 +216,127 @@ class HTMLGenerator:
     def _save_metadata(self, output_dir: str, data: dict, pages: int) -> None:
         meta = {
             "repo": data.get("repo", {}).get("name", ""),
-            "iterations": len(data.get("iterations", [])),
+            "repo_url": data.get("repo", {}).get("url", ""),
+            "iterations": (len(data.get("iterations", []))
+                           or len(data.get("modules", []))),
             "pages": pages,
             "generated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
-        with open(os.path.join(output_dir, "meta.json"), "w") as f:
+        with open(os.path.join(output_dir, "meta.json"), "w", encoding="utf-8") as f:
             json.dump(meta, f, ensure_ascii=False)
+
+    def generate_book(self, book_dir: str) -> str:
+        book_json_path = os.path.join(book_dir, "book.json")
+        manifest_path = os.path.join(book_dir, "book_manifest.json")
+
+        with open(book_json_path, encoding="utf-8") as f:
+            book_data = json.load(f)
+
+        manifest = {}
+        if os.path.isfile(manifest_path):
+            with open(manifest_path, encoding="utf-8") as f:
+                manifest = json.load(f)
+
+        repo_info = manifest.get("repo", {})
+        repo_name = repo_info.get("name", book_data.get("repo_name", ""))
+        book_title = f"{repo_name} · 产品视角技术书籍"
+        generated_at = manifest.get("analysis_time", book_data.get("generated_at", ""))
+
+        template = self._env.get_template("book.html")
+        html = template.render(
+            book_title=book_title,
+            repo_name=repo_name,
+            repo_info=repo_info,
+            chapters=book_data.get("chapters", []),
+            meta=book_data.get("meta", {}),
+            product_context=book_data.get("product_context", {}),
+            generated_at=generated_at,
+        )
+
+        filepath = os.path.join(book_dir, "index.html")
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(html)
+
+        self._update_library_index()
+        return os.path.abspath(filepath)
+
+    def _scan_dir_for_reports(self, scan_dir: str, reports: list, seen_repos: set,
+                               source_label: str = "report") -> None:
+        if not os.path.isdir(scan_dir):
+            return
+        for entry in sorted(os.listdir(scan_dir), reverse=True):
+            entry_path = os.path.join(scan_dir, entry)
+            if not os.path.isdir(entry_path):
+                continue
+            index_path = os.path.join(entry_path, "index.html")
+            if not os.path.isfile(index_path):
+                continue
+
+            # Try meta.json first (evolution/structural), then book_manifest.json
+            meta_path = os.path.join(entry_path, "meta.json")
+            meta = {}
+            if os.path.isfile(meta_path):
+                with open(meta_path, encoding="utf-8") as f:
+                    meta = json.load(f)
+            else:
+                manifest_path = os.path.join(entry_path, "book_manifest.json")
+                if os.path.isfile(manifest_path):
+                    with open(manifest_path, encoding="utf-8") as f:
+                        mf = json.load(f)
+                    repo = mf.get("repo", {})
+                    meta = {
+                        "repo": repo.get("name", entry),
+                        "iterations": repo.get("tag_count", 0) or 0,
+                        "pages": 1,
+                        "generated": mf.get("analysis_time", "").split(" ")[0],
+                        "source": "book",
+                    }
+
+            repo_name = meta.get("repo", entry)
+            if repo_name in seen_repos:
+                continue
+            seen_repos.add(repo_name)
+
+            is_book = meta.get("source") == "book"
+            iterations = meta.get("iterations", 0) or 0
+            pages = meta.get("pages", 1) or 1
+
+            if is_book:
+                book_height = 200
+                book_width = 40
+                spine_label = repo_name.split("/", 1)[-1] + " 📖"
+            else:
+                book_height = min(130 + iterations * 4, 220)
+                book_width = min(50 + pages * 6, 100)
+                spine_label = repo_name.split("/", 1)[-1]
+
+            label_fs = min(14, max(8, int(book_height / max(len(spine_label), 1))))
+            palette = ["#4a6fa5","#5f9e6e","#c17f59","#b05f5f","#8a6fa5",
+                       "#6f9e8f","#b87f5f","#9f6f6f","#6f6fa5","#c17f8f"]
+            color_idx = sum(ord(c) for c in repo_name) % len(palette)
+            tilt_raw = sum(ord(c) for c in repo_name) % 7
+            tilt_deg = 0 if tilt_raw < 3 else [-5, 3, -7, 4][tilt_raw - 3]
+            reports.append({
+                "repo": repo_name,
+                "path": os.path.relpath(entry_path, self.output_dir),
+                "pages": pages,
+                "iterations": iterations,
+                "generated": meta.get("generated", ""),
+                "book_height": book_height,
+                "book_width": book_width,
+                "color": palette[color_idx],
+                "spine_label": spine_label,
+                "label_font_size": label_fs,
+                "tilt_deg": tilt_deg,
+                "is_book": is_book,
+            })
 
     def _update_library_index(self) -> None:
         reports = []
         seen_repos = set()
-        if os.path.isdir(self.output_dir):
-            for entry in sorted(os.listdir(self.output_dir), reverse=True):
-                entry_path = os.path.join(self.output_dir, entry)
-                if not os.path.isdir(entry_path):
-                    continue
-                index_path = os.path.join(entry_path, "index.html")
-                if not os.path.isfile(index_path):
-                    continue
-                meta_path = os.path.join(entry_path, "meta.json")
-                meta = {}
-                if os.path.isfile(meta_path):
-                    with open(meta_path) as f:
-                        meta = json.load(f)
-                repo_name = meta.get("repo", entry)
-                if repo_name in seen_repos:
-                    continue
-                seen_repos.add(repo_name)
-                iterations = meta.get("iterations", 0) or 0
-                pages = meta.get("pages", 1) or 1
-                # Book dimensions proportional to project size
-                book_height = min(130 + iterations * 4, 220)
-                book_width = min(50 + pages * 6, 100)
-                # Strip owner prefix for spine display
-                spine_label = repo_name.split("/", 1)[-1]
-                # Font size: book height is visual text width after rotation
-                label_fs = min(14, max(8, int(book_height / max(len(spine_label), 1))))
-                # Deterministic color from repo name
-                palette = ["#4a6fa5","#5f9e6e","#c17f59","#b05f5f","#8a6fa5",
-                           "#6f9e8f","#b87f5f","#9f6f6f","#6f6fa5","#c17f8f"]
-                color_idx = sum(ord(c) for c in repo_name) % len(palette)
-                tilt_raw = sum(ord(c) for c in repo_name) % 7
-                tilt_deg = 0 if tilt_raw < 3 else [-5, 3, -7, 4][tilt_raw - 3]
-                reports.append({
-                    "repo": repo_name,
-                    "path": entry,
-                    "pages": pages,
-                    "iterations": iterations,
-                    "generated": meta.get("generated", ""),
-                    "book_height": book_height,
-                    "book_width": book_width,
-                    "color": palette[color_idx],
-                    "spine_label": spine_label,
-                    "label_font_size": label_fs,
-                    "tilt_deg": tilt_deg,
-                })
+        self._scan_dir_for_reports(self.output_dir, reports, seen_repos)
+        self._scan_dir_for_reports(BOOK_OUTPUT_DIR, reports, seen_repos, source_label="book")
+        reports.sort(key=lambda r: r["generated"], reverse=True)
 
         template = self._env.get_template("library.html")
         html = template.render(reports=reports)

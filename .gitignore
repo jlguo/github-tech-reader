@@ -27,3 +27,6 @@ Thumbs.db
 *.swp
 *.swo
 svg_cache/
+
+# App database
+app/jobs.db

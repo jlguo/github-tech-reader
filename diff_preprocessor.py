@@ -6,8 +6,6 @@ extracts dependency changes, and chunks large diffs for LLM context windows.
 """
 
 import re
-from typing import Optional
-
 
 # Patterns to detect dependency manifest files
 DEPENDENCY_FILES = [
@@ -52,7 +50,7 @@ def is_noise_file(filepath: str) -> bool:
     return any(re.search(pat, basename) for pat in NOISE_FILE_PATTERNS)
 
 
-def strip_comment_lines(diff_text: str, language: Optional[str] = None) -> str:
+def strip_comment_lines(diff_text: str, language: str | None = None) -> str:
     """Remove lines that are pure comment changes from a diff."""
     comment_prefixes = {
         "python": r"^\s*#",
