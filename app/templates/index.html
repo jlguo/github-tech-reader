@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GitHub Tech Reader</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+
+<header class="page-header">
+  <div class="container" style="display:flex;align-items:center;justify-content:space-between;height:56px;">
+    <a href="/" style="font-size:1.15rem;font-weight:700;letter-spacing:-0.02em;">
+      &#128214; GitHub Tech Reader
+    </a>
+    <nav style="display:flex;gap:var(--space-lg);font-size:0.875rem;">
+      <a href="/">Home</a>
+    </nav>
+  </div>
+</header>
+
+<main class="container" style="padding-top:var(--space-2xl);padding-bottom:var(--space-2xl);">
+
+  <!-- ======== Hero ======== -->
+  <section style="text-align:center;margin-bottom:var(--space-2xl);">
+    <h2 style="font-size:1.25rem;color:var(--color-text-muted);font-weight:400;margin-bottom:var(--space-xs);">
+      Local-only GitHub Repo Analysis
+    </h2>
+    <h1 style="font-size:2.25rem;margin-bottom:var(--space-lg);">
+      AI-Powered Tech Evolution Reports
+    </h1>
+    <p style="max-width:560px;margin:0 auto var(--space-xl);color:var(--color-text-muted);line-height:1.7;">
+      Paste any GitHub repo URL below. We'll clone, analyze, and generate an
+      interactive offline HTML report — no cloud dependencies.
+    </p>
+
+    <form id="analyze-form" style="max-width:520px;margin:0 auto;">
+      <div style="margin-bottom:var(--space-md);">
+        <input
+          type="url" id="repo-url" name="repo_url"
+          placeholder="https://github.com/user/repo"
+          required
+          style="width:100%;padding:14px 18px;border:2px solid var(--color-border);border-radius:var(--radius-lg);font-size:1rem;font-family:var(--font-sans);background:var(--color-surface);color:var(--color-text);outline:none;transition:border-color 0.15s;"
+          onfocus="this.style.borderColor='var(--color-primary)'"
+          onblur="this.style.borderColor='var(--color-border)'"
+        >
+      </div>
+      <div style="display:flex;gap:var(--space-md);margin-bottom:var(--space-md);flex-wrap:wrap;">
+        <select id="provider" name="provider" style="flex:1;min-width:140px;padding:12px 14px;border:2px solid var(--color-border);border-radius:var(--radius-lg);font-size:0.9rem;font-family:var(--font-sans);background:var(--color-surface);color:var(--color-text);cursor:pointer;">
+          <option value="deepseek">DeepSeek</option>
+          <option value="openai">OpenAI</option>
+          <option value="ollama">Ollama (local)</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:var(--space-sm);font-size:0.875rem;color:var(--color-text-muted);cursor:pointer;white-space:nowrap;">
+          <input type="checkbox" id="no-llm" name="no_llm" style="width:18px;height:18px;accent-color:var(--color-primary);">
+          Skip LLM (mock data)
+        </label>
+      </div>
+      <button type="submit" id="submit-btn"
+        style="width:100%;padding:14px 24px;background:var(--color-primary);color:#fff;border:none;border-radius:var(--radius-lg);font-size:1rem;font-weight:600;cursor:pointer;transition:opacity 0.15s,transform 0.15s;"
+        onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'"
+        onmousedown="this.style.transform='scale(0.98)'" onmouseup="this.style.transform='scale(1)'"
+      >
+        Analyze Repository
+      </button>
+      <p id="form-error" style="margin-top:var(--space-sm);color:var(--color-error);font-size:0.875rem;display:none;"></p>
+    </form>
+  </section>
+
+  <!-- ======== Active Jobs ======== -->
+  {% if jobs %}
+  <section style="margin-bottom:var(--space-2xl);">
+    <h2 style="margin-bottom:var(--space-md);">Active &amp; Recent Jobs</h2>
+    <div style="display:flex;flex-direction:column;gap:var(--space-sm);">
+      {% for j in jobs %}
+      <a href="/jobs/{{ j.id }}"
+        style="display:flex;align-items:center;justify-content:space-between;padding:var(--space-md);background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);transition:box-shadow 0.15s;"
+        onmouseover="this.style.boxShadow='var(--shadow-sm)'" onmouseout="this.style.boxShadow='none'">
+        <div style="min-width:0;">
+          <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ j.repo_url }}</div>
+          <div style="font-size:0.8rem;color:var(--color-text-muted);margin-top:2px;">{{ j.created_at }}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:var(--space-md);flex-shrink:0;margin-left:var(--space-lg);">
+          {% if j.progress > 0 and j.status == "running" %}
+          <div style="width:80px;height:6px;background:var(--color-border-light);border-radius:3px;overflow:hidden;">
+            <div style="width:{{ j.progress }}%;height:100%;background:var(--color-primary);border-radius:3px;transition:width 0.3s;"></div>
+          </div>
+          {% endif %}
+          <span style="font-size:0.8rem;font-weight:600;padding:3px 10px;border-radius:var(--radius-sm);background:{% if j.status=='done' %}var(--color-success){% elif j.status=='running' %}var(--color-info){% elif j.status=='error' %}var(--color-error){% else %}var(--color-border){% endif %};color:{% if j.status in ('done','running','error') %}#fff{% else %}var(--color-text-muted){% endif %};text-transform:uppercase;letter-spacing:0.05em;">
+            {{ j.status }}
+          </span>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  <!-- ======== Recent Reports ======== -->
+  {% if reports %}
+  <section>
+    <h2 style="margin-bottom:var(--space-md);">Recent Reports</h2>
+    <div style="display:flex;flex-direction:column;gap:var(--space-sm);">
+      {% for r in reports %}
+      <div class="report-card" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);overflow:hidden;transition:box-shadow 0.15s;" onmouseover="this.style.boxShadow='var(--shadow-sm)'" onmouseout="this.style.boxShadow='none'">
+        <a href="{{ r.index_url }}" style="display:block;padding:var(--space-md) var(--space-md) 0;text-decoration:none;color:inherit;min-width:0;">
+          <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ r.repo }}</div>
+          <div style="font-size:0.8rem;color:var(--color-text-muted);margin-top:4px;">
+            Generated {{ r.generated }}
+            {% if r.iterations %} &middot; {{ r.iterations }} iterations{% endif %}
+            {% if r.pages > 1 %} &middot; {{ r.pages }} pages{% endif %}
+          </div>
+        </a>
+        <div class="report-actions" style="display:flex;justify-content:flex-end;gap:4px;padding:8px var(--space-md) var(--space-md);">
+          {% if r.repo_url %}
+          <button onclick="event.preventDefault();fillForm('{{ r.repo_url }}')" class="action-link">&#x21bb; Re-analyze</button>
+          {% endif %}
+          <button onclick="event.preventDefault();deleteReport('{{ r.dir }}', this)" class="action-link action-link-danger">Delete</button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  <!-- Empty state -->
+  {% if not reports and not jobs %}
+  <section style="text-align:center;padding:var(--space-2xl) 0;color:var(--color-text-muted);">
+    <p style="font-size:1.1rem;">No reports yet. Submit a repo URL above to get started.</p>
+  </section>
+  {% endif %}
+
+</main>
+
+<script>
+(function() {
+  var form = document.getElementById("analyze-form");
+  var btn = document.getElementById("submit-btn");
+  var errorEl = document.getElementById("form-error");
+
+  window.fillForm = function(repoUrl) {
+    document.getElementById("repo-url").value = repoUrl;
+    document.getElementById("repo-url").focus();
+    document.getElementById("repo-url").scrollIntoView({ behavior: "smooth" });
+  };
+
+  window.deleteReport = function(dir, el) {
+    if (!confirm("Delete this report? This cannot be undone.")) return;
+    var card = el.closest(".report-card");
+    if (!card) return;
+    card.style.opacity = "0";
+    card.style.transition = "opacity 0.3s";
+
+    fetch("/api/reports/" + encodeURIComponent(dir), { method: "DELETE" })
+      .then(function(r) {
+        if (!r.ok) return r.json().then(function(e) { throw e; });
+        setTimeout(function() { card.remove(); }, 300);
+      })
+      .catch(function(err) {
+        card.style.opacity = "1";
+        alert("Failed to delete: " + (err.detail || err.message || "Unknown error"));
+      });
+  };
+
+  form.addEventListener("submit", function(e) {
+    e.preventDefault();
+    errorEl.style.display = "none";
+    btn.disabled = true;
+    btn.textContent = "Submitting\u2026";
+
+    var body = {
+      repo_url: document.getElementById("repo-url").value.trim(),
+      provider: document.getElementById("provider").value,
+      no_llm: document.getElementById("no-llm").checked,
+    };
+
+    fetch("/api/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+    .then(function(r) {
+      if (!r.ok) return r.json().then(function(err) { throw err; });
+      return r.json();
+    })
+    .then(function(data) {
+      window.location.href = "/jobs/" + data.job_id;
+    })
+    .catch(function(err) {
+      errorEl.textContent = err.detail || "Failed to submit. Is the server running?";
+      errorEl.style.display = "block";
+      btn.disabled = false;
+      btn.textContent = "Analyze Repository";
+    });
+  });
+})();
+</script>
+
+<style>
+.report-card { transition: box-shadow 0.15s; }
+
+.action-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: none;
+  background: none;
+  font-size: 0.78rem;
+  color: var(--color-primary);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background 0.1s, color 0.1s;
+}
+.action-link:hover { background: var(--color-bg); }
+.action-link-danger { color: var(--color-text-muted); }
+.action-link-danger:hover { color: var(--color-error); background: #fef2f2; }
+
+@media (max-width: 480px) {
+  .report-card a { padding: 10px 12px 0; }
+  .report-actions { padding: 6px 12px 10px; }
+  .action-link { font-size: 0.75rem; padding: 4px 8px; }
+}
+</style>
+
+</body>
+</html>
