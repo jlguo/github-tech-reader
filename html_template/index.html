@@ -107,6 +107,71 @@ h1 {
   color: #9ca3af;
   font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
 }
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .header {
+    height: auto;
+    min-height: 56px;
+    padding: 12px 20px;
+    flex-wrap: wrap;
+  }
+  .book-shell {
+    margin: 32px auto;
+    padding: 0 16px;
+  }
+  .index-card {
+    padding: 24px 20px;
+    border-radius: 10px;
+  }
+  .index-title { font-size: 22px; }
+  .page-link {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 14px 16px;
+  }
+  .page-num { font-size: 13px; }
+  .page-range { font-size: 13px; }
+  .page-versions { font-size: 11px; }
+}
+
+@media (max-width: 480px) {
+  .header {
+    padding: 10px 12px;
+    gap: 10px;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .logo-icon {
+    width: 32px;
+    height: 32px;
+  }
+  h1 { font-size: 16px; }
+  .meta { font-size: 11px; }
+  .back-link { font-size: 13px; }
+  .book-shell {
+    margin: 20px auto;
+    padding: 0 10px;
+  }
+  .index-card {
+    padding: 18px 14px;
+  }
+  .index-title { font-size: 20px; }
+  .index-subtitle { font-size: 13px; margin-bottom: 20px; }
+  .page-list { gap: 8px; }
+  .page-link {
+    padding: 12px 14px;
+    min-height: 44px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .page-link:hover { transform: none; }
+  .page-num { font-size: 12px; }
+  .page-range { font-size: 12px; }
+  .page-versions { font-size: 10px; }
+}
 </style>
 </head>
 <body>

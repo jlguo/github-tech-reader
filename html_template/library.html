@@ -54,31 +54,37 @@ header {
   color: #9ca3af;
 }
 .bookshelf {
-  padding: 0;
-  position: relative;
+  padding: 24px 0 0;
 }
 .shelf {
   position: relative;
   height: 280px;
-  padding: 0 40px;
+  padding: 0 40px 12px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #c4b49a transparent;
 }
+.shelf::-webkit-scrollbar { height: 6px; }
+.shelf::-webkit-scrollbar-thumb { background: #c4b49a; border-radius: 3px; }
 .shelf-board {
-  position: absolute;
+  position: sticky;
   bottom: 0;
   left: 40px;
   right: 40px;
-  height: 8px;
+  height: 10px;
+  min-width: 100%;
   background: #d4c4b0;
   border-radius: 2px;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.25);
+  box-shadow: 0 -4px 8px rgba(0,0,0,0.15);
+  z-index: 5;
 }
 .books {
-  position: absolute;
-  bottom: 8px;
-  left: 100px;
   display: flex;
   gap: 24px;
   align-items: flex-end;
+  min-width: max-content;
+  padding: 0 0 0 60px;
 }
 .book {
   position: relative;
@@ -89,6 +95,7 @@ header {
   overflow: hidden;
   transform: var(--tilt);
   transform-origin: bottom center;
+  flex-shrink: 0;
 }
 .book:hover {
   transform: var(--tilt) translateY(-8px);
@@ -142,6 +149,68 @@ header {
   color: #6b7280;
   font-size: 15px;
 }
+
+.scroll-indicator {
+  display: none;
+  text-align: center;
+  padding: 8px 0 0;
+  font-size: 12px;
+  color: #9ca3af;
+  animation: fadeHint 3s ease-in-out infinite;
+}
+@keyframes fadeHint {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+/* ── Tablet ── */
+@media (max-width: 768px) {
+  header {
+    height: auto;
+    min-height: 56px;
+    padding: 12px 20px;
+  }
+  .title-text { font-size: 18px; }
+  .subtitle-text { font-size: 14px; }
+  .search-hint { font-size: 12px; }
+  .shelf {
+    height: 220px;
+    padding: 0 20px 10px;
+  }
+  .books { padding-left: 20px; gap: 16px; }
+  .shelf-board { left: 20px; right: 20px; height: 8px; }
+  .hint { padding: 12px 28px; font-size: 12px; }
+  .empty { padding: 80px 24px; font-size: 14px; }
+  .scroll-indicator { display: block; }
+  .book:hover { transform: var(--tilt) translateY(-4px); }
+  .book-spine { gap: 4px; }
+}
+
+/* ── Mobile ── */
+@media (max-width: 480px) {
+  header {
+    padding: 10px 12px;
+    gap: 10px;
+  }
+  .logo-icon { width: 32px; height: 32px; }
+  .title-text { font-size: 16px; }
+  .subtitle-text { font-size: 12px; }
+  .search-hint { font-size: 10px; }
+  .shelf {
+    height: 180px;
+    padding: 0 12px 8px;
+  }
+  .books { padding-left: 8px; gap: 10px; }
+  .shelf-board { left: 12px; right: 12px; height: 6px; }
+  .book-label {
+    /* Make spine text readable by limiting rotation on narrow books */
+    font-size: 11px;
+  }
+  .book-ver { font-size: 7px; }
+  .hint { padding: 10px 16px; font-size: 11px; }
+  .empty { padding: 60px 16px; font-size: 13px; }
+  .book:hover { transform: var(--tilt) translateY(-4px); }
+}
 </style>
 </head>
 <body>
@@ -179,6 +248,7 @@ header {
   </div>
   {% endfor %}
 </div>
+<div class="scroll-indicator">&larr; 左右滑动浏览 &rarr;</div>
 <div class="hint">点击书籍查看项目 →</div>
 {% else %}
 <div class="empty">暂无项目。运行 <code>python main.py <repo-url></code> 生成第一个项目。</div>

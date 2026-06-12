@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ repo.name }} — 代码库深度分析</title>
+<style>
+:root {
+  --bg: #f8f5f2;
+  --card: #ffffff;
+  --paper: #faf7f4;
+  --primary: #8b7355;
+  --primary-hover: #6f5c44;
+  --accent: #d4a574;
+  --text: #1f2937;
+  --text-secondary: #4b5563;
+  --text-muted: #6b7280;
+  --border: #e8ded2;
+  --border-light: #f0e7de;
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.08);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.12);
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; font-size: 16px; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  background: var(--bg); color: var(--text); line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+.container { max-width: 1100px; margin: 0 auto; padding: 0 32px; }
+
+.page-header {
+  position: sticky; top: 0; z-index: 60; background: #fff;
+  box-shadow: var(--shadow-sm); height: 72px; padding: 0 40px;
+  display: flex; align-items: center;
+}
+.page-header .header-inner { width: 100%; display: flex; align-items: center; gap: 16px; }
+.page-header h1 { font-size: 18px; font-weight: 600; }
+.page-header .meta-stats { font-size: 12px; color: var(--text-muted); margin-left: auto; }
+.page-header .library-link { color: var(--primary); font-size: 14px; font-weight: 500; text-decoration: none; white-space: nowrap; }
+.page-header .library-link:hover { color: var(--primary-hover); }
+
+/* Hero */
+.overview-hero {
+  background: linear-gradient(135deg, #faf7f4 0%, #efe6db 100%);
+  border-bottom: 1px solid var(--border);
+  padding: 56px 0; text-align: center;
+}
+.overview-hero h2 { font-size: 32px; font-weight: 700; color: var(--primary); margin-bottom: 8px; }
+.overview-hero .subtitle { font-size: 16px; color: var(--text-secondary); max-width: 600px; margin: 0 auto 24px; }
+.overview-hero .stats { display: flex; justify-content: center; gap: 40px; }
+.overview-hero .stat { text-align: center; }
+.overview-hero .stat .num { font-size: 36px; font-weight: 700; color: var(--text); }
+.overview-hero .stat .label { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+
+/* Section titles */
+.section-title {
+  font-size: 24px; font-weight: 700; color: var(--primary);
+  padding: 40px 0 20px; border-bottom: 2px solid var(--border);
+  margin-bottom: 24px;
+}
+.section-title .num { color: var(--accent); margin-right: 8px; }
+
+/* Overview section */
+.overview-section {
+  padding: 32px 0;
+}
+.overview-block {
+  background: var(--card); border: 1px solid var(--border-light); border-radius: 12px;
+  padding: 28px; margin-bottom: 20px; box-shadow: var(--shadow-sm);
+}
+.overview-block h3 { font-size: 18px; font-weight: 600; color: var(--primary); margin-bottom: 12px; }
+.overview-block p { font-size: 15px; color: var(--text-secondary); line-height: 1.9; margin-bottom: 12px; }
+.overview-block p:last-child { margin-bottom: 0; }
+
+/* Tech stack table */
+.tech-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.tech-table th { background: var(--bg); padding: 10px 14px; text-align: left; font-weight: 600; color: var(--text-muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+.tech-table td { padding: 10px 14px; border-bottom: 1px solid var(--border-light); vertical-align: top; }
+.tech-table .alt { font-size: 12px; color: var(--text-muted); }
+.tech-table .rationale { font-size: 13px; color: var(--text-secondary); }
+
+/* Subsystem grid */
+.subsystem-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+.subsystem-card {
+  background: var(--paper); border: 1px solid var(--border-light); border-radius: 10px;
+  padding: 20px;
+}
+.subsystem-card h4 { font-size: 15px; font-weight: 600; color: var(--primary); margin-bottom: 4px; }
+.subsystem-card .cat-badge {
+  display: inline-block; padding: 1px 8px; border-radius: 4px; font-size: 11px; font-weight: 500;
+  margin-bottom: 8px;
+}
+.cat-core { background: #fef3c7; color: #92400e; }
+.cat-util { background: #e0e7ff; color: #3730a3; }
+.cat-experimental { background: #fce7f3; color: #9d174d; }
+.cat-adapter { background: #d1fae5; color: #065f46; }
+.subsystem-card .mod-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.subsystem-card .mod-tag { font-size: 11px; padding: 1px 6px; background: #fff; border: 1px solid var(--border); border-radius: 4px; color: var(--text-muted); }
+
+/* Flow stages */
+.flow-stages { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+.flow-stage {
+  flex: 1; min-width: 140px; background: var(--paper); border: 1px solid var(--border);
+  border-radius: 10px; padding: 16px; text-align: center;
+}
+.flow-stage .stage-num { font-size: 24px; font-weight: 700; color: var(--accent); }
+.flow-stage .stage-name { font-size: 14px; font-weight: 600; margin: 4px 0; }
+.flow-stage .stage-desc { font-size: 12px; color: var(--text-muted); line-height: 1.6; }
+
+/* Module cards */
+.module-grid { padding: 32px 0; display: grid; grid-template-columns: 1fr; gap: 24px; }
+.module-card {
+  background: var(--card); border: 1px solid var(--border-light); border-radius: 12px;
+  padding: 28px; transition: box-shadow 0.2s;
+}
+.module-card:hover { box-shadow: var(--shadow-md); }
+.module-card .module-header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+.module-card .module-name { font-size: 20px; font-weight: 700; color: var(--primary); }
+.module-card .module-meta { font-size: 13px; color: var(--text-muted); }
+.module-card .module-purpose {
+  font-size: 15px; color: var(--text-secondary); margin-bottom: 16px;
+  padding: 12px 16px; background: var(--bg); border-radius: 8px;
+  border-left: 3px solid var(--primary);
+}
+.module-card .module-text { font-size: 14px; color: var(--text-secondary); line-height: 1.9; margin-bottom: 12px; }
+.module-card .module-section { margin-bottom: 16px; }
+.module-card .module-section h5 { font-size: 13px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+
+/* Decision cards */
+.decision-card {
+  background: var(--bg); border-radius: 8px; padding: 16px; margin-bottom: 8px;
+  border-left: 3px solid var(--accent);
+}
+.decision-card .dec-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.decision-card .dec-detail { font-size: 13px; color: var(--text-secondary); line-height: 1.8; }
+.decision-card .dec-detail strong { color: var(--text); }
+
+/* Rule list */
+.rule-item {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 12px; background: #fff; border: 1px solid var(--border);
+  border-radius: 6px; font-size: 12px; margin: 2px 4px 2px 0;
+}
+.rule-item .rule-type { font-size: 10px; color: var(--text-muted); background: var(--bg); padding: 0 4px; border-radius: 3px; }
+
+/* Highlight & Weakness */
+.highlight-item { font-size: 13px; color: #065f46; background: #d1fae5; padding: 8px 12px; border-radius: 6px; margin-bottom: 6px; }
+.weakness-item { font-size: 13px; color: #9d174d; background: #fce7f3; padding: 8px 12px; border-radius: 6px; margin-bottom: 6px; }
+
+.tag { display: inline-block; padding: 2px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; font-size: 12px; color: var(--text-secondary); margin: 2px 4px 2px 0; }
+.module-diagram { margin-top: 16px; text-align: center; }
+.module-diagram svg { max-width: 100%; height: auto; }
+
+/* Synthesis section */
+.synthesis-section { padding: 40px 0; }
+.principle-card {
+  background: var(--card); border: 1px solid var(--border-light); border-radius: 10px;
+  padding: 20px; margin-bottom: 12px; box-shadow: var(--shadow-sm);
+}
+.principle-card h4 { font-size: 16px; font-weight: 600; color: var(--primary); }
+.principle-card .reuse { font-size: 11px; background: var(--accent); color: #fff; padding: 1px 8px; border-radius: 4px; margin-left: 8px; }
+.principle-card p { font-size: 14px; color: var(--text-secondary); margin-top: 6px; }
+.principle-card .evidence { margin-top: 8px; }
+.principle-card .evidence span { font-size: 11px; background: var(--bg); padding: 1px 6px; border-radius: 3px; margin-right: 4px; color: var(--text-muted); }
+
+.checklist-item {
+  background: var(--paper); border-radius: 8px; padding: 16px; margin-bottom: 10px;
+}
+.checklist-item .scene { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+.checklist-item .questions { list-style: none; padding: 0; }
+.checklist-item .questions li { font-size: 13px; color: var(--text-secondary); padding: 4px 0; }
+.checklist-item .questions li::before { content: "▸ "; color: var(--accent); }
+.checklist-item .guidance { font-size: 12px; color: var(--text-muted); margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-light); }
+
+.page-footer {
+  background: var(--card); border-top: 1px solid var(--border);
+  padding: 24px 0; text-align: center; font-size: 12px; color: var(--text-muted);
+}
+
+/* Nav */
+.page-nav { position: sticky; top: 72px; z-index: 50; background: rgba(255,255,255,0.95); border-bottom: 1px solid var(--border-light); padding: 10px 0; backdrop-filter: blur(8px); }
+.page-nav .nav-inner { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; }
+.page-nav a { font-size: 13px; color: var(--text-secondary); text-decoration: none; font-weight: 500; padding: 4px 0; border-bottom: 2px solid transparent; transition: all 0.15s; }
+.page-nav a:hover, .page-nav a.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+/* ===== Responsive Design ===== */
+
+/* --- Overflow Protection (all viewports) --- */
+.table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+.tech-table td, .tech-table th { word-break: break-word; }
+svg, img { max-width: 100%; height: auto; }
+pre, code {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+/* --- Tablet & Smaller Laptops (≤768px) --- */
+@media (max-width: 768px) {
+  .container { padding: 0 20px; }
+
+  .page-header {
+    height: auto; min-height: 56px; padding: 10px 20px;
+  }
+  .page-header .header-inner { flex-wrap: wrap; gap: 8px; }
+  .page-header h1 { font-size: 16px; }
+  .page-header .meta-stats { margin-left: 0; width: 100%; font-size: 11px; }
+  .page-header .library-link { font-size: 13px; }
+
+  .page-nav { top: 0; position: relative; }
+  .page-nav .nav-inner { gap: 8px; }
+  .page-nav a { font-size: 13px; padding: 8px 12px; }
+
+  .overview-hero { padding: 40px 0; }
+  .overview-hero h2 { font-size: 28px; }
+  .overview-hero .subtitle { font-size: 15px; }
+  .overview-hero .stats { gap: 24px; }
+  .overview-hero .stat .num { font-size: 30px; }
+
+  .section-title { font-size: 22px; padding: 32px 0 16px; }
+
+  .subsystem-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+  .flow-stage { min-width: 110px; }
+  .flow-stage .stage-num { font-size: 20px; }
+  .flow-stage .stage-name { font-size: 13px; }
+  .flow-stage .stage-desc { font-size: 11px; }
+
+  .module-card .module-name { font-size: 18px; }
+  .module-card { padding: 20px; }
+
+  .page-footer { padding: 20px 0; }
+}
+
+/* --- Mobile Phones (≤480px) --- */
+@media (max-width: 480px) {
+  .container { padding: 0 12px; max-width: 100%; }
+
+  .page-header {
+    padding: 10px 12px;
+  }
+  .page-header .header-inner {
+    flex-direction: column; align-items: flex-start; gap: 6px;
+  }
+  .page-header h1 { font-size: 15px; }
+
+  .overview-hero { padding: 28px 0; }
+  .overview-hero h2 { font-size: 22px; padding: 0 12px; }
+  .overview-hero .subtitle { font-size: 14px; max-width: 100%; padding: 0 12px; }
+  .overview-hero .stats { gap: 14px; flex-wrap: wrap; justify-content: center; }
+  .overview-hero .stat .num { font-size: 26px; }
+  .overview-hero .stat .label { font-size: 11px; }
+
+  .section-title { font-size: 19px; padding: 24px 0 12px; }
+  .overview-block { padding: 14px; margin-bottom: 12px; }
+  .overview-block h3 { font-size: 16px; }
+  .overview-block p { font-size: 14px; }
+
+  .tech-table { font-size: 12px; }
+  .tech-table th, .tech-table td { padding: 8px; }
+
+  .subsystem-grid { grid-template-columns: 1fr; gap: 10px; }
+  .subsystem-card { padding: 14px; }
+  .subsystem-card h4 { font-size: 14px; }
+
+  .flow-stages { flex-direction: column; gap: 8px; }
+  .flow-stage { min-width: auto; }
+
+  .module-grid { padding: 20px 0; gap: 14px; }
+  .module-card { padding: 14px; }
+  .module-card .module-header { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .module-card .module-name { font-size: 17px; }
+  .module-card .module-meta { font-size: 12px; }
+  .module-card .module-purpose { font-size: 14px; padding: 10px; }
+  .module-card .module-text { font-size: 13px; }
+  .module-card .module-section h5 { font-size: 11px; }
+
+  .decision-card { padding: 12px; }
+  .decision-card .dec-title { font-size: 13px; }
+  .decision-card .dec-detail { font-size: 12px; }
+
+  .rule-item { font-size: 11px; padding: 4px 10px; margin: 2px 2px 2px 0; }
+  .highlight-item, .weakness-item { font-size: 12px; padding: 6px 10px; }
+
+  .principle-card { padding: 14px; }
+  .principle-card h4 { font-size: 14px; }
+  .principle-card p { font-size: 13px; }
+  .principle-card .reuse { font-size: 10px; margin-left: 4px; }
+  .principle-card .evidence span { font-size: 10px; }
+
+  .checklist-item { padding: 12px; }
+  .checklist-item .scene { font-size: 13px; }
+  .checklist-item .questions li { font-size: 12px; }
+  .checklist-item .guidance { font-size: 11px; }
+
+  /* Mobile nav: stacked vertical, full-width touch targets */
+  .page-nav {
+    position: relative; top: auto; padding: 0;
+    background: rgba(255,255,255,0.98);
+  }
+  .page-nav .nav-inner {
+    flex-direction: column; gap: 0; align-items: stretch;
+  }
+  .page-nav a {
+    font-size: 14px; padding: 14px 16px; text-align: center;
+    border-bottom: 1px solid var(--border-light);
+    border-radius: 0;
+    min-height: 44px; display: flex; align-items: center; justify-content: center;
+  }
+  .page-nav a:last-child { border-bottom: none; }
+  .page-nav a:hover, .page-nav a.active {
+    color: var(--primary);
+    border-bottom-color: var(--border-light);
+    border-left: 3px solid var(--primary);
+    background: var(--bg);
+  }
+
+  .page-footer { padding: 16px 0; font-size: 11px; }
+}
+
+/* --- Desktop (≥769px) --- */
+@media (min-width: 769px) {
+  .container { max-width: 900px; }
+}
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div class="header-inner">
+    <h1>{{ repo.name }} — 代码库深度分析</h1>
+    <span class="meta-stats">{{ total_files }} 文件 · {{ total_lines }} 行 · {{ modules|length }} 模块</span>
+    <a href="library.html" class="library-link">← 返回项目库</a>
+  </div>
+</div>
+
+{% set ov = overview or {} %}
+{% set po = ov.get("project_overview", {}) or {} %}
+{% set scale = po.get("scale", {}) or {} %}
+<div class="overview-hero">
+  <div class="container">
+    <h2>{{ po.get("name", repo.name) }}</h2>
+    <div class="subtitle">{{ po.get("core_value", po.get("product_type", "")) }}</div>
+    <div class="stats">
+      <div class="stat"><div class="num">{{ modules|length }}</div><div class="label">模块</div></div>
+      <div class="stat"><div class="num">{{ total_files }}</div><div class="label">文件</div></div>
+      <div class="stat"><div class="num">{{ total_lines }}</div><div class="label">代码行</div></div>
+    </div>
+  </div>
+</div>
+
+{% if overview %}
+<div class="page-nav">
+  <div class="nav-inner container">
+    <a href="#overview">项目概览</a>
+    <a href="#architecture">架构总览</a>
+    <a href="#modules">模块分析</a>
+    {% if synthesis %}<a href="#synthesis">方法论提炼</a>{% endif %}
+  </div>
+</div>
+{% endif %}
+
+<div class="container">
+
+{% if overview %}
+<!-- ===== Phase 1: Overview ===== -->
+<section id="overview">
+  <div class="section-title"><span class="num">第一章</span>项目概览与技术背景</div>
+
+  {% if po %}
+  <div class="overview-block">
+    <h3>项目定位</h3>
+    <p><strong>产品类型：</strong>{{ po.get("product_type", "") }}</p>
+    <p><strong>目标用户：</strong>{{ po.get("target_users", "") }}</p>
+    <p><strong>核心价值：</strong>{{ po.get("core_value", "") }}</p>
+    {% if po.get("background") %}
+    <p><strong>背景：</strong>{{ po.background }}</p>
+    {% endif %}
+    {% if scale %}
+    <p><strong>规模：</strong>{{ scale.get("files", total_files) }} 文件 / {{ scale.get("lines", total_lines) }} 行 / {{ scale.get("modules", modules|length) }} 模块</p>
+    <p><strong>语言：</strong>{{ (scale.get("languages", []) or []) | join(", ") }}{% if scale.get("runtime") %} / 运行时：{{ scale.runtime }}{% endif %}</p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if ov.get("tech_stack_analysis") %}
+  <div class="overview-block">
+    <h3>技术栈选型分析</h3>
+    <div class="table-wrapper"><table class="tech-table">
+      <thead><tr><th>技术类别</th><th>选择</th><th>替代方案</th><th>选型原因</th></tr></thead>
+      <tbody>
+      {% for t in ov.tech_stack_analysis %}
+      <tr>
+        <td><strong>{{ t.get("category", "") }}</strong></td>
+        <td>{{ t.get("chosen", "") }}</td>
+        <td class="alt">{{ (t.get("alternatives", []) or []) | join(", ") }}</td>
+        <td class="rationale">{{ t.get("rationale", "") }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  </div>
+  {% endif %}
+
+  {% set cf = ov.get("core_execution_flow", {}) or {} %}
+  {% if cf %}
+  <div class="overview-block">
+    <h3>核心执行流程{% if cf.get("name") %}：{{ cf.name }}{% endif %}</h3>
+    {% if cf.get("description") %}<p>{{ cf.description }}</p>{% endif %}
+    {% if cf.get("key_stages") %}
+    <div class="flow-stages">
+      {% for s in cf.key_stages %}
+      <div class="flow-stage">
+        <div class="stage-num">{{ loop.index }}</div>
+        <div class="stage-name">{{ s.get("stage", "") }}</div>
+        <div class="stage-desc">{{ s.get("description", "") }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if cf.get("diagram") %}
+    <div class="module-diagram">{{ cf.diagram | safe }}</div>
+    {% endif %}
+  </div>
+  {% endif %}
+</section>
+
+<!-- ===== Architecture Overview ===== -->
+<section id="architecture">
+  {% set ma = ov.get("module_architecture", {}) or {} %}
+  {% if ma %}
+  <div class="section-title"><span class="num">第二章</span>架构总览与模块划分</div>
+  <div class="overview-block">
+    {% if ma.get("overview") %}<p>{{ ma.overview }}</p>{% endif %}
+    {% if ma.get("communication_patterns") %}
+    <p><strong>通信模式：</strong>
+      {% for cp in ma.communication_patterns %}
+      <span class="tag">{{ cp }}</span>
+      {% endfor %}
+    </p>
+    {% endif %}
+  </div>
+
+  {% if ma.get("subsystems") %}
+  <div class="subsystem-grid">
+    {% for ss in ma.subsystems %}
+    <div class="subsystem-card">
+      <h4>{{ ss.get("name", "") }}</h4>
+      <span class="cat-badge {% if '核心' in ss.get('category','') %}cat-core{% elif '通用' in ss.get('category','') %}cat-util{% elif '实验' in ss.get('category','') %}cat-experimental{% else %}cat-adapter{% endif %}">
+        {{ ss.get("category", "") }}
+      </span>
+      <p style="font-size:13px;color:var(--text-secondary)">{{ ss.get("description", "") }}</p>
+      {% if ss.get("modules") %}
+      <div class="mod-tags">
+        {% for mn in ss.modules %}
+        <span class="mod-tag">{{ mn }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if ma.get("diagram") %}
+  <div class="module-diagram" style="margin-top:20px">{{ ma.diagram | safe }}</div>
+  {% endif %}
+  {% endif %}
+</section>
+{% endif %}
+
+<!-- ===== Phase 2: Module Analysis ===== -->
+<section id="modules">
+  <div class="section-title"><span class="num">第三章</span>模块深度分析</div>
+  <div class="module-grid">
+    {% for mod in modules %}
+    {% set a = mod.get("analysis", {}) or {} %}
+    <div class="module-card" id="mod-{{ loop.index }}">
+      <div class="module-header">
+        <span class="module-name">{{ mod.name }}</span>
+        <span class="module-meta">{{ mod.file_count }} 文件 · {{ mod.total_lines }} 行</span>
+      </div>
+
+      {% if a.purpose %}
+      <div class="module-purpose">{{ a.purpose }}</div>
+      {% endif %}
+
+      {% if a.architecture %}
+      <div class="module-section">
+        <h5>架构设计</h5>
+        <div class="module-text">{{ a.architecture }}</div>
+      </div>
+      {% endif %}
+
+      {% if a.implementation %}
+      <div class="module-section">
+        <h5>实现细节</h5>
+        <div class="module-text">{{ a.implementation }}</div>
+      </div>
+      {% endif %}
+
+      {% if a.design_decisions %}
+      <div class="module-section">
+        <h5>设计决策溯源</h5>
+        {% for dd in a.design_decisions %}
+        <div class="decision-card">
+          <div class="dec-title">{{ dd.get("decision", "") }}</div>
+          <div class="dec-detail">
+            <strong>为什么：</strong>{{ dd.get("why", "") }}<br>
+            <strong>权衡：</strong>{{ dd.get("tradeoffs", "") }}<br>
+            {% if dd.get("alternatives") %}<strong>替代方案：</strong>{{ dd.alternatives }}{% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if a.rules_and_constraints %}
+      <div class="module-section">
+        <h5>规则与约束</h5>
+        {% for rc in a.rules_and_constraints %}
+        <span class="rule-item">
+          {{ rc.get("rule", rc) }}
+          {% if rc.get("type") %}<span class="rule-type">{{ rc.type }}</span>{% endif %}
+        </span>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if a.patterns %}
+      <div class="module-section">
+        <h5>设计模式</h5>
+        {% for p in a.patterns %}
+        <span class="tag">{{ p.get("pattern", p) }}{% if p.get("where") %} <small>({{ p.where }})</small>{% endif %}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if a.dependencies %}
+      <div class="module-section">
+        <h5>依赖关系</h5>
+        {% for d in a.dependencies %}
+        <span class="tag">{{ d.get("name", d) }}{% if d.get("direction") == "inbound" %} ←{% elif d.get("direction") == "outbound" %} →{% endif %}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if a.highlights %}
+      <div class="module-section">
+        <h5>工程亮点</h5>
+        {% for h in a.highlights %}
+        <div class="highlight-item">{{ h }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if a.weaknesses %}
+      <div class="module-section">
+        <h5>潜在问题</h5>
+        {% for w in a.weaknesses %}
+        <div class="weakness-item">{{ w }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if a.diagram_svg or a.diagram %}
+      <div class="module-diagram">
+        {{ (a.diagram_svg or a.diagram) | safe }}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- ===== Phase 3: Synthesis ===== -->
+{% if synthesis %}
+<section id="synthesis">
+  <div class="section-title"><span class="num">第四章</span>方法论提炼与可复用经验</div>
+
+  {% if synthesis.get("design_principles") %}
+  <div class="overview-block">
+    <h3>顶层设计原则</h3>
+    {% for dp in synthesis.design_principles %}
+    <div class="principle-card">
+      <h4>{{ dp.get("principle", "") }}<span class="reuse">{{ dp.get("reusability", "中") }}</span></h4>
+      <p>{{ dp.get("description", "") }}</p>
+      {% if dp.get("evidence") %}
+      <div class="evidence">
+        {% for e in dp.evidence %}<span>{{ e }}</span>{% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if synthesis.get("decision_checklist") %}
+  <div class="overview-block">
+    <h3>设计决策检查清单</h3>
+    {% for dc in synthesis.decision_checklist %}
+    <div class="checklist-item">
+      <div class="scene">{{ dc.get("scenario", "") }}</div>
+      {% if dc.get("questions") %}
+      <ul class="questions">
+        {% for q in dc.questions %}<li>{{ q }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+      {% if dc.get("guidance") %}<div class="guidance">💡 {{ dc.guidance }}</div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if synthesis.get("best_practices") %}
+  <div class="overview-block">
+    <h3>场景化最佳实践</h3>
+    {% for bp in synthesis.best_practices %}
+    <div class="principle-card">
+      <h4>{{ bp.get("scenario", "") }}</h4>
+      <p><strong>推荐做法：</strong>{{ bp.get("approach", "") }}</p>
+      <p style="font-size:13px;color:var(--text-muted)">{{ bp.get("why", "") }}</p>
+      {% if bp.get("pitfalls") %}
+      <div style="margin-top:8px">
+        {% for pf in bp.pitfalls %}
+        <span class="weakness-item" style="display:inline-block;font-size:11px">⚠ {{ pf }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if synthesis.get("industry_problems") %}
+  <div class="overview-block">
+    <h3>行业共性问题与解法</h3>
+    {% for ip in synthesis.industry_problems %}
+    <div class="principle-card">
+      <h4>{{ ip.get("problem", "") }}</h4>
+      <p><strong>项目方案：</strong>{{ ip.get("solution_in_project", "") }}</p>
+      {% if ip.get("limitations") %}<p style="font-size:13px;color:var(--text-muted)"><strong>局限性：</strong>{{ ip.limitations }}</p>{% endif %}
+      {% if ip.get("open_questions") %}
+      <div style="margin-top:6px">
+        {% for oq in ip.open_questions %}
+        <span style="font-size:12px;color:var(--accent);margin-right:12px">❓ {{ oq }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if synthesis.get("replication_guide") %}
+  {% set rg = synthesis.replication_guide %}
+  <div class="overview-block">
+    <h3>落地复刻指南</h3>
+    {% if rg.get("can_reuse") %}
+    <p><strong>可直接复用：</strong></p>
+    <ul style="margin-left:20px;font-size:14px;color:var(--text-secondary);margin-bottom:12px">
+      {% for item in rg.can_reuse %}<li>{{ item }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+    {% if rg.get("need_adaptation") %}
+    <p><strong>需要改造：</strong></p>
+    {% for na in rg.need_adaptation %}
+    <div class="decision-card">
+      <div class="dec-title">{{ na.get("item", na) }}</div>
+      <div class="dec-detail"><strong>改造建议：</strong>{{ na.get("adaptation", "") }}</div>
+    </div>
+    {% endfor %}
+    {% endif %}
+    {% if rg.get("avoid") %}
+    <p style="margin-top:12px"><strong>需要避坑：</strong></p>
+    <ul style="margin-left:20px;font-size:14px;color:#9d174d">
+      {% for item in rg.avoid %}<li>{{ item }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
+</div>
+
+<div class="page-footer">
+  <div class="container">
+    由 GitHub Tech Reader 生成 · {{ analysis_time }}
+  </div>
+</div>
+
+</body>
+</html>
