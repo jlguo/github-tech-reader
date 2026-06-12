@@ -5,10 +5,9 @@ Handles cloning, fetching, tag extraction, commit diffing, and
 iteration boundary detection for GitHub repository analysis.
 """
 
-import subprocess
 import os
-from datetime import datetime, timezone
-from typing import Optional
+import subprocess
+from datetime import UTC, datetime
 
 
 class GitRepo:
@@ -38,16 +37,17 @@ class GitRepo:
             subprocess.run(
                 ["git", "clone", "--bare", "--filter=blob:none", url, target],
                 check=True, capture_output=True,
+                timeout=300,
             )
             repo = cls(target)
         return repo
 
-    def fetch(self, depth: Optional[int] = None) -> None:
+    def fetch(self, depth: int | None = None) -> None:
         """Update the bare repo from remote."""
         cmd = ["git", "-C", self.path, "fetch", "--tags", "--force"]
         if depth:
             cmd += ["--depth", str(depth)]
-        subprocess.run(cmd, check=True, capture_output=True)
+        subprocess.run(cmd, check=True, capture_output=True, timeout=300)
 
     # ---- Queries ----
 
@@ -61,6 +61,7 @@ class GitRepo:
             result = subprocess.run(
                 ["git", "-C", self.path, "for-each-ref", "refs/tags", f"--format={fmt}", "--sort=-creatordate"],
                 check=True, capture_output=True, text=True,
+                timeout=300,
             )
         except subprocess.CalledProcessError:
             return []
@@ -76,7 +77,7 @@ class GitRepo:
             try:
                 date = datetime.fromisoformat(date_str)
             except ValueError:
-                date = datetime.now(timezone.utc)
+                date = datetime.now(UTC)
             tags.append({
                 "name": name,
                 "date": date.strftime("%Y-%m-%d"),
@@ -91,6 +92,7 @@ class GitRepo:
         result = subprocess.run(
             ["git", "-C", self.path, "rev-list", "--count", rev],
             check=True, capture_output=True, text=True,
+            timeout=300,
         )
         return int(result.stdout.strip())
 
@@ -104,6 +106,7 @@ class GitRepo:
             result = subprocess.run(
                 ["git", "-C", self.path, "log", "--format=" + fmt, f"{from_rev}..{to_rev}"],
                 check=True, capture_output=True, text=True,
+                timeout=300,
             )
         except subprocess.CalledProcessError:
             return []
@@ -144,12 +147,12 @@ class GitRepo:
             ":(exclude)node_modules/",
         ]
         cmd = ["git", "-C", self.path, "diff", f"{from_rev}...{to_rev}"] + filters
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
 
         # If no common ancestor (first commit), try direct diff
         if not result.stdout.strip() and result.returncode == 0:
             cmd = ["git", "-C", self.path, "diff", from_rev, to_rev] + filters
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
 
         return result.stdout
 
@@ -159,6 +162,7 @@ class GitRepo:
             result = subprocess.run(
                 ["git", "-C", self.path, "diff", "--stat", f"{from_rev}...{to_rev}"],
                 check=True, capture_output=True, text=True,
+                timeout=300,
             )
         except subprocess.CalledProcessError:
             return ""
@@ -170,6 +174,7 @@ class GitRepo:
             result = subprocess.run(
                 ["git", "-C", self.path, "diff", "--name-only", f"{from_rev}...{to_rev}"],
                 check=True, capture_output=True, text=True,
+                timeout=300,
             )
         except subprocess.CalledProcessError:
             return []
@@ -290,6 +295,7 @@ class GitRepo:
             result = subprocess.run(
                 ["git", "-C", self.path, "rev-list", "--max-parents=0", "HEAD"],
                 check=True, capture_output=True, text=True,
+                timeout=300,
             )
             return result.stdout.strip().split("\n")[0] or None
         except subprocess.CalledProcessError:
@@ -301,6 +307,7 @@ class GitRepo:
             result = subprocess.run(
                 ["git", "-C", self.path, "symbolic-ref", "refs/remotes/origin/HEAD"],
                 check=True, capture_output=True, text=True,
+                timeout=300,
             )
             branch = result.stdout.strip().split("/")[-1]
             if branch:
@@ -312,6 +319,7 @@ class GitRepo:
             result = subprocess.run(
                 ["git", "-C", self.path, "branch", "-a"],
                 check=True, capture_output=True, text=True,
+                timeout=300,
             )
             for line in result.stdout.strip().split("\n"):
                 stripped = line.strip().lstrip("*").strip()
@@ -324,18 +332,232 @@ class GitRepo:
         except subprocess.CalledProcessError:
             pass
 
-        common = ["main", "master", "trunk", "develop"]
-        for branch in common:
+        for branch in ("main", "master", "trunk", "develop"):
             try:
                 subprocess.run(
-                    ["git", "-C", self.path, "rev-parse", "--verify", f"refs/heads/{branch}"],
+                    ["git", "-C", self.path, "rev-parse", "--verify",
+                     f"refs/heads/{branch}"],
                     check=True, capture_output=True,
+                    timeout=300,
                 )
                 return branch
             except subprocess.CalledProcessError:
                 continue
 
         return "main"
+
+    # ---- Structural Analysis (0-1 commit repos) ----
+
+    def list_tree(self, ref: str = "HEAD") -> list[str]:
+        try:
+            result = subprocess.run(
+                ["git", "-C", self.path, "ls-tree", "-r", "--name-only", ref],
+                check=True, capture_output=True, text=True,
+                timeout=300,
+            )
+        except subprocess.CalledProcessError:
+            return []
+        return [f for f in result.stdout.strip().split("\n") if f]
+
+    def get_file_content(self, filepath: str, ref: str = "HEAD",
+                         max_lines: int = 200) -> str | None:
+        try:
+            result = subprocess.run(
+                ["git", "-C", self.path, "show", f"{ref}:{filepath}"],
+                check=True, capture_output=True, text=True,
+                timeout=300,
+            )
+        except subprocess.CalledProcessError:
+            return None
+        lines = result.stdout.split("\n")
+        if len(lines) > max_lines:
+            head = "\n".join(lines[:max_lines // 2])
+            tail = "\n".join(lines[-(max_lines // 2):])
+            return head + f"\n... [{len(lines) - max_lines} lines truncated] ...\n" + tail
+        return result.stdout
+
+    def get_file_imports(self, filepath: str, ref: str = "HEAD") -> str:
+        raw = self.get_file_content(filepath, ref, max_lines=60)
+        if not raw:
+            return ""
+        lines = raw.split("\n")
+        imports = []
+        for line in lines:
+            s = line.strip()
+            if s.startswith(("import ", "from ", "require(", "/// <reference",
+                             "use ", "mod ", "extern crate", "#include", "#import",
+                             "@import", "package ")):
+                imports.append(line)
+        return "\n".join(imports[:30])
+
+    def discover_modules(self) -> list[dict]:
+        files = self.list_tree()
+        if not files:
+            return []
+
+        from collections import defaultdict
+        groups: dict[str, list[tuple[str, str]]] = defaultdict(list)
+        for f in files:
+            parts = f.split("/", 1)
+            if len(parts) == 1:
+                groups["(root)"].append((f, f))
+            else:
+                groups[parts[0]].append((parts[1], f))
+
+        while groups:
+            total = sum(len(v) for v in groups.values())
+            largest_name = max(groups, key=lambda k: len(groups[k]))
+            largest_count = len(groups[largest_name])
+            if total == 0 or largest_count < total * 0.9:
+                break
+            if largest_name == "(root)":
+                break
+            entries = groups.pop(largest_name)
+            next_groups: dict[str, list[tuple[str, str]]] = defaultdict(list)
+            for display, git_path in entries:
+                parts = display.split("/", 1)
+                if len(parts) == 1:
+                    next_groups["(root)"].append((display, git_path))
+                else:
+                    next_groups[parts[0]].append((parts[1], git_path))
+            old_root = groups.pop("(root)", [])
+            next_groups["(root)"].extend(old_root)
+            for k, v in groups.items():
+                next_groups[k] = v
+            groups = next_groups
+
+        modules = []
+        for name, entries in sorted(groups.items()):
+            source_entries = [(d, g) for d, g in entries
+                              if not d.startswith(".") and not any(
+                                  d.endswith(ext) for ext in
+                                  (".lock", ".sum", ".min.js", ".min.css",
+                                   ".pb.go", ".pb.cc", ".pb.py", ".generated."))]
+
+            total_lines = 0
+            key_files = []
+            for display, git_path in sorted(source_entries)[:8]:
+                try:
+                    result = subprocess.run(
+                        ["git", "-C", self.path, "show", f"HEAD:{git_path}"],
+                        check=True, capture_output=True, text=True,
+                        timeout=300,
+                    )
+                    line_count = len(result.stdout.split("\n"))
+                    total_lines += line_count
+                    content = "\n".join(result.stdout.split("\n")[:300])
+                    lines = result.stdout.split("\n")[:60]
+                    import_lines = []
+                    for line in lines:
+                        s = line.strip()
+                        if s.startswith(("import ", "from ", "require(", "/// <reference",
+                                         "use ", "mod ", "extern crate", "#include",
+                                         "#import", "@import", "package ")):
+                            import_lines.append(line)
+                    imports = "\n".join(import_lines[:30])
+                    key_files.append({"path": display, "lines": line_count,
+                                      "imports": imports, "content": content})
+                except subprocess.CalledProcessError:
+                    key_files.append({"path": display, "lines": 0,
+                                      "imports": "", "content": ""})
+
+            modules.append({
+                "name": name,
+                "file_count": len(source_entries),
+                "total_lines": total_lines,
+                "key_files": key_files,
+            })
+
+        return modules
+
+    # ---- Tagless / Commit Chunking ----
+
+    def _get_all_commit_hashes(self) -> list[str]:
+        """Return all commit hashes on default branch in chronological order."""
+        try:
+            result = subprocess.run(
+                ["git", "-C", self.path, "log", "--reverse", "--format=%H",
+                 self._resolve_branch_ref(self.get_default_branch())],
+                check=True, capture_output=True, text=True,
+                timeout=300,
+            )
+        except subprocess.CalledProcessError:
+            return []
+        return [h for h in result.stdout.strip().split("\n") if h]
+
+    def _get_commit_date(self, commit_hash: str) -> str | None:
+        """Get date string (YYYY-MM-DD) for a commit."""
+        try:
+            result = subprocess.run(
+                ["git", "-C", self.path, "log", "-1", "--format=%aI", commit_hash],
+                check=True, capture_output=True, text=True,
+                timeout=300,
+            )
+            return result.stdout.strip()[:10] or None
+        except subprocess.CalledProcessError:
+            return None
+
+    def extract_commit_chunks(self, target_chunks: int = 30) -> list[dict]:
+        """Group commits into chronological chunks for tagless repos.
+
+        Each chunk spans a range of commits. The diff between consecutive
+        chunk boundaries becomes an iteration — reusing the same pipeline
+        as tag-based analysis.
+
+        Returns list of iteration-compatible dicts:
+        {version, date, tag_hash, prev_hash, prev_tag, commit_count}
+        """
+        hashes = self._get_all_commit_hashes()
+        if not hashes:
+            return []
+
+        total = len(hashes)
+        if total <= 5:
+            # Few commits: one chunk per commit
+            chunk_size = 1
+        else:
+            chunk_size = max(5, total // target_chunks)
+
+        # Group into chunks
+        chunks: list[dict] = []
+        for i in range(0, total, chunk_size):
+            chunk_hashes = hashes[i:i + chunk_size]
+            chunks.append({
+                "first": chunk_hashes[0],
+                "last": chunk_hashes[-1],
+                "count": len(chunk_hashes),
+            })
+
+        # Build iteration dicts
+        iterations: list[dict] = []
+        root_hash = self._get_root_commit()
+
+        for idx, chunk in enumerate(chunks):
+            date = self._get_commit_date(chunk["last"])
+            if not date:
+                date = datetime.now(UTC).strftime("%Y-%m-%d")
+
+            if idx == 0:
+                prev_hash = root_hash
+                prev_tag = None
+            else:
+                prev_hash = chunks[idx - 1]["last"]
+                prev_tag = f"chunk-{idx}"
+
+            label = f"Chunk {idx + 1}" if idx > 0 else f"Initial (1–{chunk['count']} commits)"
+            if date:
+                label += f" — {date}"
+
+            iterations.append({
+                "version": label,
+                "date": date,
+                "tag_hash": chunk["last"],
+                "prev_hash": prev_hash,
+                "prev_tag": prev_tag,
+                "commit_count": chunk["count"],
+            })
+
+        return iterations
 
     def get_name_status(self, from_rev: str, to_rev: str) -> list[dict]:
         """Get file status list between two revisions.
@@ -348,6 +570,7 @@ class GitRepo:
                 ["git", "-C", self.path, "diff", "--name-status", "-z",
                  f"{from_rev}...{to_rev}"],
                 check=True, capture_output=True, text=True,
+                timeout=300,
             )
         except subprocess.CalledProcessError:
             return []
@@ -379,6 +602,7 @@ class GitRepo:
                 ["git", "-C", self.path, "diff", "--numstat",
                  f"{from_rev}...{to_rev}"],
                 check=True, capture_output=True, text=True,
+                timeout=300,
             )
         except subprocess.CalledProcessError:
             return []
@@ -405,6 +629,7 @@ class GitRepo:
                 ["git", "-C", self.path, "diff", "--shortstat",
                  f"{from_rev}...{to_rev}"],
                 check=True, capture_output=True, text=True,
+                timeout=300,
             )
         except subprocess.CalledProcessError:
             return ""
@@ -421,6 +646,7 @@ class GitRepo:
                 ["git", "-C", self.path, "log", "--format=%s",
                  "-n", str(limit), f"{from_rev}..{to_rev}"],
                 check=True, capture_output=True, text=True,
+                timeout=300,
             )
         except subprocess.CalledProcessError:
             return []
@@ -440,6 +666,7 @@ class GitRepo:
                 ["git", "-C", self.path, "diff",
                  f"{from_rev}...{to_rev}", "--"] + paths,
                 capture_output=True, text=True,
+                timeout=300,
             )
         except subprocess.CalledProcessError:
             return ""
@@ -454,6 +681,7 @@ class GitRepo:
             first = subprocess.run(
                 ["git", "-C", self.path, "log", "--reverse", "--format=%aI", branch_ref],
                 check=True, capture_output=True, text=True,
+                timeout=300,
             )
             first_line = first.stdout.strip().split("\n")[0] if first.stdout.strip() else ""
             first_commit = first_line[:10]
@@ -475,6 +703,7 @@ class GitRepo:
             subprocess.run(
                 ["git", "-C", self.path, "rev-parse", "--verify", f"refs/heads/{branch}"],
                 check=True, capture_output=True,
+                timeout=300,
             )
             return f"refs/heads/{branch}"
         except subprocess.CalledProcessError:
@@ -484,6 +713,7 @@ class GitRepo:
             subprocess.run(
                 ["git", "-C", self.path, "rev-parse", "--verify", f"origin/{branch}"],
                 check=True, capture_output=True,
+                timeout=300,
             )
             return f"origin/{branch}"
         except subprocess.CalledProcessError:

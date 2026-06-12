@@ -16,30 +16,41 @@ Usage:
 import argparse
 import hashlib
 import json
+import logging
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from dotenv import load_dotenv
-from git_utils import GitRepo
+
 from diff_preprocessor import (
-    strip_comment_lines,
     extract_code_changes,
     extract_dependency_changes,
     get_diff_summary,
+    strip_comment_lines,
 )
-from llm_parser import LLMParser, _generate_mock_analysis
+from git_utils import GitRepo
 from html_generator import HTMLGenerator
-from manifest import build_manifest, manifest_cache_key, MANIFEST_SCORER_VERSION
-
+from llm_parser import LLMParser, _generate_mock_analysis
+from manifest import MANIFEST_SCORER_VERSION, build_manifest, manifest_cache_key
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_CACHE_DIR = os.path.join(BASE_DIR, "repo_cache")
 DEFAULT_JSON_CACHE_DIR = os.path.join(BASE_DIR, "cache_json")
 DEFAULT_OUTPUT_DIR = os.path.join(BASE_DIR, "report_output")
+
+
+def _setup_logging() -> None:
+    """Configure basic logging with timestamp format."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+    )
 
 
 def _find_existing_report(output_dir: str, safe_repo_name: str) -> str | None:
@@ -90,6 +101,12 @@ def parse_args():
                         help="Max changed files to extract when --use-manifest is enabled")
     parser.add_argument("--no-fetch", action="store_true",
                         help="Skip git fetch on existing cached repos")
+    parser.add_argument("--book", action="store_true",
+                        help="Generate a book-mode analysis (Chinese product-perspective JSON report)")
+    parser.add_argument("--book-section", default=None,
+                        help="Optional section filter for book mode (e.g., 'arch', 'tech-stack')")
+    parser.add_argument("--book-output-dir", default=None,
+                        help="Custom output directory for book JSON artifacts (default: book_output/)")
     return parser.parse_args()
 
 
@@ -103,7 +120,7 @@ def _save_cache(cache_dir: str, cache_key: str, data: dict) -> None:
     """Save LLM analysis result to disk cache."""
     os.makedirs(cache_dir, exist_ok=True)
     path = os.path.join(cache_dir, f"{cache_key}.json")
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False)
 
 
@@ -111,7 +128,7 @@ def _load_cache(cache_dir: str, cache_key: str) -> dict | None:
     """Load cached LLM analysis result, or None if not found."""
     path = os.path.join(cache_dir, f"{cache_key}.json")
     if os.path.exists(path):
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             return json.load(f)
     return None
 
@@ -290,7 +307,7 @@ def build_report_data(
     results = {}
 
     if workers > 1 and use_llm:
-        print(f"  Processing {total} iterations with {workers} workers...")
+        logger.info(f"  Processing {total} iterations with {workers} workers...")
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = {
                 executor.submit(
@@ -307,13 +324,13 @@ def build_report_data(
                     result = future.result()
                     if result:
                         results[version] = result
-                        print(f"  ✓ {version}")
-                except Exception as e:
-                    print(f"  ✗ {version}: {e}")
+                        logger.info(f"  ✓ {version}")
+                except Exception:
+                    logger.exception(f"  ✗ {version}")
     else:
         for it in iterations_data:
             version = it['version']
-            print(f"  Processing {version}...")
+            logger.info(f"  Processing {version}...")
             try:
                 result = process_single_iteration(
                     repo, it, llm_parser, use_llm, max_diff_chars,
@@ -323,9 +340,9 @@ def build_report_data(
                 if result:
                     results[version] = result
                 else:
-                    print(f"  ⚠ {version}: returned None")
-            except Exception as e:
-                print(f"  ✗ {version}: {e}")
+                    logger.warning(f"  ⚠ {version}: returned None")
+            except (OSError, json.JSONDecodeError, ValueError, RuntimeError) as e:
+                logger.error(f"  ✗ {version}: {e}")
                 results[version] = _generate_mock_analysis(it, str(e) or type(e).__name__)
                 results[version]["id"] = version.replace(".", "-")
                 results[version]["version"] = version
@@ -341,13 +358,240 @@ def build_report_data(
             "url": repo_info.get("url", ""),
             "description": repo_info.get("description", ""),
         },
-        "analysis_time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        "analysis_time": datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
         "iterations": iterations,
     }
 
 
+def build_structural_report(
+    repo: GitRepo,
+    repo_info: dict,
+    llm_parser: LLMParser,
+    use_llm: bool,
+    workers: int,
+    cache_dir: str,
+    repo_url: str,
+    no_cache: bool,
+) -> dict:
+    logger.info("  Discovering modules...")
+    modules = repo.discover_modules()
+    logger.info(f"  ✓ Found {len(modules)} modules")
+
+    total_files = sum(m["file_count"] for m in modules)
+    total_lines = sum(m["total_lines"] for m in modules)
+
+    overview = {}
+    if use_llm:
+        logger.info("  [Phase 1/3] Analyzing codebase overview...")
+        project_info = {
+            "total_files": total_files,
+            "total_lines": total_lines,
+            "tech_stack": repo_info.get("tech_stack", {}),
+            "entry_points": repo_info.get("entry_points", []),
+        }
+        try:
+            overview = llm_parser.analyze_codebase_overview(modules, project_info)
+            logger.info("  ✓ Overview complete")
+        except (json.JSONDecodeError, OSError, ValueError, RuntimeError) as e:
+            logger.error(f"  ✗ Overview failed: {e}")
+
+    mod_results = {}
+    if use_llm and modules:
+        logger.info(f"  [Phase 2/3] Analyzing {len(modules)} modules (deep mode, {workers} workers)...")
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = {
+                executor.submit(
+                    _analyze_module_cached,
+                    repo, m, llm_parser, use_llm,
+                    cache_dir, repo_url, no_cache, deep=True,
+                ): m["name"]
+                for m in modules
+            }
+            for future in as_completed(futures):
+                name = futures[future]
+                try:
+                    result = future.result()
+                    if result:
+                        mod_results[name] = result
+                        logger.info(f"  ✓ {name}")
+                except Exception:
+                    logger.exception(f"  ✗ {name}")
+
+    analyzed_modules = []
+    for m in modules:
+        analysis = mod_results.get(m["name"], {
+            "name": m["name"], "purpose": "", "architecture": "",
+            "implementation": "", "design_decisions": [],
+            "rules_and_constraints": [], "dependencies": [],
+            "patterns": [], "highlights": [], "weaknesses": [],
+            "diagram": None,
+        })
+        analyzed_modules.append({**m, "analysis": analysis})
+
+    synthesis = {}
+    if use_llm and overview and len(analyzed_modules) >= 3:
+        logger.info("  [Phase 3/3] Synthesizing methodology & reusable patterns...")
+        try:
+            synthesis = llm_parser.synthesize_methodology(
+                overview,
+                [ma["analysis"] for ma in analyzed_modules],
+            )
+            logger.info("  ✓ Synthesis complete")
+        except (json.JSONDecodeError, OSError, ValueError, RuntimeError) as e:
+            logger.error(f"  ✗ Synthesis failed: {e}")
+
+    return {
+        "repo": {
+            "name": repo_info.get("name", ""),
+            "url": repo_info.get("url", ""),
+            "description": repo_info.get("description", ""),
+        },
+        "analysis_time": datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
+        "overview": overview,
+        "modules": analyzed_modules,
+        "synthesis": synthesis,
+        "total_files": total_files,
+        "total_lines": total_lines,
+    }
+
+
+def _analyze_module_cached(
+    repo: GitRepo, module: dict, llm_parser: LLMParser,
+    use_llm: bool, cache_dir: str, repo_url: str, no_cache: bool,
+    deep: bool = False,
+) -> dict | None:
+    mode = "deep" if deep else "shallow"
+    cache_key = hashlib.md5(
+        f"{repo_url}|{mode}|{module['name']}|{module['file_count']}|{module['total_lines']}".encode()
+    ).hexdigest()
+    os.makedirs(cache_dir, exist_ok=True)
+
+    if use_llm and not no_cache:
+        cached = _load_cache(cache_dir, cache_key)
+        if cached:
+            return cached
+
+    if not use_llm:
+        kf_paths = [kf["path"] for kf in module.get("key_files", [])[:3]]
+        return {
+            "name": module["name"],
+            "purpose": f"{module['name']} 模块（{module['file_count']} 文件, {module['total_lines']} 行）",
+            "architecture": f"包含 {', '.join(kf_paths) if kf_paths else '?'} 等关键文件",
+            "implementation": f"共 {module['file_count']} 个文件，{module['total_lines']} 行代码",
+            "design_decisions": [],
+            "rules_and_constraints": [],
+            "dependencies": [],
+            "patterns": [],
+            "highlights": [],
+            "weaknesses": [],
+            "diagram": None,
+        }
+
+    result = llm_parser.analyze_module(module, deep=deep)
+    _save_cache(cache_dir, cache_key, result)
+    return result
+
+
+def _main_book(repo: GitRepo, repo_meta: dict, args) -> str:
+    """
+    Book mode: generate a Chinese product-perspective JSON analysis report.
+
+    If book_analyzer.py exists, delegates to build_book_report().
+    Otherwise, writes a manifest JSON with repo metadata as a stub artifact,
+    so the pipeline is safe even before the core book module is implemented.
+    """
+    base_dir = os.path.join(BASE_DIR, "book_output")
+    if args.book_output_dir:
+        base_dir = args.book_output_dir
+        if not os.path.isabs(base_dir):
+            base_dir = os.path.join(BASE_DIR, base_dir)
+
+    safe_name = repo_meta["name"].replace("/", "_").replace(" ", "_")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir = os.path.join(base_dir, f"{safe_name}_{timestamp}")
+    os.makedirs(output_dir, exist_ok=True)
+
+    repo_info = {
+        "name": repo_meta["name"],
+        "url": repo_meta.get("url", ""),
+        "total_commits": repo_meta.get("total_commits", 0),
+        "first_commit_date": repo_meta.get("first_commit_date", ""),
+        "default_branch": repo_meta.get("default_branch", ""),
+        "tag_count": repo_meta.get("tag_count", 0),
+        "section_filter": args.book_section,
+    }
+
+    logger.info("\n  📖 Book mode: generating Chinese product-perspective analysis")
+    logger.info(f"  Output dir: {output_dir}")
+
+    try:
+        import book_analyzer  # type: ignore[import-not-found]
+    except ImportError:
+        logger.warning("  ⚠ book_analyzer module not found — writing stub manifest JSON.")
+        logger.info("  → To enable full book analysis, implement book_analyzer.py with:")
+        logger.info("      def build_book_report(repo, repo_info, llm_parser, use_llm, output_dir, section=None, **kwargs) -> dict")
+
+        # Write stub manifest so the pipeline produces a valid artifact.
+        manifest = {
+            "mode": "book",
+            "status": "stub — book_analyzer module not available",
+            "repo": repo_info,
+            "analysis_time": datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
+            "section_filter": args.book_section,
+            "output_dir": output_dir,
+        }
+        manifest_path = os.path.join(output_dir, "book_manifest.json")
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=2, ensure_ascii=False)
+        logger.info(f"  ✓ Stub manifest written → {manifest_path}")
+        return output_dir
+
+    # book_analyzer is available — delegate to it.
+    llm_parser = LLMParser(
+        provider=args.provider, model=args.model,
+        api_key=args.api_key, base_url=args.base_url,
+    )
+    use_llm = not args.no_llm
+
+    logger.info("  [Book] Running full book analysis pipeline...")
+    build_book_report = getattr(book_analyzer, "build_book_report", None)
+    if not build_book_report:
+        raise ImportError("book_analyzer.build_book_report not found")
+    try:
+        _ = build_book_report(
+            repo=repo,
+            repo_info=repo_info,
+            llm_parser=llm_parser,
+            use_llm=use_llm,
+            output_dir=output_dir,
+            section=args.book_section,
+            workers=args.workers,
+            no_cache=args.no_cache,
+            cache_dir=os.path.join(BASE_DIR, "cache_json"),
+        )
+    except (OSError, json.JSONDecodeError, ValueError, RuntimeError) as e:
+        logger.error(f"  ✗ Book analysis failed: {e}")
+        # Still write a partial manifest on failure.
+        error_manifest = {
+            "mode": "book",
+            "status": f"error — {e}",
+            "repo": repo_info,
+            "analysis_time": datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
+            "section_filter": args.book_section,
+            "output_dir": output_dir,
+        }
+        manifest_path = os.path.join(output_dir, "book_manifest.json")
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(error_manifest, f, indent=2, ensure_ascii=False)
+        raise
+
+    logger.info(f"  ✓ Book report complete → {output_dir}")
+    return output_dir
+
+
 def main():
     args = parse_args()
+    _setup_logging()
 
     repo_url = args.repo_url.rstrip("/")
     repo_name = repo_url.split("/")[-1].removesuffix(".git")
@@ -357,97 +601,132 @@ def main():
     json_cache_dir = DEFAULT_JSON_CACHE_DIR
     model_display = args.model or "default"
 
-    print(f"\n{'='*60}")
-    print("  GitHub Tech Reader — Iteration Analysis Pipeline")
-    print(f"  Repo: {owner}/{repo_name}")
-    print(f"  LLM: {'disabled' if args.no_llm else f'{args.provider}/{model_display}'}")
-    print(f"  Workers: {args.workers}  |  Cache: {'off' if args.no_cache else 'on'}")
+    logger.info(f"\n{'='*60}")
+    logger.info("  GitHub Tech Reader — Iteration Analysis Pipeline")
+    logger.info(f"  Repo: {owner}/{repo_name}")
+    logger.info(f"  LLM: {'disabled' if args.no_llm else f'{args.provider}/{model_display}'}")
+    logger.info(f"  Workers: {args.workers}  |  Cache: {'off' if args.no_cache else 'on'}")
     if args.merge_patch:
-        print("  Merge patch versions: on (threshold: <10 commits)")
-    print(f"{'='*60}\n")
+        logger.info("  Merge patch versions: on (threshold: <10 commits)")
+    logger.info(f"{'='*60}\n")
 
     t_start = time.time()
 
-    print("[1/4] Cloning bare repository...")
+    logger.info("[1/4] Cloning bare repository...")
     repo = GitRepo.clone_bare(repo_url, cache_dir, skip_fetch=args.no_fetch)
     if not args.no_fetch:
         repo.fetch()
-    print(f"  ✓ Bare repo at {repo.path}")
+    logger.info(f"  ✓ Bare repo at {repo.path}")
 
-    print("[2/4] Extracting iterations...")
+    repo_meta = repo.get_repo_metadata()
+    repo_meta["name"] = f"{owner}/{repo_name}"
+    repo_meta["url"] = repo_url
+
+    if args.book:
+        logger.info("[2/2] Book mode — generating Chinese product-perspective analysis...")
+        t_start = time.time()
+        output_dir = _main_book(repo, repo_meta, args)
+        elapsed = time.time() - t_start
+        logger.info(f"\n{'='*60}")
+        logger.info(f"  ✓ Book report: {output_dir}")
+        logger.info(f"  ⏱  Elapsed: {elapsed:.1f}s")
+
+        try:
+            generator = HTMLGenerator(output_dir=DEFAULT_OUTPUT_DIR)
+            html_path = generator.generate_book(output_dir)
+            logger.info(f"  ✓ Book HTML: {html_path}")
+        except (OSError, RuntimeError) as e:
+            logger.warning(f"  ⚠ Book HTML render skipped: {e}")
+
+        logger.info(f"{'='*60}\n")
+        return output_dir
+
+    logger.info("[2/4] Extracting iterations...")
     all_tags = repo.get_tags()
 
     if args.strategy != "full":
         iterations_raw = repo.filter_by_strategy(args.strategy)
-        print(f"  ✓ Strategy: {args.strategy} → {len(iterations_raw)} iterations")
+        logger.info(f"  ✓ Strategy: {args.strategy} → {len(iterations_raw)} iterations")
     else:
         iterations_raw = repo.extract_iterations()
 
     if not iterations_raw:
-        print("  ⚠ No iterations found. Creating single-iteration from HEAD...")
-        default_branch = repo.get_default_branch()
-        iterations_raw = [{
-            "version": "HEAD",
-            "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-            "tag_hash": f"refs/heads/{default_branch}",
-            "prev_hash": None,
-            "prev_tag": None,
-            "commit_count": repo.get_commit_count(),
-        }]
+        logger.warning("  ⚠ No tags found. Using commit-chunk analysis...")
+        iterations_raw = repo.extract_commit_chunks()
+        logger.info(f"  ✓ Created {len(iterations_raw)} chunks from commit history")
 
-    if args.merge_patch and args.strategy == "full":
-        iterations_data = _merge_adjacent_patch_versions(iterations_raw)
-        merged_count = len(iterations_raw) - len(iterations_data)
-        if merged_count:
-            print(f"  ✓ Merged {merged_count} small patch versions → {len(iterations_data)} iterations")
-    else:
-        iterations_data = iterations_raw
+    use_structural = False
+    iterations_data = iterations_raw
+    if len(iterations_raw) <= 1 and repo.get_commit_count() <= 1:
+        logger.warning("  ⚠ Single/missing commit — switching to structural analysis...")
+        use_structural = True
+
+    if not use_structural:
+        if args.merge_patch and args.strategy == "full":
+            iterations_data = _merge_adjacent_patch_versions(iterations_raw)
+            merged_count = len(iterations_raw) - len(iterations_data)
+            if merged_count:
+                logger.info(f"  ✓ Merged {merged_count} small patch versions → {len(iterations_data)} iterations")
+        else:
+            iterations_data = iterations_raw
 
     if args.limit and args.limit < len(iterations_data):
         iterations_data = iterations_data[-args.limit:]
-        print(f"  ✓ Limited to {args.limit} most recent iterations")
+        logger.info(f"  ✓ Limited to {args.limit} most recent iterations")
 
-    print(f"  ✓ Tags: {len(all_tags)}, Iterations: {len(iterations_data)}")
+    logger.info(f"  ✓ Tags: {len(all_tags)}, Iterations: {len(iterations_data)}")
 
-    print("[3/4] Analyzing iterations...")
     llm_parser = LLMParser(
         provider=args.provider, model=args.model,
         api_key=args.api_key, base_url=args.base_url,
     )
     use_llm = not args.no_llm
 
-    repo_meta = repo.get_repo_metadata()
-    repo_meta["name"] = f"{owner}/{repo_name}"
-    repo_meta["url"] = repo_url
-    repo_meta["description"] = (
-        f"分析 {len(iterations_data)} 个版本迭代，共 {repo_meta['total_commits']} 次提交。"
-    )
-
-    report_data = build_report_data(
-        repo, repo_meta, iterations_data, llm_parser,
-        use_llm, args.max_diff_chars, json_cache_dir,
-        repo_url, args.no_cache, args.workers,
-        args.use_manifest, args.manifest_max_files,
-    )
+    if use_structural:
+        repo_meta["description"] = (
+            f"代码结构分析 — {repo_meta['total_commits']} 次提交, "
+            f"扫描所有模块与依赖关系。"
+        )
+        logger.info("[3/4] Analyzing code structure...")
+        report_data = build_structural_report(
+            repo, repo_meta, llm_parser,
+            use_llm, args.workers, json_cache_dir,
+            repo_url, args.no_cache,
+        )
+    else:
+        repo_meta["description"] = (
+            f"分析 {len(iterations_data)} 个版本迭代，共 {repo_meta['total_commits']} 次提交。"
+        )
+        report_data = build_report_data(
+            repo, repo_meta, iterations_data, llm_parser,
+            use_llm, args.max_diff_chars, json_cache_dir,
+            repo_url, args.no_cache, args.workers,
+            args.use_manifest, args.manifest_max_files,
+        )
 
     if use_llm:
         from llm_parser import LLMParser as _LLM
-        print(f"\n  📊 Token stats: {_LLM.total_calls} calls | "
-              f"input={_LLM.total_input_tokens:,} tokens | "
-              f"output={_LLM.total_output_tokens:,} tokens | "
-              f"total={_LLM.total_input_tokens + _LLM.total_output_tokens:,} tokens")
+        logger.info(
+            f"\n  📊 Token stats: {_LLM.total_calls} calls | "
+            f"input={_LLM.total_input_tokens:,} tokens | "
+            f"output={_LLM.total_output_tokens:,} tokens | "
+            f"total={_LLM.total_input_tokens + _LLM.total_output_tokens:,} tokens"
+        )
 
     # Step 4: Generate HTML
-    print("[4/4] Generating HTML report...")
+    logger.info("[4/4] Generating HTML report...")
     existing_dir = _find_existing_report(DEFAULT_OUTPUT_DIR, f"{owner}_{repo_name}")
     generator = HTMLGenerator(output_dir=DEFAULT_OUTPUT_DIR)
-    output_path = generator.generate(report_data, args.output, existing_dir=existing_dir)
+    if use_structural:
+        output_path = generator.generate_structural(report_data, args.output, existing_dir=existing_dir)
+    else:
+        output_path = generator.generate(report_data, args.output, existing_dir=existing_dir)
 
     elapsed = time.time() - t_start
-    print(f"\n{'='*60}")
-    print(f"  ✓ Report: {output_path}")
-    print(f"  ⏱  Elapsed: {elapsed:.1f}s")
-    print(f"{'='*60}\n")
+    logger.info(f"\n{'='*60}")
+    logger.info(f"  ✓ Report: {output_path}")
+    logger.info(f"  ⏱  Elapsed: {elapsed:.1f}s")
+    logger.info(f"{'='*60}\n")
 
     return output_path
 

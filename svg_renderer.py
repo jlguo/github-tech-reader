@@ -1,8 +1,10 @@
 import hashlib
 import json
+import logging
 import os
 import time
-from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "svg_cache")
 
@@ -11,7 +13,7 @@ def _mermaid_code_hash(code: str) -> str:
     return hashlib.sha256(code.encode()).hexdigest()[:16]
 
 
-def _load_svg_cache(code_hash: str) -> Optional[str]:
+def _load_svg_cache(code_hash: str) -> str | None:
     path = os.path.join(CACHE_DIR, f"{code_hash}.svg")
     if os.path.isfile(path):
         with open(path, encoding="utf-8") as f:
@@ -27,8 +29,9 @@ def _save_svg_cache(code_hash: str, svg: str) -> None:
 
 
 def render_mermaid_batch(mermaid_codes: list[str]) -> dict[str, str]:
-    from llm_parser import _sanitize_mermaid
     from playwright.sync_api import sync_playwright
+
+    from llm_parser import _sanitize_mermaid
 
     result: dict[str, str] = {}
     uncached: list[tuple[str, str]] = []
@@ -81,7 +84,8 @@ mermaid.initialize({{ startOnLoad: false, theme: 'neutral', securityLevel: 'loos
                 """)
                 result[h] = svg
                 _save_svg_cache(h, svg)
-            except Exception as e:
+            except (json.JSONDecodeError, RuntimeError, ValueError) as e:
+                logger.warning("Mermaid render failed for %s: %s", h, e)
                 result[h] = f'<span style="color:#ef4444;font-size:12px;">Mermaid error: {e}</span>'
 
         browser.close()
@@ -104,10 +108,11 @@ def pre_render_iterations(iterations: list[dict]) -> dict[str, str]:
     if not codes:
         return {}
 
-    print(f"  Pre-rendering {len(codes)} Mermaid diagrams...")
+    logger.info("  Pre-rendering %d Mermaid diagrams...", len(codes))
     t0 = time.time()
     result = render_mermaid_batch(codes)
     elapsed = time.time() - t0
-    print(f"  ✓ Rendered {len(result)} diagrams in {elapsed:.1f}s "
-          f"(cache hits: {len(codes) - len([c for c in codes if _mermaid_code_hash(c) not in result])})")
+    cache_hits = len(codes) - len([c for c in codes if _mermaid_code_hash(c) not in result])
+    logger.info("  ✓ Rendered %d diagrams in %.1fs (cache hits: %d)",
+                len(result), elapsed, cache_hits)
     return result
