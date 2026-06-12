@@ -32,3 +32,6 @@ doc/*.pdf
 
 # App database
 app/jobs.db
+
+# GitHub
+.github/
