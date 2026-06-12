@@ -27,6 +27,8 @@ Thumbs.db
 *.swp
 *.swo
 svg_cache/
+book_output/
+doc/*.pdf
 
 # App database
 app/jobs.db
