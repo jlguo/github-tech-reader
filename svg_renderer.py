@@ -1,7 +1,8 @@
 import hashlib
-import json
 import logging
 import os
+import subprocess
+import tempfile
 import time
 
 logger = logging.getLogger(__name__)
@@ -28,9 +29,65 @@ def _save_svg_cache(code_hash: str, svg: str) -> None:
         f.write(svg)
 
 
-def render_mermaid_batch(mermaid_codes: list[str]) -> dict[str, str]:
-    from playwright.sync_api import sync_playwright
+def _render_one(code: str, code_hash: str) -> str | None:
+    """Render a single Mermaid diagram via the official mermaid-cli.
 
+    Writes the diagram to a temp ``.mmd`` file, runs ``mmdc`` via
+    ``npx``, reads the resulting SVG, and returns it.  Returns
+    ``None`` if rendering fails.
+    """
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".mmd", encoding="utf-8", delete=False,
+    ) as tmp_in:
+        tmp_in.write(code)
+        input_path = tmp_in.name
+
+    output_path = input_path + ".svg"
+
+    try:
+        subprocess.run(
+            [
+                "npx", "-p", "@mermaid-js/mermaid-cli", "mmdc",
+                "-i", input_path,
+                "-o", output_path,
+                "--quiet",
+                "--theme", "neutral",
+                "--backgroundColor", "transparent",
+            ],
+            check=True, capture_output=True, text=True,
+            timeout=60,
+        )
+        with open(output_path, encoding="utf-8") as f:
+            svg = f.read()
+        return svg
+    except subprocess.CalledProcessError as exc:
+        stderr = (exc.stderr or "").strip()
+        logger.warning("mmdc failed for %s: %s", code_hash, stderr[:200])
+        return None
+    except subprocess.TimeoutExpired:
+        logger.warning("mmdc timed out for %s", code_hash)
+        return None
+    finally:
+        for p in (input_path, output_path):
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
+
+
+def render_mermaid_batch(mermaid_codes: list[str]) -> dict[str, str]:
+    """Render a batch of Mermaid diagrams to SVG via the official mermaid-cli.
+
+    Cached SVGs are returned immediately.  Uncached diagrams are
+    rendered sequentially (mmdc bundles its own Puppeteer browser).
+
+    Args:
+        mermaid_codes: List of raw Mermaid diagram strings.
+
+    Returns:
+        Dict mapping SHA256 code-hashes to SVG strings (or inline
+        error spans for failed renders).
+    """
     from llm_parser import _sanitize_mermaid
 
     result: dict[str, str] = {}
@@ -52,42 +109,16 @@ def render_mermaid_batch(mermaid_codes: list[str]) -> dict[str, str]:
     if not uncached:
         return result
 
-    mermaid_js_path = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        "html_template", "assets", "mermaid.min.js",
-    )
-    with open(mermaid_js_path, encoding="utf-8") as f:
-        mermaid_js = f.read()
-
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-
-        page.set_content(f"""<!DOCTYPE html><html><body>
-<script>{mermaid_js}</script>
-<script>
-mermaid.initialize({{ startOnLoad: false, theme: 'neutral', securityLevel: 'loose' }});
-</script>
-<div id="target"></div>
-</body></html>""")
-
-        for h, code in uncached:
-            try:
-                svg = page.evaluate("""
-                    async (code) => {
-                        const el = document.getElementById('target');
-                        el.innerHTML = '';
-                        const result = await mermaid.render('mermaid-svg', code);
-                        return result.svg;
-                    }
-                """, code)
-                result[h] = svg
-                _save_svg_cache(h, svg)
-            except (json.JSONDecodeError, RuntimeError, ValueError) as e:
-                logger.warning("Mermaid render failed for %s: %s", h, e)
-                result[h] = f'<span style="color:#ef4444;font-size:12px;">Mermaid error: {e}</span>'
-
-        browser.close()
+    for h, code in uncached:
+        svg = _render_one(code, h)
+        if svg:
+            result[h] = svg
+            _save_svg_cache(h, svg)
+        else:
+            result[h] = (
+                '<span style="color:#ef4444;font-size:12px;">'
+                "Mermaid render failed</span>"
+            )
 
     return result
 
