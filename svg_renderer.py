@@ -73,15 +73,14 @@ mermaid.initialize({{ startOnLoad: false, theme: 'neutral', securityLevel: 'loos
 
         for h, code in uncached:
             try:
-                escaped = json.dumps(code)
-                svg = page.evaluate(f"""
-                    (async () => {{
+                svg = page.evaluate("""
+                    async (code) => {
                         const el = document.getElementById('target');
                         el.innerHTML = '';
-                        const result = await mermaid.render('mermaid-svg', {escaped});
+                        const result = await mermaid.render('mermaid-svg', code);
                         return result.svg;
-                    }})()
-                """)
+                    }
+                """, code)
                 result[h] = svg
                 _save_svg_cache(h, svg)
             except (json.JSONDecodeError, RuntimeError, ValueError) as e:
