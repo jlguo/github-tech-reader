@@ -1,11 +1,12 @@
-import { useState, useRef, useEffect } from "react";
-import { List, Code2, ExternalLink, ChevronRight } from "lucide-react";
-import { htmlContent } from "./readerData";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Book } from "../bookData";
+import { htmlContent as mockContent } from "./readerData";
 
-interface HtmlReaderProps {
-  book: Book;
-}
+interface HtmlReaderProps { book: Book; }
+
+interface TocItem { id: string; title: string; level: number; }
+
+const API = "http://localhost:8000/api";
 
 const tocItemStyle = (level: number, active: boolean): React.CSSProperties => ({
   paddingLeft: level === 1 ? "12px" : "24px",
@@ -16,320 +17,147 @@ const tocItemStyle = (level: number, active: boolean): React.CSSProperties => ({
   background: active ? "rgba(194,91,22,0.08)" : "transparent",
   borderLeft: active ? "2px solid #c25b16" : "2px solid transparent",
   padding: `6px 12px 6px ${level === 1 ? 12 : 24}px`,
-  display: "block",
-  width: "100%",
-  textAlign: "left" as const,
-  cursor: "pointer",
-  transition: "all 0.15s",
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
+  display: "block", width: "100%", textAlign: "left" as const,
+  cursor: "pointer", transition: "all 0.15s",
+  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
 });
 
-// Inject scoped styles into the HTML string
-const scopedHtml = `
-<style>
-  .html-reader-body {
-    font-family: "Source Serif 4", serif;
-    color: #2c1a0e;
-    font-size: 16px;
-    line-height: 1.85;
+function extractToc(html: string): TocItem[] {
+  const items: TocItem[] = [];
+  const regex = /<h([1-3])[^>]*>\s*(.*?)\s*<\/h\1>/gi;
+  let match;
+  while ((match = regex.exec(html)) !== null) {
+    const level = parseInt(match[1]);
+    const title = match[2].replace(/<[^>]+>/g, "").trim();
+    items.push({ id: `s${items.length}`, title: title || `Section ${items.length}`, level });
   }
-  .html-reader-body h1 {
-    font-family: "Playfair Display", serif;
-    font-size: 1.6rem;
-    font-weight: 700;
-    color: #2c1a0e;
-    margin: 2rem 0 1rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 2px solid #c25b16;
-  }
-  .html-reader-body h2 {
-    font-family: "Playfair Display", serif;
-    font-size: 1.15rem;
-    font-weight: 600;
-    color: #3a2010;
-    margin: 1.75rem 0 0.75rem;
-  }
-  .html-reader-body h3 {
-    font-family: "Inter", sans-serif;
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: #5c3d1e;
-    margin: 1.25rem 0 0.5rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-  .html-reader-body p {
-    margin: 0 0 1rem;
-    text-align: justify;
-  }
-  .html-reader-body ul, .html-reader-body ol {
-    margin: 0.5rem 0 1rem 1.5rem;
-  }
-  .html-reader-body li {
-    margin-bottom: 0.4rem;
-  }
-  .html-reader-body strong {
-    font-weight: 600;
-    color: #3a2010;
-  }
-  .html-reader-body code {
-    font-family: "JetBrains Mono", monospace;
-    font-size: 0.82rem;
-    background: #ede5d4;
-    color: #8b3a0a;
-    padding: 1px 5px;
-    border-radius: 3px;
-  }
-  .html-reader-body pre {
-    background: #2c1a0e;
-    color: #e8d8c0;
-    padding: 1rem 1.25rem;
-    border-radius: 8px;
-    overflow-x: auto;
-    margin: 1rem 0;
-    font-size: 0.82rem;
-    line-height: 1.65;
-  }
-  .html-reader-body pre code {
-    background: transparent;
-    color: inherit;
-    padding: 0;
-    font-size: inherit;
-  }
-  .html-reader-body blockquote {
-    margin: 1.25rem 0;
-    padding: 0.75rem 1.25rem;
-    border-left: 3px solid #c25b16;
-    background: #fdf5ec;
-    border-radius: 0 6px 6px 0;
-    font-style: italic;
-    color: #5c3d1e;
-  }
-  .html-reader-body blockquote p {
-    margin: 0;
-  }
-  .html-reader-body a {
-    color: #c25b16;
-    text-decoration: underline;
-    text-underline-offset: 2px;
-  }
-  .html-reader-body table {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 1rem 0;
-    font-size: 0.875rem;
-  }
-  .html-reader-body th {
-    background: #5c3d1e;
-    color: white;
-    padding: 8px 12px;
-    text-align: left;
-    font-family: "Inter", sans-serif;
-    font-size: 0.78rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-  .html-reader-body td {
-    padding: 8px 12px;
-    border-bottom: 1px solid #ede5d4;
-    color: #2c1a0e;
-  }
-  .html-reader-body tr:nth-child(even) td {
-    background: #faf6ed;
-  }
-</style>
-<div class="html-reader-body">${htmlContent.html}</div>
-`;
+  return items;
+}
+
+function injectAnchorIds(html: string): string {
+  let idx = 0;
+  return html.replace(/<h([1-3])([^>]*)>/gi, (_, level, attrs) => {
+    if (attrs.includes("id=")) return `<h${level}${attrs}>`;
+    return `<h${level} id="s${idx++}"${attrs}>`;
+  });
+}
 
 export function HtmlReader({ book }: HtmlReaderProps) {
-  const [showToc, setShowToc] = useState(true);
-  const [showSource, setShowSource] = useState(false);
-  const [activeId, setActiveId] = useState("s1");
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [realHtml, setRealHtml] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [activeId, setActiveId] = useState("s0");
+  const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const iframe = iframeRef.current;
-    if (!iframe) return;
-    const doc = iframe.contentDocument || iframe.contentWindow?.document;
-    if (!doc) return;
-    doc.open();
-    doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
-      <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Source+Serif+4:wght@300;400;600&family=Inter:wght@400;500;600&family=JetBrains+Mono&display=swap" rel="stylesheet">
-    </head><body style="margin:0;padding:0;">${scopedHtml}</body></html>`);
-    doc.close();
-
-    // Track scroll position to update active TOC item
-    const win = iframe.contentWindow;
-    if (!win) return;
-    const onScroll = () => {
-      const headings = doc.querySelectorAll("h1[id], h2[id]");
-      let current = "s1";
-      headings.forEach(el => {
-        if ((el as HTMLElement).offsetTop - 80 <= win.scrollY) {
-          current = el.id;
-        }
-      });
-      setActiveId(current);
-    };
-    win.addEventListener("scroll", onScroll);
-    return () => win.removeEventListener("scroll", onScroll);
-  }, [showSource]);
-
-  const scrollTo = (id: string) => {
-    const iframe = iframeRef.current;
-    const doc = iframe?.contentDocument || iframe?.contentWindow?.document;
-    const el = doc?.getElementById(id);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
-      setActiveId(id);
+    if (book.category === "generated") {
+      fetch(`${API}/books/by-repo/${book.id}`)
+        .then(r => r.json())
+        .then(d => { setRealHtml(d.html_content); setLoaded(true); })
+        .catch(() => setLoaded(true));
+    } else {
+      setLoaded(true);
     }
-  };
+  }, [book.id, book.category]);
+
+  const displayHtml = realHtml || mockContent.html;
+  const anchoredHtml = injectAnchorIds(displayHtml);
+  const tocItems = extractToc(displayHtml);
+
+  const scrollToSection = useCallback((id: string) => {
+    setActiveId(id);
+    const iframe = contentRef.current?.querySelector("iframe");
+    if (!iframe?.contentDocument) return;
+    const el = iframe.contentDocument.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
+  const handleContentLoad = useCallback(() => {
+    const iframe = contentRef.current?.querySelector("iframe");
+    if (!iframe?.contentDocument) return;
+
+    const doc = iframe.contentDocument;
+
+    const onIntersect = (entries: IntersectionObserverEntry[]) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting && entry.target.id.startsWith("s")) {
+          setActiveId(entry.target.id);
+        }
+      }
+    };
+
+    const observer = new IntersectionObserver(onIntersect, {
+      root: doc,
+      rootMargin: "-10% 0px -60% 0px",
+      threshold: 0,
+    });
+
+    doc.querySelectorAll("h1[id],h2[id],h3[id]").forEach(el => observer.observe(el));
+
+    const onScroll = () => {
+      const maxScroll = doc.documentElement.scrollHeight - doc.documentElement.clientHeight;
+      const position = maxScroll > 0 ? doc.documentElement.scrollTop / maxScroll : 0;
+      const activeIdx = tocItems.findIndex(t => t.id === activeId);
+      const section = activeIdx >= 0 ? tocItems[activeIdx].title : null;
+      if (book.category === "generated") {
+        fetch(`${API}/reading/progress`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ repo_id: book.id, section, position: Math.round(position * 100), completed: position > 0.95 }),
+        }).catch(() => {});
+      }
+    };
+
+    let timer: ReturnType<typeof setTimeout>;
+    doc.addEventListener("scroll", () => { clearTimeout(timer); timer = setTimeout(onScroll, 2000); }, { passive: true });
+
+    return () => { observer.disconnect(); clearTimeout(timer); };
+  }, [book.id, book.category, activeId, tocItems]);
+
+  if (!loaded) {
+    return <div className="flex items-center justify-center h-full" style={{ color: "var(--muted-foreground)" }}>加载中...</div>;
+  }
+
+  const scopedHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+    html,body{height:100%;margin:0;padding:0}
+    body{font-family:"Source Serif 4",serif;color:#2c1a0e;font-size:16px;line-height:1.85;max-width:720px;margin:0 auto;padding:2rem 1.5rem 4rem;background:#f5f0e8;scroll-behavior:smooth}
+    h1{font-family:"Playfair Display",serif;font-size:1.6rem;color:#5c3d1e;margin-top:0;padding-top:1rem}
+    h2{font-family:"Playfair Display",serif;font-size:1.2rem;color:#5c3d1e;margin-top:2.5rem;padding-top:0.5rem}
+    h3{font-family:"Playfair Display",serif;font-size:1rem;color:#8b5a2b;margin-top:2rem}
+    a{color:#c17f3a}
+    pre{background:#ede5d4;padding:1rem;border-radius:8px;overflow-x:auto}
+    code{font-family:"Fira Code",monospace;font-size:0.9em}
+    img{max-width:100%;border-radius:8px}
+    blockquote{border-left:3px solid #c17f3a;padding-left:1rem;margin-left:0;color:#7a6248}
+    table{width:100%;border-collapse:collapse;margin:1rem 0}
+    th,td{border:1px solid rgba(92,61,30,0.15);padding:8px 12px;text-align:left}
+  </style></head><body>${anchoredHtml}</body></html>`;
 
   return (
-    <div className="flex h-full" style={{ background: "#f5f0e8" }}>
-      {/* TOC sidebar */}
-      {showToc && (
-        <aside
-          className="w-52 flex-shrink-0 flex flex-col border-r overflow-hidden"
-          style={{ background: "#fffdf7", borderColor: "rgba(92,61,30,0.12)" }}
-        >
-          <div
-            className="px-4 py-3 border-b flex items-center justify-between"
-            style={{ borderColor: "rgba(92,61,30,0.12)" }}
-          >
-            <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: "#7a6248", fontFamily: "Inter, sans-serif" }}>
-              目录
-            </span>
-            <span className="text-xs" style={{ color: "#b5a08a", fontFamily: "Inter, sans-serif" }}>
-              {htmlContent.toc.length} 节
-            </span>
-          </div>
-          <nav className="flex-1 overflow-y-auto py-2">
-            {htmlContent.toc.map(item => (
-              <button
-                key={item.id}
-                onClick={() => scrollTo(item.id)}
-                style={tocItemStyle(item.level, activeId === item.id)}
-              >
-                {item.level === 2 && (
-                  <ChevronRight size={10} style={{ display: "inline", marginRight: "4px", opacity: 0.5 }} />
-                )}
-                {item.title}
-              </button>
-            ))}
-          </nav>
-        </aside>
-      )}
-
-      {/* Main area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Toolbar */}
-        <div
-          className="flex items-center gap-2 px-4 py-2 border-b flex-shrink-0"
-          style={{ background: "#fffdf7", borderColor: "rgba(92,61,30,0.1)" }}
-        >
+    <div className="flex h-full">
+      <aside className="w-56 flex-shrink-0 overflow-y-auto border-r" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
+        <div className="p-4 font-semibold text-sm" style={{ color: "var(--foreground)", fontFamily: "Playfair Display, serif" }}>
+          目录 ({tocItems.length} 节)
+        </div>
+        {tocItems.map((item) => (
           <button
-            onClick={() => setShowToc(v => !v)}
-            className="p-1.5 rounded transition-colors"
-            style={{
-              background: showToc ? "rgba(194,91,22,0.12)" : "transparent",
-              color: showToc ? "#c25b16" : "#7a6248",
-            }}
-            title="目录"
+            key={item.id}
+            style={tocItemStyle(item.level, item.id === activeId)}
+            onClick={() => scrollToSection(item.id)}
           >
-            <List size={16} />
+            {item.title}
           </button>
-
-          {/* Breadcrumb */}
-          <div className="flex items-center gap-1 flex-1 min-w-0 text-xs overflow-hidden" style={{ fontFamily: "Inter, sans-serif", color: "#b5a08a" }}>
-            <span className="truncate">{book.title}</span>
-            <span>/</span>
-            <span className="truncate" style={{ color: "#c25b16" }}>
-              {htmlContent.toc.find(t => t.id === activeId)?.title || ""}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setShowSource(v => !v)}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs transition-colors"
-              style={{
-                background: showSource ? "rgba(194,91,22,0.12)" : "transparent",
-                color: showSource ? "#c25b16" : "#7a6248",
-                fontFamily: "Inter, sans-serif",
-                border: "1px solid rgba(194,91,22,0.2)",
-              }}
-            >
-              <Code2 size={13} />
-              {showSource ? "预览" : "源码"}
-            </button>
-            <button
-              className="p-1.5 rounded transition-colors"
-              style={{ color: "#7a6248" }}
-              title="在新窗口打开"
-            >
-              <ExternalLink size={15} />
-            </button>
-          </div>
-        </div>
-
-        {/* Content */}
-        {showSource ? (
-          <div className="flex-1 overflow-auto" style={{ background: "#1e1410" }}>
-            <pre
-              className="p-6 text-xs leading-relaxed h-full"
-              style={{ fontFamily: "JetBrains Mono, monospace", color: "#e8d8c0", margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-all" }}
-            >
-              <span style={{ color: "#b5a08a" }}>{`<!DOCTYPE html>\n<html lang="zh">\n<head>\n  <meta charset="UTF-8">\n  <title>CSS权威指南</title>\n  <link rel="stylesheet" href="styles.css">\n</head>\n<body>\n`}</span>
-              {htmlContent.html
-                .replace(/</g, "<")
-                .replace(/>/g, ">")
-                .split("\n")
-                .map((line, i) => {
-                  const indent = line.match(/^(\s*)/)?.[1] || "";
-                  const rest = line.slice(indent.length);
-                  const colored = rest
-                    .replace(/(&lt;\/?[a-z0-9]+)/g, '<span style="color:#c25b16">$1</span>')
-                    .replace(/((?:class|id|href|src)=&quot;[^&]*&quot;)/g, '<span style="color:#8bc25b">$1</span>');
-                  return (
-                    <span key={i}>
-                      <span style={{ color: "#5a4030", userSelect: "none", marginRight: "16px", fontSize: "0.7rem" }}>
-                        {String(i + 1).padStart(3, " ")}
-                      </span>
-                      <span dangerouslySetInnerHTML={{ __html: indent + colored }} />
-                      {"\n"}
-                    </span>
-                  );
-                })}
-              <span style={{ color: "#b5a08a" }}>{`</body>\n</html>`}</span>
-            </pre>
-          </div>
-        ) : (
+        ))}
+      </aside>
+      <main className="flex-1 h-full" style={{ background: "#f5f0e8" }}>
+        <div ref={contentRef} className="h-full w-full">
           <iframe
-            ref={iframeRef}
-            className="flex-1 w-full border-0"
-            title="html-reader"
+            srcDoc={scopedHtml}
+            style={{ width: "100%", height: "100%", border: "none" }}
+            onLoad={handleContentLoad}
             sandbox="allow-same-origin"
-            style={{ background: "#faf6ed" }}
           />
-        )}
-
-        {/* Status bar */}
-        <div
-          className="flex items-center justify-between px-4 py-1.5 border-t flex-shrink-0"
-          style={{ background: "#fffdf7", borderColor: "rgba(92,61,30,0.08)" }}
-        >
-          <span className="text-xs" style={{ color: "#b5a08a", fontFamily: "Inter, sans-serif" }}>
-            HTML · UTF-8
-          </span>
-          <span className="text-xs" style={{ color: "#b5a08a", fontFamily: "Inter, sans-serif" }}>
-            已读 {book.progress}% · 第 {book.currentPage} / {book.totalPages} 页
-          </span>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

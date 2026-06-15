@@ -7,21 +7,28 @@
 ## Stack
 
 - **Frontend**: React 18 + TypeScript, Vite 6, pnpm (`frontend/`)
-- **Backend**: Python 3.11+, FastAPI, SQLAlchemy (async), SQLite (`backend/`)
+- **Backend**: Python 3.11+, FastAPI, SQLAlchemy (async), SQLite, CrewAI (`backend/`)
 - **Styling**: Tailwind CSS v4 (`@tailwindcss/vite` plugin, source scanned from `src/`), custom theme via CSS variables in `src/styles/theme.css`
 - **UI primitives**: shadcn/ui (Radix UI) — components in `src/app/components/ui/`
 - **Fonts**: Google Fonts — Playfair Display, Source Serif 4, Inter (`src/styles/fonts.css`)
 
-## Commands
+## Ports (DO NOT CHANGE)
+
+| Service | Port | Reason |
+|---------|------|--------|
+| Frontend (Vite) | **5173** | Vite default, CORS configured for this |
+| Backend (FastAPI) | **8000** | uvicorn default, frontend hard-coded to this |
+
+These are **fixed** — never change them in config, CLI args, or env vars.
 
 ```sh
 # Frontend
 cd frontend && pnpm install   # install frontend deps
 cd frontend && pnpm dev       # start Vite dev server (port 5173)
 
-# Backend
-cd backend && pip install -e .    # install backend deps
-cd backend && uvicorn app.main:app --reload --port 8000  # start API server
+# Backend (uses uv for Python deps)
+cd backend && uv sync              # install backend deps
+cd backend && uv run uvicorn app.main:app --reload --port 8000  # start API server
 ```
 
 ## Architecture

@@ -10,9 +10,10 @@ interface SidebarProps {
   onCategoryChange: (cat: BookCategory) => void;
   activeSection: string;
   onSectionChange: (section: string) => void;
+  onImport?: () => void;
 }
 
-export function Sidebar({ activeCategory, onCategoryChange, activeSection, onSectionChange }: SidebarProps) {
+export function Sidebar({ activeCategory, onCategoryChange, activeSection, onSectionChange, onImport }: SidebarProps) {
   return (
     <aside
       className="flex flex-col h-full"
@@ -130,6 +131,7 @@ export function Sidebar({ activeCategory, onCategoryChange, activeSection, onSec
       {/* Add book */}
       <div className="p-4">
         <button
+          onClick={onImport}
           className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all"
           style={{
             background: "var(--accent)",

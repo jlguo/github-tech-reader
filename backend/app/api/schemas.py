@@ -72,3 +72,40 @@ class SectionResponse(BaseModel):
 class RepoListResponse(BaseModel):
     items: list[RepoResponse]
     total: int
+
+
+class BookGenerationRequest(BaseModel):
+    chapter_count: int | None = None
+    target_words_per_chapter: int | None = None
+
+
+class BookGenerationStatusResponse(BaseModel):
+    repo_id: str
+    status: str
+    current_phase: str | None
+    total_chapters: int
+    completed_chapters: int
+    error_log: str | None
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class BookListItem(BaseModel):
+    repo_id: str
+    book_id: str
+    title: str
+    author: str
+    description: str | None
+    language: str | None
+    html_url: str
+    status: str
+    chapter_count: int
+
+
+class BookContentResponse(BaseModel):
+    book_id: str
+    title: str
+    html_content: str
+    cover_html: str | None = None
+    chapters: list["SectionResponse"] = []

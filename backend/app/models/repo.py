@@ -60,7 +60,31 @@ class ContentSection(Base):
     title: Mapped[str] = mapped_column(String(256), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     order_index: Mapped[int] = mapped_column(Integer, default=0)
+    chapter_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    word_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="drafting")
     metadata_: Mapped[dict | None] = mapped_column("metadata", JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     repo = relationship("Repo", back_populates="content_sections")
+
+
+class BookGeneration(Base):
+    __tablename__ = "book_generations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    repo_id: Mapped[str] = mapped_column(String(36), ForeignKey("repos.id"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(
+        String(32), default="pending", nullable=False,
+    )
+    total_chapters: Mapped[int] = mapped_column(Integer, default=0)
+    completed_chapters: Mapped[int] = mapped_column(Integer, default=0)
+    current_phase: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    outline: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    error_log: Mapped[str | None] = mapped_column(Text, nullable=True)
+    html_output: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cover_html: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    repo = relationship("Repo")

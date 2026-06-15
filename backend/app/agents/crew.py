@@ -1,6 +1,14 @@
 from __future__ import annotations
 
+import os
+import re
+import asyncio
+import time
+
 from app.core.config import settings
+
+os.environ.setdefault("OPENAI_API_KEY", settings.llm_api_key)
+os.environ.setdefault("OPENAI_BASE_URL", settings.llm_base_url_normalized)
 
 try:
     from crewai import Agent, Task, Crew, Process
@@ -8,111 +16,358 @@ try:
 except ImportError:
     _crewai_available = False
 
+llm = f"openai/{settings.llm_model}"
 
-if _crewai_available:
-    researcher = Agent(
-        role="Technical Researcher",
-        goal="Deeply analyze GitHub repositories and extract key technical insights, "
-             "architecture patterns, and implementation details.",
-        backstory="You are a seasoned software engineer who excels at reading and "
-                  "understanding complex codebases. You can quickly identify the core "
-                  "architecture, design patterns, and interesting implementation details "
-                  "in any GitHub repository.",
-        verbose=True,
-        allow_delegation=False,
-        llm=f"openai/{settings.crewai_model}",
-    )
+_llm_lock = asyncio.Lock()
+_llm_last_request: float = 0
+_chapter_sem: asyncio.Semaphore | None = None
 
-    writer = Agent(
-        role="Technical Writer",
-        goal="Transform raw technical analysis into engaging, well-structured book chapters "
-             "that are accessible to intermediate developers.",
-        backstory="You are a technical book author who specializes in making complex "
-                  "software concepts approachable. You know how to structure content, "
-                  "add practical examples, and maintain a consistent narrative voice.",
-        verbose=True,
-        allow_delegation=False,
-        llm=f"openai/{settings.crewai_model}",
-    )
-
-    reviewer = Agent(
-        role="Technical Reviewer",
-        goal="Review and improve book chapters for technical accuracy, clarity, and "
-             "educational value.",
-        backstory="You are a senior engineer and editor who ensures all technical content "
-                  "is correct, well-explained, and valuable for the target audience. "
-                  "You catch errors, suggest improvements, and maintain quality standards.",
-        verbose=True,
-        allow_delegation=False,
-        llm=f"openai/{settings.crewai_model}",
-    )
+_RATE_LIMIT_CODES = {429}
+_RATE_LIMIT_KEYWORDS = ("rate_limit", "rate limit", "too many requests", "quota exceeded")
 
 
-def _build_crew(repo_name: str, repo_description: str, readme_content: str) -> Crew:
+def _get_chapter_sem() -> asyncio.Semaphore:
+    global _chapter_sem
+    if _chapter_sem is None:
+        _chapter_sem = asyncio.Semaphore(settings.llm_max_parallel_chapters)
+    return _chapter_sem
+
+
+async def _acquire_request_slot():
+    global _llm_last_request
+    async with _llm_lock:
+        now = time.monotonic()
+        elapsed = now - _llm_last_request
+        if elapsed < settings.llm_request_delay_seconds:
+            await asyncio.sleep(settings.llm_request_delay_seconds - elapsed)
+        _llm_last_request = time.monotonic()
+
+
+def _is_rate_limit_error(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    if any(kw in msg for kw in _RATE_LIMIT_KEYWORDS):
+        return True
+    code = getattr(exc, "status_code", None) or getattr(exc, "code", None)
+    return code in _RATE_LIMIT_CODES
+
+
+async def _kickoff_with_retry(crew: Crew) -> str:
+    last_err = None
+    for attempt in range(settings.llm_max_retries):
+        try:
+            await _acquire_request_slot()
+            return str(await crew.kickoff_async())
+        except Exception as e:
+            last_err = e
+            if _is_rate_limit_error(e):
+                if attempt == 0:
+                    await asyncio.sleep(settings.llm_rate_limit_wait_seconds)
+                    continue
+                raise
+            if attempt < settings.llm_max_retries - 1:
+                delay = 2 ** attempt
+                await asyncio.sleep(delay)
+    raise last_err
+
+
+def _ensure_crewai():
     if not _crewai_available:
         raise RuntimeError("crewai not installed")
 
-    analysis_task = Task(
+
+def _make_agent(role: str, goal: str, backstory: str) -> Agent:
+    _ensure_crewai()
+    return Agent(
+        role=role, goal=goal, backstory=backstory,
+        verbose=True, allow_delegation=False, llm=llm,
+    )
+
+
+def _count_words(text: str) -> int:
+    return len(re.findall(r"\w+", text))
+
+
+def _determine_chapter_count(repo_info: dict, files: dict[str, str]) -> int:
+    file_count = len(files)
+    if file_count < 30: return 4
+    elif file_count < 80: return 8
+    elif file_count < 200: return 12
+    return min(settings.book_max_chapters, 16)
+
+
+def _build_textual_snapshot(readme, files, issues) -> str:
+    parts = []
+    if readme:
+        parts.append(f"## README\n\n{readme[:6000]}")
+    parts.append("\n## Repository Files\n")
+    for path, content in sorted(files.items())[:60]:
+        parts.append(f"### {path}\n```\n{content[:3000]}\n```\n")
+    if issues:
+        parts.append("\n## Top Issues\n")
+        for i in issues[:5]:
+            parts.append(f"### {i['title']} ({i['state']})\n{i['body']}\n")
+    return "\n".join(parts)
+
+
+async def _run_planning_crew(repo_name, repo_description, chapter_count, snapshot) -> list[dict]:
+    _ensure_crewai()
+    planner = _make_agent(
+        role="Book Planner",
+        goal=f"Create a detailed outline for a {chapter_count}-chapter technical book about '{repo_name}'.",
+        backstory="You are an experienced technical book editor who excels at structuring "
+                  "complex software topics into logical, progressive chapters.",
+    )
+    task = Task(
         description=(
-            f"Analyze the GitHub repository '{repo_name}'.\n\n"
-            f"Description: {repo_description}\n\n"
-            f"README content (first 4000 chars):\n{readme_content[:4000]}\n\n"
-            "Provide a structured analysis covering:\n"
-            "1. Core purpose and problem solved\n"
-            "2. Architecture and design patterns used\n"
-            "3. Key technical concepts demonstrated\n"
-            "4. Notable implementation details\n"
-            "5. What makes this project interesting or educational"
+            f"Repository: {repo_name}\nDescription: {repo_description}\n"
+            f"Target: {chapter_count} chapters, {settings.book_chapter_min_words}-"
+            f"{settings.book_chapter_max_words} words each.\n\n"
+            f"Repository content:\n{snapshot[:15000]}\n\n"
+            "Create a book outline. Return ONLY a JSON array of chapter objects. "
+            "Each object: number (int), title (str), focus (str), files_to_analyze (str[]). "
+            "Return ONLY the JSON array, no other text."
         ),
-        expected_output="A structured technical analysis with clear sections and concrete examples.",
+        expected_output=f"A JSON array of {chapter_count} chapter objects.",
+        agent=planner,
+    )
+    crew = Crew(agents=[planner], tasks=[task], process=Process.sequential, verbose=True)
+    result = await _kickoff_with_retry(crew)
+    try:
+        json_match = re.search(r"\[.*\]", result, re.DOTALL)
+        if json_match:
+            import json
+            return json.loads(json_match.group())
+        return _fallback_outline(chapter_count, repo_name)
+    except Exception:
+        return _fallback_outline(chapter_count, repo_name)
+
+
+def _fallback_outline(chapter_count, repo_name) -> list[dict]:
+    sections = [
+        "Project Overview and Architecture", "Core Concepts and Design Philosophy",
+        "Codebase Tour: Key Modules", "Data Models and State Management",
+        "API Design and Communication", "Testing and Quality Assurance",
+        "Build System and DevOps", "Performance and Optimization",
+        "Security Considerations", "Error Handling and Resilience",
+        "Configuration and Extensibility", "Community and Contribution Guide",
+        "Advanced Patterns and Internals", "Real-World Use Cases",
+        "Lessons Learned and Best Practices", "Future Roadmap and Evolution",
+    ]
+    return [{"number": i, "title": f"Chapter {i}: {sections[(i-1)%16]}",
+             "focus": sections[(i-1)%16].lower(), "files_to_analyze": []}
+            for i in range(1, chapter_count + 1)]
+
+
+async def _run_chapter_research_writer(repo_name, chapter, snapshot) -> dict:
+    _ensure_crewai()
+    researcher = _make_agent(
+        role="Chapter Researcher",
+        goal=f"Research Chapter {chapter['number']}: '{chapter['title']}' of the {repo_name} book.",
+        backstory="Meticulous technical researcher who extracts the most valuable insights "
+                  "from source code and documentation.",
+    )
+    writer = _make_agent(
+        role="Chapter Writer",
+        goal=f"Write Chapter {chapter['number']}: '{chapter['title']}' as a polished "
+             f"educational chapter ({settings.book_chapter_min_words}-"
+             f"{settings.book_chapter_max_words} words) in Markdown.",
+        backstory="Skilled technical book author who transforms raw research into "
+                  "compelling, educational prose for intermediate developers.",
+    )
+    research_task = Task(
+        description=(
+            f"Chapter {chapter['number']}: {chapter['title']}\nFocus: {chapter['focus']}\n"
+            f"Key files: {chapter.get('files_to_analyze', [])}\n\n"
+            f"Repository content:\n{snapshot[:12000]}\n\n"
+            "Provide structured research notes: key concepts, architecture decisions, "
+            "code patterns with references, edge cases, educational value."
+        ),
+        expected_output="Structured research notes with code references.",
         agent=researcher,
     )
-
     writing_task = Task(
         description=(
-            "Based on the technical analysis provided by the researcher, write a "
-            "well-structured book chapter about this repository.\n\n"
-            "The chapter should:\n"
-            "- Have a compelling title and introduction\n"
-            "- Explain the problem the project solves\n"
-            "- Walk through the architecture with clear explanations\n"
-            "- Include code snippets or patterns worth learning\n"
-            "- End with key takeaways and further reading suggestions\n"
-            "- Be written in a clear, engaging style for intermediate developers"
+            f"Write Chapter {chapter['number']}: '{chapter['title']}' "
+            f"({settings.book_chapter_min_words}-{settings.book_chapter_max_words} words). "
+            "Use clear section headers (##), include code snippets, explain WHY not just WHAT, "
+            "add practical examples, end with summary and further reading."
         ),
-        expected_output="A complete book chapter in markdown format, 1500-3000 words.",
+        expected_output="A complete book chapter in Markdown.",
         agent=writer,
     )
+    crew = Crew(agents=[researcher, writer], tasks=[research_task, writing_task],
+                process=Process.sequential, verbose=True)
+    result = await _kickoff_with_retry(crew)
+    return {"number": chapter["number"], "title": chapter["title"],
+            "content": result, "word_count": _count_words(result)}
 
-    review_task = Task(
+
+async def _run_chapters_parallel(repo_name, outline, snapshot) -> list[dict]:
+    sem = _get_chapter_sem()
+
+    async def _chapter_with_limit(ch):
+        async with sem:
+            return await _run_chapter_research_writer(repo_name, ch, snapshot)
+
+    tasks = [_chapter_with_limit(ch) for ch in outline]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    chapters = []
+    for i, result in enumerate(results):
+        if isinstance(result, Exception):
+            chapters.append({"number": outline[i]["number"], "title": outline[i]["title"],
+                            "content": f"Chapter generation failed: {result}", "word_count": 0})
+        else:
+            chapters.append(result)
+    chapters.sort(key=lambda c: c["number"])
+    return chapters
+
+
+async def _run_review_crew(chapters, repo_name) -> list[dict]:
+    _ensure_crewai()
+    reviewer = _make_agent(
+        role="Technical Reviewer",
+        goal="Review all book chapters for technical accuracy, clarity, completeness, and consistency.",
+        backstory="Senior engineer and editor who ensures technical books are accurate, "
+                  "well-structured, and valuable.",
+    )
+    chapters_text = "\n\n".join(
+        f"### Chapter {ch['number']}: {ch['title']}\n\n{ch['content'][:3000]}"
+        for ch in chapters
+    )
+    task = Task(
         description=(
-            "Review the written chapter for:\n"
-            "1. Technical accuracy — are any claims or explanations wrong?\n"
-            "2. Clarity — would an intermediate developer understand this?\n"
-            "3. Completeness — are there important aspects missing?\n"
-            "4. Quality — is the writing engaging and well-structured?\n\n"
-            "Provide specific, actionable feedback. If the chapter needs revision, "
-            "note exactly what should change."
+            f"Review the following chapters for '{repo_name}'.\n\n{chapters_text[:20000]}\n\n"
+            "For each chapter: PASS or NEEDS_FIX, list issues, list suggestions."
         ),
-        expected_output="A review summary with specific praise, issues found, and revision suggestions.",
+        expected_output="Per-chapter review with PASS/NEEDS_FIX verdicts.",
         agent=reviewer,
     )
+    crew = Crew(agents=[reviewer], tasks=[task], process=Process.sequential, verbose=True)
+    await _kickoff_with_retry(crew)
+    return chapters
 
-    return Crew(
-        agents=[researcher, writer, reviewer],
-        tasks=[analysis_task, writing_task, review_task],
-        process=Process.sequential,
-        verbose=True,
+
+async def _run_editor_crew(chapters, repo_name) -> str:
+    _ensure_crewai()
+    editor = _make_agent(
+        role="Book Editor",
+        goal=f"Merge all chapters into a polished, publication-ready HTML book for '{repo_name}'.",
+        backstory="Professional book editor who takes raw chapters and turns them "
+                  "into a cohesive, beautifully formatted book.",
     )
+    chapters_text = "\n\n".join(
+        f"CHAPTER_{ch['number']}_MARKER\n# Chapter {ch['number']}: {ch['title']}\n\n{ch['content']}"
+        for ch in chapters
+    )
+    task = Task(
+        description=(
+            f"Convert the following chapters into a complete HTML book for '{repo_name}'.\n\n"
+            f"{chapters_text[:30000]}\n\n"
+            "Produce a single HTML document with: title, table of contents, "
+            "each chapter as <section>, code in <pre><code>, footer with date. "
+            "Use this CSS: body{background:#f5f0e8;color:#2c1a0e;"
+            "font-family:'Source Serif 4',Georgia,serif;max-width:800px;margin:0 auto;"
+            "padding:2rem;line-height:1.8}h1,h2{font-family:'Playfair Display',serif;"
+            "color:#5c3d1e}pre{background:#ede5d4;padding:1rem;border-radius:8px}"
+            "code{font-family:monospace} a{color:#c17f3a}.toc{background:#fffdf7;"
+            "padding:1.5rem;border-radius:12px;margin:2rem 0}.toc a{display:block;"
+            "padding:.25rem 0;text-decoration:none}.footer{text-align:center;"
+            "color:#7a6248;margin-top:3rem;font-size:.85em}\n"
+            "Return ONLY the complete HTML document."
+        ),
+        expected_output="A complete, self-contained HTML book document.",
+        agent=editor,
+    )
+    crew = Crew(agents=[editor], tasks=[task], process=Process.sequential, verbose=True)
+    result = await _kickoff_with_retry(crew)
+    html_match = re.search(r"<!DOCTYPE html>.*?</html>", result, re.DOTALL | re.IGNORECASE)
+    if html_match: return html_match.group()
+    html_match = re.search(r"<html.*?</html>", result, re.DOTALL | re.IGNORECASE)
+    if html_match: return "<!DOCTYPE html>\n" + html_match.group()
+    return result
 
 
-async def generate_book_chapter(repo_name: str, repo_description: str, readme_content: str) -> dict:
-    if not _crewai_available:
-        return {"repo_name": repo_name, "output": "CrewAI not installed."}
+async def _run_cover_crew(repo_name: str, repo_description: str, outline: list[dict]) -> str:
+    _ensure_crewai()
+    designer = _make_agent(
+        role="Book Cover Designer",
+        goal=f"Design a beautiful, professional book cover for '{repo_name}' that "
+             "captures the essence of the project and entices readers.",
+        backstory="You are an award-winning book cover designer specializing in technical "
+                  "books. Your covers combine elegant typography, harmonious color palettes, "
+                  "and subtle visual elements that hint at the book's content.",
+    )
+    chapters_list = "\n".join(
+        f"Chapter {ch['number']}: {ch['title']}" for ch in outline[:6]
+    )
+    task = Task(
+        description=(
+            f"Design a cover page for the book '{repo_name}'.\n\n"
+            f"Description: {repo_description}\n\n"
+            f"Chapters:\n{chapters_list}\n\n"
+            "Create an HTML cover page that looks like a real book cover. Requirements:\n"
+            "- Full viewport height, centered content\n"
+            "- Elegant typography using 'Playfair Display' for title, 'Source Serif 4' for subtitle\n"
+            "- Title prominently displayed\n"
+            "- A tagline derived from the project description\n"
+            "- Author attribution (the repo owner)\n"
+            "- Subtle decorative elements (lines, geometric shapes, or dots)\n"
+            "- Use this color palette: background #f5f0e8, text #2c1a0e, accent #c17f3a, dark #5c3d1e\n"
+            "- The cover should feel like a premium technical book\n"
+            "- Add a subtle background pattern or texture effect\n\n"
+            "Return ONLY the HTML for the cover page (a complete <div> element), no other text."
+        ),
+        expected_output="A beautiful HTML cover page for the book.",
+        agent=designer,
+    )
+    crew = Crew(agents=[designer], tasks=[task], process=Process.sequential, verbose=True)
+    result = await _kickoff_with_retry(crew)
+    div_match = re.search(r"<div[^>]*>.*?</div>", result, re.DOTALL | re.IGNORECASE)
+    if div_match:
+        return div_match.group()
+    return result
 
-    crew = _build_crew(repo_name, repo_description, readme_content)
-    result = crew.kickoff()
-    return {
-        "repo_name": repo_name,
-        "output": str(result),
-    }
+
+def _prepend_cover(html: str, cover: str) -> str:
+    body_match = re.search(r"<body[^>]*>", html, re.IGNORECASE)
+    if body_match:
+        insertion_point = body_match.end()
+        return html[:insertion_point] + "\n" + cover + "\n" + html[insertion_point:]
+    return cover + html
+
+
+async def generate_book_cover(repo_id, repo_name, repo_description, readme_content, status_updater) -> dict:
+    _ensure_crewai()
+
+    await status_updater("fetching")
+    from app.services.github import fetch_key_files, fetch_top_issues
+    files = await fetch_key_files(repo_name)
+    issues = await fetch_top_issues(repo_name)
+    repo_info = {"repo_name": repo_name, "file_count": len(files)}
+    chapter_count = _determine_chapter_count(repo_info, files)
+    snapshot = _build_textual_snapshot(readme_content, files, issues)
+
+    await status_updater("planning", total_chapters=chapter_count, phase="planning")
+    outline = await _run_planning_crew(repo_name, repo_description, chapter_count, snapshot)
+
+    await status_updater("cover", phase="cover")
+    cover_html = await _run_cover_crew(repo_name, repo_description, outline)
+
+    return {"outline": outline, "cover_html": cover_html, "snapshot": snapshot,
+            "chapter_count": chapter_count, "repo_name": repo_name}
+
+
+async def generate_book_content(repo_name: str, outline: list[dict], snapshot: str,
+                                 status_updater) -> dict:
+    _ensure_crewai()
+
+    await status_updater("writing", outline=outline, phase="writing")
+    chapters = await _run_chapters_parallel(repo_name, outline, snapshot)
+
+    await status_updater("reviewing", completed_chapters=len(chapters), phase="reviewing")
+    chapters = await _run_review_crew(chapters, repo_name)
+
+    await status_updater("publishing", phase="publishing")
+    html = await _run_editor_crew(chapters, repo_name)
+
+    return {"chapters": chapters, "html": html}

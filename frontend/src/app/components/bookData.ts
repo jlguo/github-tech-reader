@@ -1,5 +1,5 @@
 export type BookType = "epub" | "pdf" | "word" | "txt" | "ppt" | "excel" | "html";
-export type BookCategory = "all" | "fiction" | "nonfiction" | "academic" | "documents" | "manga";
+export type BookCategory = "all" | "fiction" | "nonfiction" | "academic" | "documents" | "manga" | "generated";
 
 export interface Book {
   id: string;
@@ -18,6 +18,7 @@ export interface Book {
   description: string;
   tags: string[];
   isFavorite: boolean;
+  genStatus?: "writing" | "done" | "failed";
 }
 
 export const books: Book[] = [
@@ -262,6 +263,7 @@ export const categories = [
   { id: "academic", label: "学术专业", icon: "GraduationCap", count: books.filter(b => b.category === "academic").length },
   { id: "documents", label: "文档资料", icon: "FileText", count: books.filter(b => b.category === "documents").length },
   { id: "manga", label: "漫画", icon: "Smile", count: books.filter(b => b.category === "manga").length },
+  { id: "generated", label: "AI 生成", icon: "BookOpen", count: books.filter(b => b.category === "generated").length },
 ];
 
 export const typeConfig: Record<BookType, { label: string; color: string; bg: string }> = {

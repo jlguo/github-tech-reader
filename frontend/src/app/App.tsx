@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Search, LayoutGrid, List, SlidersHorizontal, X, Clock, TrendingUp, BookOpen } from "lucide-react";
 import { books as initialBooks, categories, Book, BookCategory, typeConfig, BookType } from "./components/bookData";
 
@@ -9,6 +9,7 @@ import { Sidebar } from "./components/Sidebar";
 import { MobileNav } from "./components/MobileNav";
 import { BookDetailModal } from "./components/BookDetailModal";
 import { ReaderModal } from "./components/readers/ReaderModal";
+import { ImportDialog } from "./components/ImportDialog";
 
 export default function App() {
   const [bookList, setBookList] = useState(initialBooks);
@@ -20,6 +21,85 @@ export default function App() {
   const [readingBook, setReadingBook] = useState<Book | null>(null);
   const [sortBy, setSortBy] = useState<"recent" | "title" | "progress">("recent");
   const [showSortMenu, setShowSortMenu] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
+
+  const toColor = (s: string) => {
+    let hash = 0;
+    for (let i = 0; i < s.length; i++) hash = s.charCodeAt(i) + ((hash << 5) - hash);
+    return `hsl(${hash % 360}, 40%, ${30 + (hash % 20)}%)`;
+  };
+
+  useEffect(() => {
+    const API = "http://localhost:8000/api";
+
+    const syncBooks = () => {
+      fetch(`${API}/books`)
+        .then(r => r.json())
+        .then((books: Array<{
+          repo_id: string; title: string; author: string;
+          description: string | null; language: string | null;
+          html_url: string; status: string; chapter_count: number;
+        }>) => {
+          const generated: Book[] = books.map(b => ({
+            id: b.repo_id,
+            title: b.title,
+            author: b.author,
+            cover: `https://opengraph.githubassets.com/1/${b.author}/${b.title}`,
+            coverColor: toColor(b.title),
+            type: "html" as BookType,
+            category: "generated" as BookCategory,
+            progress: b.status === "done" ? 100 : 0,
+            totalPages: b.chapter_count,
+            currentPage: 0,
+            addedDate: new Date().toISOString().split("T")[0],
+            size: b.status === "done" ? `${b.chapter_count} 章` : "创作中...",
+            description: b.description || "",
+            tags: b.language ? [b.language] : [],
+            isFavorite: false,
+            genStatus: b.status as "writing" | "done" | "failed" | undefined,
+          }));
+          setBookList(prev => {
+            const existing = new Set(prev.map(b => b.id));
+            const newBooks = generated.filter(b => !existing.has(b.id));
+            const updated = prev.map(pb => {
+              const gen = generated.find(g => g.id === pb.id);
+              return gen ? { ...pb, ...gen } : pb;
+            });
+            return [...newBooks, ...updated];
+          });
+        })
+        .catch(() => {});
+    };
+
+    syncBooks();
+    const interval = setInterval(syncBooks, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleBookImported = (info: { id: string; title: string; author: string }) => {
+    const newBook: Book = {
+      id: info.id,
+      title: info.title,
+      author: info.author,
+      cover: `https://opengraph.githubassets.com/1/${info.author}/${info.title}`,
+      coverColor: toColor(info.title),
+      type: "html" as BookType,
+      category: "generated" as BookCategory,
+      progress: 0,
+      totalPages: 0,
+      currentPage: 0,
+      addedDate: new Date().toISOString().split("T")[0],
+      size: "0 章",
+      description: "",
+      tags: [],
+      isFavorite: false,
+    };
+    setBookList(prev => {
+      if (prev.find(b => b.id === info.id)) return prev;
+      return [newBook, ...prev];
+    });
+    setActiveCategory("generated");
+  };
 
   const toggleFavorite = (id: string) => {
     setBookList(prev => prev.map(b => b.id === id ? { ...b, isFavorite: !b.isFavorite } : b));
@@ -64,6 +144,7 @@ export default function App() {
           onCategoryChange={setActiveCategory}
           activeSection={activeSection}
           onSectionChange={setActiveSection}
+          onImport={() => setShowImportDialog(true)}
         />
       </div>
 
@@ -306,6 +387,13 @@ export default function App() {
           onClose={() => setReadingBook(null)}
         />
       )}
+
+      {/* Import dialog */}
+      <ImportDialog
+        open={showImportDialog}
+        onClose={() => setShowImportDialog(false)}
+        onImported={handleBookImported}
+      />
     </div>
   );
 }
