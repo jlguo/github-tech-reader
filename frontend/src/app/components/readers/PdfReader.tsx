@@ -17,11 +17,12 @@ export function PdfReader({ book }: PdfReaderProps) {
   return (
     <div className="flex flex-col h-full" style={{ background: "#4a4a4a" }}>
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-4 py-2.5 flex-shrink-0" style={{ background: "#2d2d2d" }}>
+      <div className="flex items-center justify-between px-4 py-2.5 flex-shrink-0" data-testid="pdf-reader-toolbar" style={{ background: "#2d2d2d" }}>
         <div className="flex items-center gap-1">
           <button
             onClick={() => setPageIndex(v => Math.max(0, v - 1))}
             disabled={pageIndex === 0}
+            data-testid="pdf-reader-prev"
             className="p-1.5 rounded transition-colors hover:bg-white/10 disabled:opacity-30"
             style={{ color: "#d0d0d0" }}
           >
@@ -30,6 +31,7 @@ export function PdfReader({ book }: PdfReaderProps) {
           <div className="flex items-center gap-1">
             <input
               className="w-10 text-center text-xs py-0.5 rounded outline-none"
+              data-testid="pdf-reader-page-input"
               style={{ background: "#1a1a1a", color: "#d0d0d0", border: "1px solid rgba(255,255,255,0.15)", fontFamily: "Inter, sans-serif" }}
               value={pageIndex + 1}
               readOnly
@@ -39,6 +41,7 @@ export function PdfReader({ book }: PdfReaderProps) {
           <button
             onClick={() => setPageIndex(v => Math.min(pdfPages.length - 1, v + 1))}
             disabled={pageIndex === pdfPages.length - 1}
+            data-testid="pdf-reader-next"
             className="p-1.5 rounded transition-colors hover:bg-white/10 disabled:opacity-30"
             style={{ color: "#d0d0d0" }}
           >
@@ -51,19 +54,20 @@ export function PdfReader({ book }: PdfReaderProps) {
         </p>
 
         <div className="flex items-center gap-1">
-          <button onClick={() => setZoom(v => Math.max(50, v - 10))} className="p-1.5 rounded hover:bg-white/10 transition-colors" style={{ color: "#d0d0d0" }}>
+          <button onClick={() => setZoom(v => Math.max(50, v - 10))} data-testid="pdf-reader-zoom-out" className="p-1.5 rounded hover:bg-white/10 transition-colors" style={{ color: "#d0d0d0" }}>
             <ZoomOut size={15} />
           </button>
-          <span className="text-xs w-12 text-center" style={{ color: "#aaa", fontFamily: "Inter, sans-serif" }}>{zoom}%</span>
-          <button onClick={() => setZoom(v => Math.min(200, v + 10))} className="p-1.5 rounded hover:bg-white/10 transition-colors" style={{ color: "#d0d0d0" }}>
+          <span className="text-xs w-12 text-center" data-testid="pdf-reader-zoom-value" style={{ color: "#aaa", fontFamily: "Inter, sans-serif" }}>{zoom}%</span>
+          <button onClick={() => setZoom(v => Math.min(200, v + 10))} data-testid="pdf-reader-zoom-in" className="p-1.5 rounded hover:bg-white/10 transition-colors" style={{ color: "#d0d0d0" }}>
             <ZoomIn size={15} />
           </button>
           <div className="w-px h-4 mx-1" style={{ background: "rgba(255,255,255,0.15)" }} />
-          <button onClick={() => setZoom(100)} className="p-1.5 rounded hover:bg-white/10 transition-colors" style={{ color: "#d0d0d0" }}>
+          <button onClick={() => setZoom(100)} data-testid="pdf-reader-reset" className="p-1.5 rounded hover:bg-white/10 transition-colors" style={{ color: "#d0d0d0" }}>
             <RotateCcw size={14} />
           </button>
           <button
             onClick={() => setBookmarked(v => !v)}
+            data-testid="pdf-reader-bookmark"
             className="p-1.5 rounded hover:bg-white/10 transition-colors"
             style={{ color: bookmarked ? "#c17f3a" : "#d0d0d0" }}
           >
@@ -73,7 +77,7 @@ export function PdfReader({ book }: PdfReaderProps) {
       </div>
 
       {/* PDF page */}
-      <div className="flex-1 overflow-auto flex items-start justify-center py-6 px-4">
+      <div className="flex-1 overflow-auto flex items-start justify-center py-6 px-4" data-testid="pdf-reader-page">
         <div
           className="shadow-2xl"
           style={{

@@ -1,36 +1,60 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
+from datetime import datetime
 
 from app.core.database import get_db
 from app.models.repo import Repo, BookGeneration, ContentSection
-from app.api.schemas import BookListItem, BookContentResponse, SectionResponse
+from app.api.schemas import BookListItem, BookContentResponse, SectionResponse, BookUpdateRequest
 
 router = APIRouter()
 
 
 @router.get("/books", response_model=list[BookListItem])
-async def list_books(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(BookGeneration, Repo)
-        .join(Repo, BookGeneration.repo_id == Repo.id)
-        .where(BookGeneration.status.in_(["writing", "done"]))
-        .order_by(BookGeneration.updated_at.desc())
+async def list_books(
+    status: str | None = Query(default=None, description="Filter by status (comma-separated, e.g. 'writing,done')"),
+    search: str | None = Query(default=None, description="Search in title, author, description"),
+    db: AsyncSession = Depends(get_db),
+):
+    statuses = (
+        [s.strip() for s in status.split(",") if s.strip()]
+        if status
+        else ["pending", "fetching", "planning", "cover", "writing", "reviewing", "publishing", "done"]
     )
+
+    query = (
+        select(Repo, BookGeneration)
+        .outerjoin(BookGeneration, BookGeneration.repo_id == Repo.id)
+    )
+
+    if search:
+        like = f"%{search}%"
+        query = query.where(
+            (Repo.name.ilike(like)) | (Repo.owner.ilike(like)) | (Repo.description.ilike(like))
+        )
+
+    query = query.order_by(Repo.added_at.desc())
+
+    result = await db.execute(query)
     rows = result.all()
     books = []
-    for gen, repo in rows:
+    for repo, gen in rows:
+        is_book = gen is not None and gen.status in statuses
         books.append(BookListItem(
             repo_id=repo.id,
-            book_id=gen.id,
+            book_id=gen.id if gen else "",
             title=repo.name,
             author=repo.owner,
             description=repo.description,
             language=repo.language,
             html_url=repo.html_url,
-            status=gen.status,
-            chapter_count=gen.total_chapters,
+            status=gen.status if is_book else "no_book",
+            chapter_count=gen.total_chapters if gen else 0,
+            completed_chapters=gen.completed_chapters if gen else 0,
+            current_phase=gen.current_phase if gen else None,
+            created_at=gen.created_at if gen else repo.added_at,
+            updated_at=gen.updated_at if gen else repo.added_at,
         ))
     return books
 
@@ -116,3 +140,92 @@ async def get_book_by_repo(repo_id: str, db: AsyncSession = Depends(get_db)):
             for c in chapters
         ],
     )
+
+
+@router.patch("/books/{repo_id}")
+async def update_book(
+    repo_id: str,
+    body: BookUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    # Frontend sends repo_id — look up BookGeneration by repo_id
+    result = await db.execute(
+        select(BookGeneration)
+        .options(selectinload(BookGeneration.repo))
+        .where(BookGeneration.repo_id == repo_id)
+    )
+    gen = result.scalar()
+
+    if gen:
+        if body.status is not None:
+            if body.status == "pending":
+                raise HTTPException(status_code=400, detail="Cannot set status to 'pending'")
+            gen.status = body.status
+            gen.updated_at = datetime.utcnow()
+
+        if gen.repo:
+            if body.description is not None:
+                gen.repo.description = body.description
+            if body.category is not None:
+                gen.repo.category = body.category
+            if body.tags is not None:
+                gen.repo.tags = body.tags
+            if body.is_favorite is not None:
+                gen.repo.is_favorite = body.is_favorite
+
+        await db.commit()
+        return {
+            "ok": True,
+            "book_id": gen.id,
+            "status": gen.status,
+            "description": gen.repo.description if gen.repo else None,
+        }
+
+    # No BookGeneration — update Repo directly
+    repo_result = await db.execute(select(Repo).where(Repo.id == repo_id))
+    repo = repo_result.scalar()
+    if not repo:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    if body.description is not None:
+        repo.description = body.description
+    if body.category is not None:
+        repo.category = body.category
+    if body.tags is not None:
+        repo.tags = body.tags
+    if body.is_favorite is not None:
+        repo.is_favorite = body.is_favorite
+
+    await db.commit()
+    return {
+        "ok": True,
+        "book_id": repo_id,
+        "status": "no_book",
+        "description": repo.description,
+    }
+
+
+@router.delete("/books/{repo_id}")
+async def delete_book(repo_id: str, db: AsyncSession = Depends(get_db)):
+    # Frontend sends repo_id — look up BookGeneration by repo_id
+    gen_result = await db.execute(
+        select(BookGeneration).where(BookGeneration.repo_id == repo_id)
+    )
+    gen = gen_result.scalar()
+
+    if gen:
+        await db.execute(
+            delete(ContentSection).where(ContentSection.repo_id == repo_id)
+        )
+        await db.delete(gen)
+
+    # Also delete the Repo itself
+    repo_result = await db.execute(select(Repo).where(Repo.id == repo_id))
+    repo = repo_result.scalar()
+    if not repo:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    repo_name = repo.full_name
+    await db.delete(repo)
+    await db.commit()
+    return {"ok": True, "deleted": repo_id, "repo": repo_name}

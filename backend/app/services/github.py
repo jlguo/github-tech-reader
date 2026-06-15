@@ -15,9 +15,12 @@ async def fetch_repo_info(full_name: str) -> dict | None:
     url = f"{settings.github_api_base}/repos/{full_name}"
     async with httpx.AsyncClient() as client:
         resp = await client.get(url, headers=_github_headers())
-        if resp.status_code != 200:
+        if resp.status_code == 404:
             return None
-
+        if resp.status_code == 403:
+            raise Exception("GitHub API rate limit exceeded. Set GITHUB_TOKEN in backend/.env to increase the limit (60 → 5000 req/hr).")
+        if resp.status_code != 200:
+            raise Exception(f"GitHub API error: {resp.status_code} — {resp.text[:200]}")
         data = resp.json()
         return {
             "github_id": data["id"],

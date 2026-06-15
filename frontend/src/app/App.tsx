@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { Search, LayoutGrid, List, SlidersHorizontal, X, Clock, TrendingUp, BookOpen } from "lucide-react";
 import { books as initialBooks, categories, Book, BookCategory, typeConfig, BookType } from "./components/bookData";
+import { API_BASE_URL, POLL_INTERVAL_MS } from "../config/api";
 
 const getTypeInfo = (type: BookType) => typeConfig[type] ?? { label: "FILE", color: "#5a5a5a", bg: "#f0f0f0" };
 import { BookCard } from "./components/BookCard";
@@ -30,10 +31,8 @@ export default function App() {
   };
 
   useEffect(() => {
-    const API = "http://localhost:8000/api";
-
     const syncBooks = () => {
-      fetch(`${API}/books`)
+      fetch(`${API_BASE_URL}/books`)
         .then(r => r.json())
         .then((books: Array<{
           repo_id: string; title: string; author: string;
@@ -52,11 +51,11 @@ export default function App() {
             totalPages: b.chapter_count,
             currentPage: 0,
             addedDate: new Date().toISOString().split("T")[0],
-            size: b.status === "done" ? `${b.chapter_count} 章` : "创作中...",
+            size: b.status === "done" ? `${b.chapter_count} 章` : b.status === "no_book" ? "未生成" : "创作中...",
             description: b.description || "",
             tags: b.language ? [b.language] : [],
             isFavorite: false,
-            genStatus: b.status as "writing" | "done" | "failed" | undefined,
+            genStatus: b.status as "writing" | "done" | "failed" | "no_book" | undefined,
           }));
           setBookList(prev => {
             const existing = new Set(prev.map(b => b.id));
@@ -72,7 +71,7 @@ export default function App() {
     };
 
     syncBooks();
-    const interval = setInterval(syncBooks, 30000);
+    const interval = setInterval(syncBooks, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
   }, []);
 
@@ -105,6 +104,34 @@ export default function App() {
     setBookList(prev => prev.map(b => b.id === id ? { ...b, isFavorite: !b.isFavorite } : b));
   };
 
+  const handleDeleteBook = async (bookId: string) => {
+    try {
+      await fetch(`${API_BASE_URL}/books/${bookId}`, { method: "DELETE" });
+    } catch {}
+    setBookList(prev => prev.filter(b => b.id !== bookId));
+    setSelectedBook(null);
+  };
+
+  const handleUpdateBook = async (bookId: string, data: Record<string, any>) => {
+    try {
+      await fetch(`${API_BASE_URL}/books/${bookId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+    } catch {}
+  };
+
+  const handleGenerateBook = async (bookId: string) => {
+    setBookList(prev => prev.map(b => b.id === bookId ? { ...b, genStatus: "writing", size: "创作中...", progress: 0 } : b));
+
+    try {
+      await fetch(`${API_BASE_URL}/repos/${bookId}/fetch-readme`, { method: "POST" });
+    } catch {}
+
+    fetch(`${API_BASE_URL}/agents/generate-book/${bookId}`, { method: "POST" }).catch(() => {});
+  };
+
   const filteredBooks = useMemo(() => {
     let result = bookList;
 
@@ -133,27 +160,41 @@ export default function App() {
     reading: bookList.filter(b => b.progress > 0 && b.progress < 100).length,
   }), [bookList]);
 
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const cat of categories) {
+      if (cat.id === "all") {
+        counts[cat.id] = bookList.length;
+      } else {
+        counts[cat.id] = bookList.filter(b => b.category === cat.id).length;
+      }
+    }
+    return counts;
+  }, [bookList]);
+
   const sectionTitle = activeSection === "favorites" ? "收藏夹" : activeSection === "recent" ? "最近阅读" : categories.find(c => c.id === activeCategory)?.label || "全部";
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: "var(--background)", fontFamily: "Inter, sans-serif" }}>
       {/* PC Sidebar */}
-      <div className="hidden lg:flex">
+      <div className="hidden lg:flex" data-testid="pc-sidebar">
         <Sidebar
           activeCategory={activeCategory}
           onCategoryChange={setActiveCategory}
           activeSection={activeSection}
           onSectionChange={setActiveSection}
           onImport={() => setShowImportDialog(true)}
+          categoryCounts={categoryCounts}
         />
       </div>
 
       {/* Main content */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden" data-testid="main-content">
         {/* Top bar */}
         <header
           className="flex-shrink-0 px-4 lg:px-8 py-4 flex items-center gap-3 border-b"
           style={{ background: "var(--card)", borderColor: "var(--border)" }}
+          data-testid="header-bar"
         >
           {/* Mobile logo */}
           <div className="flex lg:hidden items-center gap-2 mr-2">
@@ -172,6 +213,7 @@ export default function App() {
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-4 py-2 rounded-lg text-sm outline-none transition-all"
+              data-testid="search-input"
               style={{
                 background: "var(--muted)",
                 color: "var(--foreground)",
@@ -180,7 +222,7 @@ export default function App() {
               }}
             />
             {searchQuery && (
-              <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "var(--muted-foreground)" }}>
+              <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "var(--muted-foreground)" }} data-testid="search-clear">
                 <X size={14} />
               </button>
             )}
@@ -192,6 +234,7 @@ export default function App() {
               onClick={() => setViewMode("grid")}
               className="p-2 rounded-lg transition-colors"
               style={{ background: viewMode === "grid" ? "var(--accent)" : "transparent", color: viewMode === "grid" ? "white" : "var(--muted-foreground)" }}
+              data-testid="view-mode-grid"
             >
               <LayoutGrid size={16} />
             </button>
@@ -199,6 +242,7 @@ export default function App() {
               onClick={() => setViewMode("list")}
               className="p-2 rounded-lg transition-colors"
               style={{ background: viewMode === "list" ? "var(--accent)" : "transparent", color: viewMode === "list" ? "white" : "var(--muted-foreground)" }}
+              data-testid="view-mode-list"
             >
               <List size={16} />
             </button>
@@ -207,6 +251,7 @@ export default function App() {
                 onClick={() => setShowSortMenu(v => !v)}
                 className="p-2 rounded-lg transition-colors"
                 style={{ background: "transparent", color: "var(--muted-foreground)" }}
+                data-testid="sort-toggle"
               >
                 <SlidersHorizontal size={16} />
               </button>
@@ -214,6 +259,7 @@ export default function App() {
                 <div
                   className="absolute right-0 top-10 z-20 rounded-xl overflow-hidden shadow-lg"
                   style={{ background: "var(--card)", border: "1px solid var(--border)", width: "140px" }}
+                  data-testid="sort-menu"
                 >
                   {[{ id: "recent", label: "最近阅读" }, { id: "title", label: "书名排序" }, { id: "progress", label: "阅读进度" }].map(opt => (
                     <button
@@ -225,6 +271,7 @@ export default function App() {
                         color: sortBy === opt.id ? "white" : "var(--foreground)",
                         fontFamily: "Inter, sans-serif",
                       }}
+                      data-testid={`sort-option-${opt.id}`}
                     >
                       {opt.label}
                     </button>
@@ -241,13 +288,13 @@ export default function App() {
 
             {/* Stats bar — PC only, shelf section */}
             {activeSection === "shelf" && (
-              <div className="hidden lg:flex items-center gap-6 mb-6">
+              <div className="hidden lg:flex items-center gap-6 mb-6" data-testid="stats-bar">
                 {[
-                  { icon: BookOpen, label: "全部书籍", value: stats.total, color: "var(--accent)" },
-                  { icon: TrendingUp, label: "阅读中", value: stats.reading, color: "#5a8a6a" },
-                  { icon: Clock, label: "已读完", value: stats.finished, color: "#6a7a8a" },
-                ].map(({ icon: Icon, label, value, color }) => (
-                  <div key={label} className="flex items-center gap-2.5">
+                  { icon: BookOpen, label: "全部书籍", value: stats.total, color: "var(--accent)", testId: "stat-total" },
+                  { icon: TrendingUp, label: "阅读中", value: stats.reading, color: "#5a8a6a", testId: "stat-reading" },
+                  { icon: Clock, label: "已读完", value: stats.finished, color: "#6a7a8a", testId: "stat-finished" },
+                ].map(({ icon: Icon, label, value, color, testId }) => (
+                  <div key={label} className="flex items-center gap-2.5" data-testid={testId}>
                     <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: color + "20" }}>
                       <Icon size={14} style={{ color }} />
                     </div>
@@ -262,7 +309,7 @@ export default function App() {
 
             {/* Recently reading strip — shown when on shelf/all, not searching */}
             {activeSection === "shelf" && activeCategory === "all" && !searchQuery && recentBooks.length > 0 && (
-              <div className="mb-8">
+              <div className="mb-8" data-testid="recent-reading-section">
                 <div className="flex items-center justify-between mb-4">
                   <h2 style={{ fontFamily: "Playfair Display, serif", fontWeight: 700, color: "var(--foreground)", fontSize: "1.1rem" }}>
                     继续阅读
@@ -271,6 +318,7 @@ export default function App() {
                     onClick={() => setActiveSection("recent")}
                     className="text-sm"
                     style={{ color: "var(--accent)", fontFamily: "Inter, sans-serif" }}
+                    data-testid="recent-view-all"
                   >
                     查看全部
                   </button>
@@ -287,6 +335,7 @@ export default function App() {
                         boxShadow: "0 2px 8px rgba(92,61,30,0.07)",
                       }}
                       onClick={() => setSelectedBook(book)}
+                      data-testid={`recent-book-${book.id}`}
                     >
                       <BookCover book={book} size="sm" />
                       <div className="flex-1 min-w-0 py-0.5">
@@ -329,17 +378,17 @@ export default function App() {
 
             {/* Section title + count */}
             <div className="flex items-baseline gap-3 mb-4">
-              <h2 style={{ fontFamily: "Playfair Display, serif", fontWeight: 700, color: "var(--foreground)", fontSize: "1.1rem" }}>
+              <h2 style={{ fontFamily: "Playfair Display, serif", fontWeight: 700, color: "var(--foreground)", fontSize: "1.1rem" }} data-testid="section-title">
                 {searchQuery ? `"${searchQuery}" 的搜索结果` : sectionTitle}
               </h2>
-              <span style={{ fontFamily: "Inter, sans-serif", fontSize: "0.8rem", color: "var(--muted-foreground)" }}>
+              <span style={{ fontFamily: "Inter, sans-serif", fontSize: "0.8rem", color: "var(--muted-foreground)" }} data-testid="book-count">
                 {filteredBooks.length} 本
               </span>
             </div>
 
             {/* Book grid / list */}
             {filteredBooks.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20" style={{ color: "var(--muted-foreground)" }}>
+              <div className="flex flex-col items-center justify-center py-20" style={{ color: "var(--muted-foreground)" }} data-testid="empty-state">
                 <BookOpen size={48} strokeWidth={1} style={{ opacity: 0.3, marginBottom: "16px" }} />
                 <p style={{ fontFamily: "Playfair Display, serif", fontSize: "1.1rem", color: "var(--muted-foreground)" }}>
                   {searchQuery ? "没有找到相关书籍" : "这里还没有书籍"}
@@ -349,13 +398,13 @@ export default function App() {
                 </p>
               </div>
             ) : viewMode === "grid" ? (
-              <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
+              <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }} data-testid="book-grid">
                 {filteredBooks.map(book => (
                   <BookCard key={book.id} book={book} viewMode="grid" onToggleFavorite={toggleFavorite} onOpen={setSelectedBook} />
                 ))}
               </div>
             ) : (
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-2" data-testid="book-list">
                 {filteredBooks.map(book => (
                   <BookCard key={book.id} book={book} viewMode="list" onToggleFavorite={toggleFavorite} onOpen={setSelectedBook} />
                 ))}
@@ -367,7 +416,7 @@ export default function App() {
 
       {/* Mobile bottom nav */}
       <div className="lg:hidden">
-        <MobileNav activeSection={activeSection} onSectionChange={setActiveSection} />
+        <MobileNav activeSection={activeSection} onSectionChange={setActiveSection} onImport={() => setShowImportDialog(true)} />
       </div>
 
       {/* Book detail modal */}
@@ -377,6 +426,9 @@ export default function App() {
           onClose={() => setSelectedBook(null)}
           onToggleFavorite={id => { toggleFavorite(id); setSelectedBook(prev => prev && prev.id === id ? { ...prev, isFavorite: !prev.isFavorite } : prev); }}
           onRead={book => { setSelectedBook(null); setReadingBook(book); }}
+          onDelete={handleDeleteBook}
+          onUpdate={handleUpdateBook}
+          onGenerate={handleGenerateBook}
         />
       )}
 

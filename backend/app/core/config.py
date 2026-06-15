@@ -23,6 +23,7 @@ class Settings(BaseSettings):
         return self.llm_base_url.rstrip("/").removesuffix("/chat/completions")
 
     # Book generation
+    book_language: str = "zh"
     book_max_chapters: int = 16
     book_max_files_to_fetch: int = 100
     book_chapter_min_words: int = 2000

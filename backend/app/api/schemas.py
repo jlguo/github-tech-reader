@@ -101,6 +101,18 @@ class BookListItem(BaseModel):
     html_url: str
     status: str
     chapter_count: int
+    completed_chapters: int = 0
+    current_phase: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class BookUpdateRequest(BaseModel):
+    status: str | None = None
+    description: str | None = None
+    category: str | None = None
+    tags: list[str] | None = None
+    is_favorite: bool | None = None
 
 
 class BookContentResponse(BaseModel):

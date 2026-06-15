@@ -18,6 +18,7 @@ export function BookCard({ book, viewMode, onToggleFavorite, onOpen }: BookCardP
         className="flex items-center gap-4 p-3 rounded-xl cursor-pointer group transition-all duration-200"
         style={{ background: "var(--card)", border: "1px solid var(--border)" }}
         onClick={() => onOpen(book)}
+        data-testid={`book-card-list-${book.id}`}
       >
         <BookCover book={book} size="sm" />
         <div className="flex-1 min-w-0">
@@ -26,6 +27,7 @@ export function BookCard({ book, viewMode, onToggleFavorite, onOpen }: BookCardP
               <h3
                 className="truncate leading-tight"
                 style={{ fontFamily: "Playfair Display, serif", color: "var(--foreground)", fontSize: "0.95rem", fontWeight: 600 }}
+                data-testid={`book-title-${book.id}`}
               >
                 {book.title}
               </h3>
@@ -34,23 +36,37 @@ export function BookCard({ book, viewMode, onToggleFavorite, onOpen }: BookCardP
               </p>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
+              {book.isDemo && (
+                <span
+                  className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                  style={{
+                    background: "color-mix(in srgb, var(--accent) 12%, transparent)",
+                    color: "var(--accent)",
+                    fontFamily: "Inter, sans-serif",
+                  }}
+                >
+                  示例
+                </span>
+              )}
               <span
                 className="text-xs px-2 py-0.5 rounded-full font-medium"
                 style={{ background: typeInfo.bg, color: typeInfo.color, fontFamily: "Inter, sans-serif" }}
+                data-testid={`book-type-badge-${book.id}`}
               >
                 {typeInfo.label}
               </span>
               <button
                 onClick={e => { e.stopPropagation(); onToggleFavorite(book.id); }}
                 className="transition-colors"
-                style={{ color: book.isFavorite ? "#c17f3a" : "var(--muted-foreground)" }}
+                style={{ color: book.isFavorite ? "var(--accent)" : "var(--muted-foreground)" }}
+                data-testid={`book-favorite-${book.id}`}
               >
                 <Heart size={16} fill={book.isFavorite ? "currentColor" : "none"} />
               </button>
             </div>
           </div>
           {book.progress > 0 && (
-            <div className="mt-2">
+            <div className="mt-2" data-testid={`book-progress-${book.id}`}>
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs" style={{ color: "var(--muted-foreground)", fontFamily: "Inter, sans-serif" }}>
                   {book.progress === 100 ? "已读完" : `已读 ${book.progress}%`}
@@ -84,6 +100,7 @@ export function BookCard({ book, viewMode, onToggleFavorite, onOpen }: BookCardP
         boxShadow: "0 2px 8px rgba(92,61,30,0.08)",
       }}
       onClick={() => onOpen(book)}
+      data-testid={`book-card-grid-${book.id}`}
     >
       <div className="relative p-4 pb-3 flex justify-center" style={{ background: "var(--secondary)" }}>
         <BookCover book={book} size="md" />
@@ -91,6 +108,7 @@ export function BookCard({ book, viewMode, onToggleFavorite, onOpen }: BookCardP
           onClick={e => { e.stopPropagation(); onToggleFavorite(book.id); }}
           className="absolute top-2 right-2 p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-all"
           style={{ background: "rgba(255,255,255,0.9)", color: book.isFavorite ? "#c17f3a" : "var(--muted-foreground)" }}
+          data-testid={`book-favorite-${book.id}`}
         >
           <Heart size={14} fill={book.isFavorite ? "currentColor" : "none"} />
         </button>

@@ -28,6 +28,7 @@ export function EpubReader({ book }: EpubReaderProps) {
       {showToc && (
         <aside
           className="w-56 flex-shrink-0 flex flex-col border-r"
+          data-testid="epub-reader-toc"
           style={{ background: surfaceColor, borderColor: darkMode ? "rgba(255,255,255,0.08)" : "rgba(92,61,30,0.12)" }}
         >
           <div className="px-5 py-4 border-b" style={{ borderColor: darkMode ? "rgba(255,255,255,0.08)" : "rgba(92,61,30,0.12)" }}>
@@ -37,6 +38,7 @@ export function EpubReader({ book }: EpubReaderProps) {
             {epubContent.chapters.map((ch, i) => (
               <button
                 key={ch.id}
+                data-testid={`epub-reader-chapter-${ch.id}`}
                 className="w-full text-left px-5 py-2.5 text-sm transition-colors"
                 style={{
                   background: i === epubContent.currentChapter - 1 ? (darkMode ? "rgba(193,127,58,0.2)" : "rgba(193,127,58,0.12)") : "transparent",
@@ -60,7 +62,7 @@ export function EpubReader({ book }: EpubReaderProps) {
           className="flex items-center justify-between px-6 py-3 border-b"
           style={{ borderColor: darkMode ? "rgba(255,255,255,0.06)" : "rgba(92,61,30,0.08)", background: surfaceColor }}
         >
-          <button onClick={() => setShowToc(v => !v)} style={{ color: mutedColor }}>
+          <button onClick={() => setShowToc(v => !v)} data-testid="epub-reader-toc-toggle" style={{ color: mutedColor }}>
             <List size={18} />
           </button>
           <div className="text-center">
@@ -69,10 +71,10 @@ export function EpubReader({ book }: EpubReaderProps) {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => setShowSettings(v => !v)} style={{ color: mutedColor }}>
+            <button onClick={() => setShowSettings(v => !v)} data-testid="epub-reader-settings-toggle" style={{ color: mutedColor }}>
               <Type size={17} />
             </button>
-            <button onClick={() => setDarkMode(v => !v)} style={{ color: mutedColor }}>
+            <button onClick={() => setDarkMode(v => !v)} data-testid="epub-reader-dark-toggle" style={{ color: mutedColor }}>
               {darkMode ? <Sun size={17} /> : <Moon size={17} />}
             </button>
           </div>
@@ -88,6 +90,7 @@ export function EpubReader({ book }: EpubReaderProps) {
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setFontSize(v => Math.max(13, v - 1))}
+                data-testid="epub-reader-font-decrease"
                 className="w-7 h-7 rounded-full flex items-center justify-center border transition-colors"
                 style={{ borderColor: mutedColor, color: mutedColor }}
               >
@@ -96,6 +99,7 @@ export function EpubReader({ book }: EpubReaderProps) {
               <span className="text-sm w-6 text-center" style={{ color: textColor, fontFamily: "Inter, sans-serif" }}>{fontSize}</span>
               <button
                 onClick={() => setFontSize(v => Math.min(24, v + 1))}
+                data-testid="epub-reader-font-increase"
                 className="w-7 h-7 rounded-full flex items-center justify-center border transition-colors"
                 style={{ borderColor: mutedColor, color: mutedColor }}
               >
@@ -106,6 +110,7 @@ export function EpubReader({ book }: EpubReaderProps) {
               {[{ label: "衬线", font: "serif" }, { label: "无衬线", font: "sans" }].map(opt => (
                 <button
                   key={opt.font}
+                  data-testid={`epub-reader-font-${opt.font}`}
                   className="px-3 py-1 rounded-full text-xs border transition-colors"
                   style={{ borderColor: mutedColor, color: mutedColor, fontFamily: "Inter, sans-serif" }}
                 >
@@ -117,7 +122,7 @@ export function EpubReader({ book }: EpubReaderProps) {
         )}
 
         {/* Text content */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto" data-testid="epub-reader-area">
           <div className="max-w-[640px] mx-auto px-6 py-12">
             <p
               className="leading-[2] whitespace-pre-wrap"
@@ -141,6 +146,7 @@ export function EpubReader({ book }: EpubReaderProps) {
           <button
             onClick={() => setPage(v => Math.max(0, v - 1))}
             disabled={page === 0}
+            data-testid="epub-reader-prev"
             className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm transition-all disabled:opacity-30"
             style={{ background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(92,61,30,0.08)", color: textColor, fontFamily: "Inter, sans-serif" }}
           >
@@ -161,13 +167,14 @@ export function EpubReader({ book }: EpubReaderProps) {
                 />
               ))}
             </div>
-            <span className="text-xs" style={{ color: mutedColor, fontFamily: "Inter, sans-serif" }}>
+            <span className="text-xs" data-testid="epub-reader-page-indicator" style={{ color: mutedColor, fontFamily: "Inter, sans-serif" }}>
               {page + 1} / {pages.length}
             </span>
           </div>
           <button
             onClick={() => setPage(v => Math.min(pages.length - 1, v + 1))}
             disabled={page === pages.length - 1}
+            data-testid="epub-reader-next"
             className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm transition-all disabled:opacity-30"
             style={{ background: darkMode ? "rgba(255,255,255,0.06)" : "rgba(92,61,30,0.08)", color: textColor, fontFamily: "Inter, sans-serif" }}
           >

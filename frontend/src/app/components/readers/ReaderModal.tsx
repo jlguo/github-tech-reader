@@ -40,7 +40,7 @@ function getReaderBg(book: Book) {
     case "ppt": return "#1a1a1a";
     case "excel": return "#f5f5f5";
     case "word": return "#e8e8e8";
-    case "html": return "#f5f0e8";
+    case "html": return "var(--background)";
     default: return book.category === "manga" ? "#0d0d0d" : "#faf6ed";
   }
 }
@@ -50,10 +50,11 @@ export function ReaderModal({ book, onClose }: ReaderModalProps) {
   const typeInfo = typeConfig[book.type];
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col" style={{ background: getReaderBg(book) }}>
+    <div className="fixed inset-0 z-50 flex flex-col" data-testid="reader-modal" style={{ background: getReaderBg(book) }}>
       {/* Reader top bar */}
       <div
         className="flex items-center justify-between px-4 py-3 flex-shrink-0 border-b"
+        data-testid="reader-topbar"
         style={{
           background: book.type === "pdf" || book.type === "ppt" || book.category === "manga"
             ? "rgba(0,0,0,0.7)"
@@ -72,6 +73,7 @@ export function ReaderModal({ book, onClose }: ReaderModalProps) {
               ? "#d0d0d0"
               : "var(--foreground)",
           }}
+          data-testid="reader-back"
         >
           <ArrowLeft size={18} />
           <span className="text-sm hidden sm:block" style={{ fontFamily: "Inter, sans-serif" }}>返回书架</span>
@@ -84,12 +86,14 @@ export function ReaderModal({ book, onClose }: ReaderModalProps) {
               fontFamily: "Playfair Display, serif",
               color: book.type === "pdf" || book.type === "ppt" || book.category === "manga" ? "#d0d0d0" : "var(--foreground)",
             }}
+            data-testid="reader-title"
           >
             {book.title}
           </p>
           <span
             className="text-xs px-1.5 py-0.5 rounded mt-0.5"
             style={{ background: typeInfo.bg, color: typeInfo.color, fontFamily: "Inter, sans-serif", fontSize: "0.6rem", fontWeight: 600 }}
+            data-testid="reader-type-badge"
           >
             {typeInfo.label}
           </span>
@@ -99,12 +103,14 @@ export function ReaderModal({ book, onClose }: ReaderModalProps) {
           <button
             className="p-2 rounded-full transition-colors hover:bg-black/10"
             style={{ color: book.type === "pdf" || book.type === "ppt" || book.category === "manga" ? "#aaa" : "var(--muted-foreground)" }}
+            data-testid="reader-bookmark"
           >
             <Bookmark size={17} />
           </button>
           <button
             className="p-2 rounded-full transition-colors hover:bg-black/10"
             style={{ color: book.type === "pdf" || book.type === "ppt" || book.category === "manga" ? "#aaa" : "var(--muted-foreground)" }}
+            data-testid="reader-more"
           >
             <MoreVertical size={17} />
           </button>
@@ -112,16 +118,16 @@ export function ReaderModal({ book, onClose }: ReaderModalProps) {
       </div>
 
       {/* Reader content */}
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-h-0" data-testid="reader-content">
         <ReaderContent book={book} />
       </div>
 
       {/* Progress bar */}
       {book.progress > 0 && (
-        <div className="absolute bottom-0 left-0 right-0 h-0.5" style={{ background: "rgba(0,0,0,0.1)" }}>
+        <div className="absolute bottom-0 left-0 right-0 h-0.5" style={{ background: "rgba(0,0,0,0.1)" }} data-testid="reader-progress-bar">
           <div
             className="h-full"
-            style={{ width: `${book.progress}%`, background: "#c17f3a", transition: "width 0.5s" }}
+            style={{ width: `${book.progress}%`, background: "var(--accent)", transition: "width 0.5s" }}
           />
         </div>
       )}

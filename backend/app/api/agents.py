@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from datetime import datetime
 
 from app.core.database import get_db, async_session
@@ -133,6 +133,13 @@ async def _run_book_pipeline(
                 gen.html_output = html
                 gen.current_phase = "done"
                 gen.updated_at = datetime.utcnow()
+
+            await session.execute(
+                delete(ContentSection).where(
+                    ContentSection.repo_id == repo_id,
+                    ContentSection.section_type == "book_chapter",
+                )
+            )
 
             for ch in chapters:
                 section = ContentSection(

@@ -18,7 +18,8 @@ export interface Book {
   description: string;
   tags: string[];
   isFavorite: boolean;
-  genStatus?: "writing" | "done" | "failed";
+  isDemo?: boolean;
+  genStatus?: "writing" | "done" | "failed" | "no_book";
 }
 
 export const books: Book[] = [
@@ -39,6 +40,7 @@ export const books: Book[] = [
     description: "魔幻现实主义文学的巅峰之作，布恩迪亚家族七代人的传奇故事。",
     tags: ["诺贝尔奖", "魔幻现实主义", "经典"],
     isFavorite: true,
+    isDemo: true,
   },
   {
     id: "2",
@@ -57,6 +59,7 @@ export const books: Book[] = [
     description: "探讨日常事物的设计原则，改变你对设计的思考方式。",
     tags: ["设计", "心理学", "用户体验"],
     isFavorite: false,
+    isDemo: true,
   },
   {
     id: "3",
@@ -75,6 +78,7 @@ export const books: Book[] = [
     description: "中国科幻文学里程碑，描绘人类与三体文明的宏大史诗。",
     tags: ["科幻", "雨果奖", "中国文学"],
     isFavorite: true,
+    isDemo: true,
   },
   {
     id: "4",
@@ -93,6 +97,7 @@ export const books: Book[] = [
     description: "在信息爆炸时代，如何专注创造真正的价值。",
     tags: ["生产力", "专注", "职业发展"],
     isFavorite: false,
+    isDemo: true,
   },
   {
     id: "5",
@@ -111,6 +116,7 @@ export const books: Book[] = [
     description: "从认知革命到人工智能，重新审视人类的过去与未来。",
     tags: ["历史", "人类学", "畅销书"],
     isFavorite: true,
+    isDemo: true,
   },
   {
     id: "6",
@@ -129,6 +135,7 @@ export const books: Book[] = [
     description: "2024年第四季度产品路线图与功能规划文档。",
     tags: ["工作", "产品", "规划"],
     isFavorite: false,
+    isDemo: true,
   },
   {
     id: "7",
@@ -147,6 +154,7 @@ export const books: Book[] = [
     description: "从理论到实践，系统掌握机器学习核心算法与应用。",
     tags: ["机器学习", "Python", "AI"],
     isFavorite: false,
+    isDemo: true,
   },
   {
     id: "8",
@@ -165,6 +173,7 @@ export const books: Book[] = [
     description: "大正时代，少年炭治郎踏上寻鬼之路，为家人复仇。",
     tags: ["漫画", "动作", "日本"],
     isFavorite: true,
+    isDemo: true,
   },
   {
     id: "9",
@@ -182,6 +191,7 @@ export const books: Book[] = [
     description: "2023年度各部门财务数据汇总与分析。",
     tags: ["财务", "工作", "数据"],
     isFavorite: false,
+    isDemo: true,
   },
   {
     id: "10",
@@ -199,6 +209,7 @@ export const books: Book[] = [
     description: "一部关于苦难与生命意义的震撼之作。",
     tags: ["中国文学", "当代", "经典"],
     isFavorite: false,
+    isDemo: true,
   },
   {
     id: "11",
@@ -217,6 +228,7 @@ export const books: Book[] = [
     description: "以用户为中心的网站设计，从战略到界面的五个层次。",
     tags: ["UX", "设计", "产品"],
     isFavorite: true,
+    isDemo: true,
   },
   {
     id: "13",
@@ -235,6 +247,7 @@ export const books: Book[] = [
     description: "深入讲解CSS级联、选择器、布局与动画，是前端开发者的必备参考书。",
     tags: ["CSS", "前端", "Web开发"],
     isFavorite: false,
+    isDemo: true,
   },
   {
     id: "12",
@@ -253,6 +266,7 @@ export const books: Book[] = [
     description: "2024年第一季度新产品发布演示文稿。",
     tags: ["工作", "产品", "演示"],
     isFavorite: false,
+    isDemo: true,
   },
 ];
 

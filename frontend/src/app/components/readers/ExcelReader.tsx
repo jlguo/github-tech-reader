@@ -23,11 +23,12 @@ export function ExcelReader({ book }: ExcelReaderProps) {
   return (
     <div className="flex flex-col h-full" style={{ background: "#f5f5f5" }}>
       {/* Excel-style toolbar */}
-      <div className="flex-shrink-0 border-b" style={{ background: "#217346", borderColor: "#1a5c38" }}>
+      <div className="flex-shrink-0 border-b" data-testid="excel-reader-toolbar" style={{ background: "#217346", borderColor: "#1a5c38" }}>
         <div className="flex items-center gap-4 px-4 py-2">
           {["文件", "开始", "插入", "页面布局", "公式", "数据", "审阅", "视图"].map((tab, i) => (
             <button
               key={tab}
+              data-testid={`excel-reader-tab-${tab}`}
               className="text-xs py-1 px-2 rounded transition-colors"
               style={{
                 color: i === 1 ? "white" : "rgba(255,255,255,0.75)",
@@ -45,10 +46,12 @@ export function ExcelReader({ book }: ExcelReaderProps) {
       {/* Formula bar */}
       <div
         className="flex items-center gap-3 px-3 py-1.5 border-b flex-shrink-0"
+        data-testid="excel-reader-formula-bar"
         style={{ background: "white", borderColor: "#d0d0d0" }}
       >
         <div
           className="flex items-center justify-center px-2 py-0.5 rounded border text-xs"
+          data-testid="excel-reader-cell-ref"
           style={{ background: "#f0f0f0", borderColor: "#d0d0d0", color: "#333", fontFamily: "Inter, sans-serif", minWidth: "60px" }}
         >
           {selectedCell ? `${String.fromCharCode(65 + selectedCell[1])}${selectedCell[0] + 1}` : "A1"}
@@ -56,6 +59,7 @@ export function ExcelReader({ book }: ExcelReaderProps) {
         <div className="w-px h-4" style={{ background: "#d0d0d0" }} />
         <div
           className="flex-1 text-xs px-2 py-0.5"
+          data-testid="excel-reader-cell-value"
           style={{ color: "#333", fontFamily: "Inter, sans-serif" }}
         >
           {getCellValue()}
@@ -63,7 +67,7 @@ export function ExcelReader({ book }: ExcelReaderProps) {
       </div>
 
       {/* Spreadsheet */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto" data-testid="excel-reader-table">
         <table style={{ borderCollapse: "collapse", width: "100%", minWidth: "700px" }}>
           {/* Row number + column headers */}
           <thead>
@@ -209,6 +213,7 @@ export function ExcelReader({ book }: ExcelReaderProps) {
         {excelData.sheets.map((sheet, i) => (
           <button
             key={sheet}
+            data-testid={`excel-reader-sheet-${sheet}`}
             onClick={() => setActiveSheet(i)}
             className="px-4 h-full text-xs border-r border-t transition-colors"
             style={{

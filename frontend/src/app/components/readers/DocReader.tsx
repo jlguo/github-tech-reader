@@ -15,7 +15,7 @@ export function DocReader({ book }: DocReaderProps) {
   return (
     <div className="flex h-full" style={{ background: "#f5f5f5" }}>
       {/* Outline sidebar */}
-      <aside className="w-52 flex-shrink-0 hidden sm:flex flex-col border-r" style={{ background: "#fafafa", borderColor: "#e0e0e0" }}>
+      <aside className="w-52 flex-shrink-0 hidden sm:flex flex-col border-r" data-testid="doc-reader-outline" style={{ background: "#fafafa", borderColor: "#e0e0e0" }}>
         <div className="px-4 py-3 border-b flex items-center gap-2" style={{ borderColor: "#e0e0e0" }}>
           <FileText size={14} style={{ color: "#1a73e8" }} />
           <span className="text-xs font-semibold" style={{ color: "#333", fontFamily: "Inter, sans-serif" }}>文档大纲</span>
@@ -25,6 +25,7 @@ export function DocReader({ book }: DocReaderProps) {
             <div key={i}>
               <button
                 onClick={() => toggle(i)}
+                data-testid={`doc-reader-section-${i}`}
                 className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-100 transition-colors"
                 style={{ color: "#333", fontFamily: "Inter, sans-serif" }}
               >
@@ -37,7 +38,7 @@ export function DocReader({ book }: DocReaderProps) {
       </aside>
 
       {/* Document body */}
-      <div className="flex-1 overflow-y-auto flex justify-center py-6 px-4" style={{ background: "#e8e8e8" }}>
+      <div className="flex-1 overflow-y-auto flex justify-center py-6 px-4" data-testid="doc-reader-body" style={{ background: "#e8e8e8" }}>
         <div className="w-full max-w-3xl shadow-lg" style={{ background: "#ffffff" }}>
           {/* Word-style ribbon hint */}
           <div
@@ -47,6 +48,7 @@ export function DocReader({ book }: DocReaderProps) {
             {["文件", "开始", "插入", "设计", "布局", "引用", "审阅", "视图"].map(tab => (
               <button
                 key={tab}
+                data-testid={`doc-reader-tab-${tab}`}
                 className="text-xs py-1 px-2 rounded transition-colors hover:bg-gray-200"
                 style={{ color: tab === "开始" ? "#1a73e8" : "#444", fontFamily: "Inter, sans-serif", fontWeight: tab === "开始" ? 600 : 400 }}
               >
@@ -56,7 +58,7 @@ export function DocReader({ book }: DocReaderProps) {
           </div>
 
           {/* Page content */}
-          <div className="px-16 py-16">
+          <div className="px-16 py-16" data-testid="doc-reader-page">
             {/* Title block */}
             <div className="mb-10 pb-8 border-b" style={{ borderColor: "#e0e0e0" }}>
               <h1

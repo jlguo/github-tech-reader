@@ -18,6 +18,12 @@ except ImportError:
 
 llm = f"openai/{settings.llm_model}"
 
+_LANG_INSTRUCTION = (
+    "IMPORTANT: All output MUST be in Simplified Chinese (zh-CN). "
+    "Chapter titles, descriptions, content — everything in Chinese. "
+    "Only keep code identifiers, class names, and function names in their original language."
+) if settings.book_language == "zh" else ""
+
 _llm_lock = asyncio.Lock()
 _llm_last_request: float = 0
 _chapter_sem: asyncio.Semaphore | None = None
@@ -113,7 +119,8 @@ async def _run_planning_crew(repo_name, repo_description, chapter_count, snapsho
     _ensure_crewai()
     planner = _make_agent(
         role="Book Planner",
-        goal=f"Create a detailed outline for a {chapter_count}-chapter technical book about '{repo_name}'.",
+        goal=f"Create a detailed outline for a {chapter_count}-chapter technical book about '{repo_name}'. "
+             f"{_LANG_INSTRUCTION}",
         backstory="You are an experienced technical book editor who excels at structuring "
                   "complex software topics into logical, progressive chapters.",
     )
@@ -123,7 +130,8 @@ async def _run_planning_crew(repo_name, repo_description, chapter_count, snapsho
             f"Target: {chapter_count} chapters, {settings.book_chapter_min_words}-"
             f"{settings.book_chapter_max_words} words each.\n\n"
             f"Repository content:\n{snapshot[:15000]}\n\n"
-            "Create a book outline. Return ONLY a JSON array of chapter objects. "
+            f"Create a book outline. {_LANG_INSTRUCTION} "
+            "Return ONLY a JSON array of chapter objects. "
             "Each object: number (int), title (str), focus (str), files_to_analyze (str[]). "
             "Return ONLY the JSON array, no other text."
         ),
@@ -144,14 +152,14 @@ async def _run_planning_crew(repo_name, repo_description, chapter_count, snapsho
 
 def _fallback_outline(chapter_count, repo_name) -> list[dict]:
     sections = [
-        "Project Overview and Architecture", "Core Concepts and Design Philosophy",
-        "Codebase Tour: Key Modules", "Data Models and State Management",
-        "API Design and Communication", "Testing and Quality Assurance",
-        "Build System and DevOps", "Performance and Optimization",
-        "Security Considerations", "Error Handling and Resilience",
-        "Configuration and Extensibility", "Community and Contribution Guide",
-        "Advanced Patterns and Internals", "Real-World Use Cases",
-        "Lessons Learned and Best Practices", "Future Roadmap and Evolution",
+        "项目概览与架构", "核心概念与设计哲学",
+        "代码漫游：关键模块", "数据模型与状态管理",
+        "API 设计与通信", "测试与质量保障",
+        "构建系统与 DevOps", "性能与优化",
+        "安全性考量", "错误处理与韧性",
+        "配置与可扩展性", "社区与贡献指南",
+        "高级模式与内部原理", "真实场景案例",
+        "经验教训与最佳实践", "未来路线图与演进",
     ]
     return [{"number": i, "title": f"Chapter {i}: {sections[(i-1)%16]}",
              "focus": sections[(i-1)%16].lower(), "files_to_analyze": []}
@@ -162,7 +170,8 @@ async def _run_chapter_research_writer(repo_name, chapter, snapshot) -> dict:
     _ensure_crewai()
     researcher = _make_agent(
         role="Chapter Researcher",
-        goal=f"Research Chapter {chapter['number']}: '{chapter['title']}' of the {repo_name} book.",
+        goal=f"Research Chapter {chapter['number']}: '{chapter['title']}' of the {repo_name} book. "
+             f"{_LANG_INSTRUCTION}",
         backstory="Meticulous technical researcher who extracts the most valuable insights "
                   "from source code and documentation.",
     )
@@ -170,7 +179,7 @@ async def _run_chapter_research_writer(repo_name, chapter, snapshot) -> dict:
         role="Chapter Writer",
         goal=f"Write Chapter {chapter['number']}: '{chapter['title']}' as a polished "
              f"educational chapter ({settings.book_chapter_min_words}-"
-             f"{settings.book_chapter_max_words} words) in Markdown.",
+             f"{settings.book_chapter_max_words} words) in Markdown. {_LANG_INSTRUCTION}",
         backstory="Skilled technical book author who transforms raw research into "
                   "compelling, educational prose for intermediate developers.",
     )
@@ -179,7 +188,7 @@ async def _run_chapter_research_writer(repo_name, chapter, snapshot) -> dict:
             f"Chapter {chapter['number']}: {chapter['title']}\nFocus: {chapter['focus']}\n"
             f"Key files: {chapter.get('files_to_analyze', [])}\n\n"
             f"Repository content:\n{snapshot[:12000]}\n\n"
-            "Provide structured research notes: key concepts, architecture decisions, "
+            f"Provide structured research notes in Chinese: key concepts, architecture decisions, "
             "code patterns with references, edge cases, educational value."
         ),
         expected_output="Structured research notes with code references.",
@@ -189,6 +198,7 @@ async def _run_chapter_research_writer(repo_name, chapter, snapshot) -> dict:
         description=(
             f"Write Chapter {chapter['number']}: '{chapter['title']}' "
             f"({settings.book_chapter_min_words}-{settings.book_chapter_max_words} words). "
+            f"{_LANG_INSTRUCTION} "
             "Use clear section headers (##), include code snippets, explain WHY not just WHAT, "
             "add practical examples, end with summary and further reading."
         ),
@@ -226,7 +236,8 @@ async def _run_review_crew(chapters, repo_name) -> list[dict]:
     _ensure_crewai()
     reviewer = _make_agent(
         role="Technical Reviewer",
-        goal="Review all book chapters for technical accuracy, clarity, completeness, and consistency.",
+        goal=f"Review all book chapters for technical accuracy, clarity, completeness, and consistency. "
+             f"{_LANG_INSTRUCTION}",
         backstory="Senior engineer and editor who ensures technical books are accurate, "
                   "well-structured, and valuable.",
     )
@@ -237,7 +248,8 @@ async def _run_review_crew(chapters, repo_name) -> list[dict]:
     task = Task(
         description=(
             f"Review the following chapters for '{repo_name}'.\n\n{chapters_text[:20000]}\n\n"
-            "For each chapter: PASS or NEEDS_FIX, list issues, list suggestions."
+            f"For each chapter: PASS or NEEDS_FIX, list issues, list suggestions. "
+            f"{_LANG_INSTRUCTION}"
         ),
         expected_output="Per-chapter review with PASS/NEEDS_FIX verdicts.",
         agent=reviewer,
@@ -251,7 +263,8 @@ async def _run_editor_crew(chapters, repo_name) -> str:
     _ensure_crewai()
     editor = _make_agent(
         role="Book Editor",
-        goal=f"Merge all chapters into a polished, publication-ready HTML book for '{repo_name}'.",
+        goal=f"Merge all chapters into a polished, publication-ready HTML book for '{repo_name}'. "
+             f"{_LANG_INSTRUCTION}",
         backstory="Professional book editor who takes raw chapters and turns them "
                   "into a cohesive, beautifully formatted book.",
     )
@@ -263,7 +276,8 @@ async def _run_editor_crew(chapters, repo_name) -> str:
         description=(
             f"Convert the following chapters into a complete HTML book for '{repo_name}'.\n\n"
             f"{chapters_text[:30000]}\n\n"
-            "Produce a single HTML document with: title, table of contents, "
+            f"Produce a single HTML document. {_LANG_INSTRUCTION} "
+            "The document should have: title, table of contents, "
             "each chapter as <section>, code in <pre><code>, footer with date. "
             "Use this CSS: body{background:#f5f0e8;color:#2c1a0e;"
             "font-family:'Source Serif 4',Georgia,serif;max-width:800px;margin:0 auto;"
@@ -292,7 +306,7 @@ async def _run_cover_crew(repo_name: str, repo_description: str, outline: list[d
     designer = _make_agent(
         role="Book Cover Designer",
         goal=f"Design a beautiful, professional book cover for '{repo_name}' that "
-             "captures the essence of the project and entices readers.",
+             f"captures the essence of the project and entices readers. {_LANG_INSTRUCTION}",
         backstory="You are an award-winning book cover designer specializing in technical "
                   "books. Your covers combine elegant typography, harmonious color palettes, "
                   "and subtle visual elements that hint at the book's content.",
@@ -305,6 +319,7 @@ async def _run_cover_crew(repo_name: str, repo_description: str, outline: list[d
             f"Design a cover page for the book '{repo_name}'.\n\n"
             f"Description: {repo_description}\n\n"
             f"Chapters:\n{chapters_list}\n\n"
+            f"{_LANG_INSTRUCTION}\n\n"
             "Create an HTML cover page that looks like a real book cover. Requirements:\n"
             "- Full viewport height, centered content\n"
             "- Elegant typography using 'Playfair Display' for title, 'Source Serif 4' for subtitle\n"

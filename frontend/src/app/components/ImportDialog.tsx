@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { X, Github, Loader2, CheckCircle, AlertCircle, BookOpen, Sparkles } from "lucide-react";
-
-const API = "http://localhost:8000/api";
+import { API_BASE_URL } from "../../config/api";
 
 type ImportStep = "input" | "loading" | "success" | "error";
 interface ImportResult { repo_id: string; repo_name: string; readme_length: number; }
@@ -45,7 +44,7 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
     setError("");
 
     try {
-      const addResp = await fetch(`${API}/repos/add`, {
+      const addResp = await fetch(`${API_BASE_URL}/repos/add`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ full_name: fullName }),
@@ -60,13 +59,17 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
 
       let readmeLen = 0;
       try {
-        const rResp = await fetch(`${API}/repos/${repo.id}/fetch-readme`, { method: "POST" });
+        const rResp = await fetch(`${API_BASE_URL}/repos/${repo.id}/fetch-readme`, { method: "POST" });
         if (rResp.ok) {
           const rData = await rResp.json();
           readmeLen = rData.length;
         }
       } catch {
         readmeLen = 0;
+      }
+
+      if (readmeLen > 0) {
+        fetch(`${API_BASE_URL}/agents/generate-book/${repo.id}`, { method: "POST" }).catch(() => {});
       }
 
       setResult({ repo_id: repo.id, repo_name: repo.full_name, readme_length: readmeLen });
@@ -93,6 +96,7 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      data-testid="import-dialog-overlay"
       onClick={handleClose}
     >
       <div className="absolute inset-0" style={{ background: "rgba(44,26,14,0.6)", backdropFilter: "blur(4px)" }} />
@@ -100,6 +104,7 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
       <div
         className="relative w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl overflow-hidden"
         style={{ background: "var(--card)" }}
+        data-testid="import-dialog-content"
         onClick={e => e.stopPropagation()}
       >
         {step === "input" && (
@@ -112,6 +117,7 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
                 <h2
                   className="text-lg font-bold"
                   style={{ fontFamily: "Playfair Display, serif", color: "var(--foreground)" }}
+                  data-testid="import-dialog-title"
                 >
                   导入 GitHub 仓库
                 </h2>
@@ -120,6 +126,7 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
                 onClick={handleClose}
                 className="p-2 rounded-full transition-colors"
                 style={{ background: "var(--muted)", color: "var(--muted-foreground)" }}
+                data-testid="import-dialog-close"
               >
                 <X size={18} />
               </button>
@@ -136,6 +143,7 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
                 onKeyDown={e => e.key === "Enter" && handleImport()}
                 placeholder="例如: facebook/react"
                 className="w-full px-4 py-3 rounded-xl text-sm border outline-none transition-all focus:ring-2"
+                data-testid="import-dialog-input"
                 style={{
                   background: "var(--background)",
                   color: "var(--foreground)",
@@ -147,7 +155,7 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
               />
 
               {input && !fullName && (
-                <div className="flex items-center gap-1.5 text-xs" style={{ color: "#c0392b", fontFamily: "Inter, sans-serif" }}>
+                <div className="flex items-center gap-1.5 text-xs" style={{ color: "#c0392b", fontFamily: "Inter, sans-serif" }} data-testid="import-dialog-error-format">
                   <AlertCircle size={13} />
                   格式不正确，请使用 owner/repo 格式
                 </div>
@@ -163,6 +171,7 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
                   fontFamily: "Inter, sans-serif",
                   cursor: fullName ? "pointer" : "not-allowed",
                 }}
+                data-testid="import-dialog-submit"
               >
                 <Github size={15} />
                 导入仓库
@@ -172,9 +181,9 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
         )}
 
         {step === "loading" && (
-          <div className="p-8 flex flex-col items-center gap-4">
+          <div className="p-8 flex flex-col items-center gap-4" data-testid="import-dialog-loading">
             <Loader2 size={36} className="animate-spin" style={{ color: "var(--accent)" }} />
-            <p className="text-sm" style={{ color: "var(--foreground)", fontFamily: "Inter, sans-serif" }}>
+            <p className="text-sm" style={{ color: "var(--foreground)", fontFamily: "Inter, sans-serif" }} data-testid="import-dialog-loading-text">
               正在从 GitHub 获取仓库信息...
             </p>
             <p className="text-xs" style={{ color: "var(--muted-foreground)", fontFamily: "Inter, sans-serif" }}>
@@ -184,7 +193,7 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
         )}
 
         {step === "success" && result && (
-          <div className="p-6 space-y-4">
+          <div className="p-6 space-y-4" data-testid="import-dialog-success">
             <div className="flex flex-col items-center gap-3 py-4">
               <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: "#e2f5ec" }}>
                 <CheckCircle size={28} style={{ color: "#2d7a4a" }} />
@@ -195,7 +204,7 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
               >
                 导入成功
               </h3>
-              <p className="text-sm text-center" style={{ color: "var(--muted-foreground)", fontFamily: "Inter, sans-serif" }}>
+              <p className="text-sm text-center" style={{ color: "var(--muted-foreground)", fontFamily: "Inter, sans-serif" }} data-testid="import-dialog-success-repo">
                 {result.repo_name}
               </p>
               <div className="flex items-center gap-1.5 text-xs" style={{ color: "var(--muted-foreground)", fontFamily: "Inter, sans-serif" }}>
@@ -212,6 +221,7 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
                 color: "var(--primary-foreground)",
                 fontFamily: "Inter, sans-serif",
               }}
+              data-testid="import-dialog-done"
             >
               完成
             </button>
@@ -219,7 +229,7 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
         )}
 
         {step === "error" && (
-          <div className="p-6 space-y-4">
+          <div className="p-6 space-y-4" data-testid="import-dialog-error">
             <div className="flex flex-col items-center gap-3 py-4">
               <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: "#f7e8e8" }}>
                 <AlertCircle size={28} style={{ color: "#c0392b" }} />
@@ -230,7 +240,7 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
               >
                 导入失败
               </h3>
-              <p className="text-sm text-center" style={{ color: "var(--muted-foreground)", fontFamily: "Inter, sans-serif" }}>
+              <p className="text-sm text-center" style={{ color: "var(--muted-foreground)", fontFamily: "Inter, sans-serif" }} data-testid="import-dialog-error-message">
                 {error}
               </p>
             </div>
@@ -244,6 +254,7 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
                   color: "var(--foreground)",
                   fontFamily: "Inter, sans-serif",
                 }}
+                data-testid="import-dialog-retry"
               >
                 重试
               </button>
@@ -255,6 +266,7 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
                   color: "white",
                   fontFamily: "Inter, sans-serif",
                 }}
+                data-testid="import-dialog-error-close"
               >
                 关闭
               </button>

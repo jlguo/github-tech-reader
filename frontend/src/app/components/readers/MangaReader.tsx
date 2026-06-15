@@ -24,15 +24,17 @@ export function MangaReader({ book }: MangaReaderProps) {
       {/* Toolbar */}
       <div
         className="flex items-center justify-between px-4 py-2 flex-shrink-0"
+        data-testid="manga-reader-toolbar"
         style={{ background: "#1a1a1a", borderBottom: "1px solid rgba(255,255,255,0.08)" }}
       >
         <div className="flex items-center gap-2">
-          <span className="text-xs" style={{ color: "#888", fontFamily: "Inter, sans-serif" }}>
+          <span className="text-xs" data-testid="manga-reader-page-info" style={{ color: "#888", fontFamily: "Inter, sans-serif" }}>
             {page + 1} / {mangaPages.length}
           </span>
           <div className="w-px h-3 mx-1" style={{ background: "rgba(255,255,255,0.15)" }} />
           <button
             onClick={() => setDirection(v => v === "rtl" ? "ltr" : "rtl")}
+            data-testid="manga-reader-direction"
             className="flex items-center gap-1.5 px-2 py-1 rounded text-xs transition-colors hover:bg-white/10"
             style={{ color: "#888", fontFamily: "Inter, sans-serif" }}
           >
@@ -47,6 +49,7 @@ export function MangaReader({ book }: MangaReaderProps) {
 
         <button
           onClick={() => setZoom(v => !v)}
+          data-testid="manga-reader-zoom"
           className="p-1.5 rounded transition-colors hover:bg-white/10"
           style={{ color: zoom ? "#c17f3a" : "#888" }}
         >
@@ -57,6 +60,7 @@ export function MangaReader({ book }: MangaReaderProps) {
       {/* Page viewer */}
       <div
         className="flex-1 flex items-center justify-center relative overflow-hidden"
+        data-testid="manga-reader-page"
         onClick={e => {
           const rect = (e.target as HTMLElement).closest(".manga-area")?.getBoundingClientRect();
           if (!rect) return;
@@ -110,11 +114,13 @@ export function MangaReader({ book }: MangaReaderProps) {
       {/* Bottom progress strip */}
       <div
         className="flex items-center gap-3 px-4 py-3 flex-shrink-0"
+        data-testid="manga-reader-progress"
         style={{ background: "#1a1a1a", borderTop: "1px solid rgba(255,255,255,0.08)" }}
       >
         <button
           onClick={prev}
           disabled={page === 0}
+          data-testid="manga-reader-prev"
           className="p-1.5 rounded transition-colors hover:bg-white/10 disabled:opacity-30"
           style={{ color: "white" }}
         >
@@ -125,6 +131,7 @@ export function MangaReader({ book }: MangaReaderProps) {
           {mangaPages.map((_, i) => (
             <button
               key={i}
+              data-testid={`manga-reader-dot-${i}`}
               onClick={() => setPage(i)}
               className="flex-1 h-1.5 rounded-full transition-all"
               style={{ background: i === page ? "#c17f3a" : "rgba(255,255,255,0.2)" }}
@@ -135,6 +142,7 @@ export function MangaReader({ book }: MangaReaderProps) {
         <button
           onClick={next}
           disabled={page === mangaPages.length - 1}
+          data-testid="manga-reader-next"
           className="p-1.5 rounded transition-colors hover:bg-white/10 disabled:opacity-30"
           style={{ color: "white" }}
         >

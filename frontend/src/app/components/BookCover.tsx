@@ -22,6 +22,7 @@ export function BookCover({ book, size = "md" }: BookCoverProps) {
       <div
         className={`${s.width} ${s.height} relative flex-shrink-0 overflow-hidden shadow-md`}
         style={{ borderRadius: "2px 6px 6px 2px" }}
+        data-testid={`book-cover-img-${book.id}`}
       >
         <img
           src={book.cover}
@@ -31,9 +32,22 @@ export function BookCover({ book, size = "md" }: BookCoverProps) {
         <div
           className={`absolute top-1.5 right-1.5 px-1 py-0.5 rounded ${s.titleSize} font-semibold tracking-wide`}
           style={{ background: typeInfo.bg, color: typeInfo.color, fontFamily: "Inter, sans-serif" }}
+          data-testid={`book-cover-type-${book.id}`}
         >
           {typeInfo.label}
         </div>
+        {book.isDemo && (
+          <div
+            className={`absolute bottom-1.5 left-1.5 px-1 py-0.5 rounded ${s.titleSize} font-medium`}
+            style={{
+              background: "color-mix(in srgb, var(--accent) 15%, transparent)",
+              color: "var(--accent)",
+              fontFamily: "Inter, sans-serif",
+            }}
+          >
+            示例
+          </div>
+        )}
         {/* Spine shadow */}
         <div
           className="absolute left-0 top-0 h-full w-3 opacity-30"
@@ -51,6 +65,7 @@ export function BookCover({ book, size = "md" }: BookCoverProps) {
         background: `linear-gradient(135deg, ${book.coverColor}, ${book.coverColor}cc)`,
         borderRadius: "2px 6px 6px 2px",
       }}
+      data-testid={`book-cover-color-${book.id}`}
     >
       {/* Spine shadow */}
       <div
@@ -60,6 +75,7 @@ export function BookCover({ book, size = "md" }: BookCoverProps) {
       <div
         className={`px-1.5 py-0.5 rounded mb-2 ${s.titleSize} font-semibold tracking-wide`}
         style={{ background: "rgba(255,255,255,0.2)", color: "rgba(255,255,255,0.9)", fontFamily: "Inter, sans-serif" }}
+        data-testid={`book-cover-type-${book.id}`}
       >
         {typeInfo.label}
       </div>
@@ -69,6 +85,18 @@ export function BookCover({ book, size = "md" }: BookCoverProps) {
       >
         {book.title.slice(0, 12)}
       </div>
+      {book.isDemo && (
+        <div
+          className={`mt-1.5 px-1.5 py-0.5 rounded ${s.titleSize} font-medium`}
+          style={{
+            background: "rgba(255,255,255,0.15)",
+            color: "rgba(255,255,255,0.7)",
+            fontFamily: "Inter, sans-serif",
+          }}
+        >
+          示例
+        </div>
+      )}
     </div>
   );
 }

@@ -76,7 +76,23 @@ backend/           # FastAPI (Python)
 | POST | `/api/repos/{id}/fetch-readme` | Fetch README from GitHub |
 | GET | `/api/reading/progress/{repo_id}` | Get reading progress |
 | POST | `/api/reading/progress` | Update reading progress |
-| POST | `/api/agents/generate-chapter/{repo_id}` | Trigger CrewAI chapter generation |
+| POST | `/api/agents/generate-book/{repo_id}` | Trigger CrewAI book generation |
+| GET | `/api/books` | List generated books (join BookGeneration + Repo) |
+| GET | `/api/books/by-repo/{repo_id}` | Get book HTML content by repo ID |
+
+### Import flow
+
+```
+ImportDialog → POST /repos/add → POST /repos/{id}/fetch-readme → POST /agents/generate-book/{id}
+```
+
+The import dialog automatically triggers agent book generation after fetching the README. The agent runs in background — the book appears on the shelf immediately (status: `writing`) and content becomes available once generation completes (status: `done`).
+
+## Demo books
+
+The `bookData.ts` file contains 13 hardcoded **demo books** (百年孤独, 三体, 设计心理学, etc.) that ship with the prototype. All demo books have `isDemo: true` and render a "示例" badge on covers, cards, and the detail modal to distinguish them from real imported repos.
+
+Real imported books (via `ImportDialog`) get `isDemo: undefined` — no badge rendered.
 
 ## Design vs Implementation Gap
 

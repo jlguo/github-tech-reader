@@ -173,10 +173,11 @@ export function PptReader({ book }: PptReaderProps) {
   return (
     <div className="flex h-full" style={{ background: "#1a1a1a" }}>
       {/* Thumbnails */}
-      <div className="hidden sm:flex flex-col w-36 flex-shrink-0 overflow-y-auto py-3 px-2 gap-2" style={{ background: "#111" }}>
+      <div className="hidden sm:flex flex-col w-36 flex-shrink-0 overflow-y-auto py-3 px-2 gap-2" data-testid="ppt-reader-thumbnails" style={{ background: "#111" }}>
         {pptSlides.map((s, i) => (
           <button
             key={s.id}
+            data-testid={`ppt-reader-thumb-${i}`}
             onClick={() => setCurrent(i)}
             className="relative rounded overflow-hidden flex-shrink-0 transition-all"
             style={{
@@ -195,7 +196,7 @@ export function PptReader({ book }: PptReaderProps) {
       {/* Main slide */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Slide canvas */}
-        <div className="flex-1 flex items-center justify-center p-4 lg:p-8">
+        <div className="flex-1 flex items-center justify-center p-4 lg:p-8" data-testid="ppt-reader-slide">
           <div
             className="w-full rounded-xl overflow-hidden shadow-2xl"
             style={{ maxWidth: "800px", aspectRatio: "16/9" }}
@@ -212,6 +213,7 @@ export function PptReader({ book }: PptReaderProps) {
           <button
             onClick={() => setCurrent(v => Math.max(0, v - 1))}
             disabled={current === 0}
+            data-testid="ppt-reader-prev"
             className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm disabled:opacity-30 transition-colors hover:bg-white/10"
             style={{ color: "#aaa", fontFamily: "Inter, sans-serif" }}
           >
@@ -222,6 +224,7 @@ export function PptReader({ book }: PptReaderProps) {
             {pptSlides.map((_, i) => (
               <button
                 key={i}
+                data-testid={`ppt-reader-dot-${i}`}
                 onClick={() => setCurrent(i)}
                 className="rounded-full transition-all"
                 style={{
@@ -236,6 +239,7 @@ export function PptReader({ book }: PptReaderProps) {
           <button
             onClick={() => setCurrent(v => Math.min(pptSlides.length - 1, v + 1))}
             disabled={current === pptSlides.length - 1}
+            data-testid="ppt-reader-next"
             className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm disabled:opacity-30 transition-colors hover:bg-white/10"
             style={{ color: "#aaa", fontFamily: "Inter, sans-serif" }}
           >

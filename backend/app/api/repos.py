@@ -104,7 +104,11 @@ async def add_repo(body: RepoAddRequest, db: AsyncSession = Depends(get_db)):
     if existing:
         raise HTTPException(status_code=409, detail="Repo already in shelf")
 
-    info = await fetch_repo_info(body.full_name)
+    try:
+        info = await fetch_repo_info(body.full_name)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
     if not info:
         raise HTTPException(status_code=404, detail="Repo not found on GitHub")
 

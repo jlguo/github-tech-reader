@@ -1,21 +1,22 @@
-import { BookOpen, Clock, Heart, Search, Plus } from "lucide-react";
+import { BookOpen, Clock, Heart, Plus } from "lucide-react";
 
 interface MobileNavProps {
   activeSection: string;
   onSectionChange: (section: string) => void;
+  onImport?: () => void;
 }
 
 const navItems = [
   { id: "shelf", label: "书架", icon: BookOpen },
   { id: "recent", label: "最近", icon: Clock },
-  { id: "search", label: "搜索", icon: Search },
   { id: "favorites", label: "收藏", icon: Heart },
   { id: "add", label: "导入", icon: Plus },
 ];
 
-export function MobileNav({ activeSection, onSectionChange }: MobileNavProps) {
+export function MobileNav({ activeSection, onSectionChange, onImport }: MobileNavProps) {
   return (
     <nav
+      data-testid="mobile-nav"
       className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-around px-2 pb-safe"
       style={{
         background: "var(--primary)",
@@ -29,7 +30,8 @@ export function MobileNav({ activeSection, onSectionChange }: MobileNavProps) {
         return (
           <button
             key={id}
-            onClick={() => onSectionChange(id)}
+            data-testid={`mobile-nav-${id}`}
+            onClick={() => id === "add" ? onImport?.() : onSectionChange(id)}
             className="flex flex-col items-center gap-1 min-w-0 px-3 py-1 rounded-xl transition-all"
             style={{
               color: isActive ? "var(--accent)" : "rgba(245,240,232,0.5)",

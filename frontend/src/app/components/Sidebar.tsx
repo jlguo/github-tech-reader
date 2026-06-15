@@ -1,4 +1,4 @@
-import { BookOpen, BookMarked, Lightbulb, GraduationCap, FileText, Smile, Heart, Clock, Plus, Search } from "lucide-react";
+import { BookOpen, BookMarked, Lightbulb, GraduationCap, FileText, Smile, Heart, Clock, Plus } from "lucide-react";
 import { BookCategory, categories } from "./bookData";
 
 const iconMap: Record<string, React.ComponentType<{ size?: number; strokeWidth?: number }>> = {
@@ -11,16 +11,18 @@ interface SidebarProps {
   activeSection: string;
   onSectionChange: (section: string) => void;
   onImport?: () => void;
+  categoryCounts: Record<string, number>;
 }
 
-export function Sidebar({ activeCategory, onCategoryChange, activeSection, onSectionChange, onImport }: SidebarProps) {
+export function Sidebar({ activeCategory, onCategoryChange, activeSection, onSectionChange, onImport, categoryCounts }: SidebarProps) {
   return (
     <aside
+      data-testid="sidebar"
       className="flex flex-col h-full"
       style={{ background: "var(--primary)", width: "220px", flexShrink: 0 }}
     >
       {/* Logo */}
-      <div className="px-6 pt-8 pb-6">
+      <div data-testid="sidebar-logo" className="px-6 pt-8 pb-6">
         <div className="flex items-center gap-2.5">
           <div
             className="w-8 h-8 rounded-lg flex items-center justify-center"
@@ -39,28 +41,6 @@ export function Sidebar({ activeCategory, onCategoryChange, activeSection, onSec
         </div>
       </div>
 
-      {/* Search shortcut */}
-      <div className="px-4 mb-4">
-        <button
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all"
-          style={{
-            background: "rgba(245,240,232,0.08)",
-            color: "rgba(245,240,232,0.6)",
-            fontFamily: "Inter, sans-serif",
-            border: "1px solid rgba(245,240,232,0.1)",
-          }}
-        >
-          <Search size={13} />
-          <span>搜索书籍...</span>
-          <kbd
-            className="ml-auto text-xs px-1 rounded"
-            style={{ background: "rgba(245,240,232,0.1)", color: "rgba(245,240,232,0.4)", fontFamily: "Inter, sans-serif", fontSize: "0.65rem" }}
-          >
-            ⌘K
-          </kbd>
-        </button>
-      </div>
-
       {/* Sections */}
       <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto">
         <div className="mb-2 px-3 text-xs font-semibold uppercase tracking-widest" style={{ color: "rgba(245,240,232,0.35)", fontFamily: "Inter, sans-serif" }}>
@@ -74,6 +54,7 @@ export function Sidebar({ activeCategory, onCategoryChange, activeSection, onSec
         ].map(({ id, label, icon: Icon }) => (
           <button
             key={id}
+            data-testid={`sidebar-nav-${id}`}
             onClick={() => onSectionChange(id)}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all text-left"
             style={{
@@ -98,9 +79,11 @@ export function Sidebar({ activeCategory, onCategoryChange, activeSection, onSec
         {categories.map(cat => {
           const Icon = iconMap[cat.icon];
           const isActive = activeSection === "shelf" && activeCategory === cat.id;
+          const count = categoryCounts[cat.id] ?? 0;
           return (
             <button
               key={cat.id}
+              data-testid={`sidebar-category-${cat.id}`}
               onClick={() => { onSectionChange("shelf"); onCategoryChange(cat.id as BookCategory); }}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all text-left"
               style={{
@@ -121,7 +104,7 @@ export function Sidebar({ activeCategory, onCategoryChange, activeSection, onSec
                   fontSize: "0.65rem",
                 }}
               >
-                {cat.count}
+                {count}
               </span>
             </button>
           );
@@ -131,6 +114,7 @@ export function Sidebar({ activeCategory, onCategoryChange, activeSection, onSec
       {/* Add book */}
       <div className="p-4">
         <button
+          data-testid="sidebar-import"
           onClick={onImport}
           className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all"
           style={{
@@ -145,14 +129,14 @@ export function Sidebar({ activeCategory, onCategoryChange, activeSection, onSec
       </div>
 
       {/* User */}
-      <div className="px-4 pb-6">
+      <div data-testid="sidebar-user" className="px-4 pb-6">
         <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg" style={{ background: "rgba(245,240,232,0.06)" }}>
           <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold" style={{ background: "var(--accent)", color: "white", fontFamily: "Inter, sans-serif" }}>
             李
           </div>
           <div>
             <div className="text-xs font-medium" style={{ color: "var(--primary-foreground)", fontFamily: "Inter, sans-serif" }}>李明</div>
-            <div className="text-xs" style={{ color: "rgba(245,240,232,0.4)", fontFamily: "Inter, sans-serif" }}>共 {categories[0].count} 本书</div>
+             <div className="text-xs" style={{ color: "rgba(245,240,232,0.4)", fontFamily: "Inter, sans-serif" }}>共 {(categoryCounts["all"] ?? 0)} 本书</div>
           </div>
         </div>
       </div>
