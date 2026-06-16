@@ -1,0 +1,46 @@
+# ────────────────────────────────────────────────
+# Docker Compose — Dev Mode (Hot Reload)
+# ────────────────────────────────────────────────
+# Usage:
+#   docker compose -f docker-compose.dev.yml up --build
+#
+# What's different from prod:
+#   • Backend: --reload flag, code mounted as volume
+#   • Frontend: Vite dev server with HMR (instead of nginx)
+#   • Both services rebuild on code changes
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/index.html:/app/index.html
+      - ./frontend/vite.config.ts:/app/vite.config.ts
+    environment:
+      - VITE_API_BASE_URL=/api
+      - VITE_PROXY_API_TARGET=http://backend:8000
+    depends_on:
+      - backend
+
+  backend:
+    extends:
+      file: docker-compose.yml
+      service: backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/pyproject.toml:/app/pyproject.toml
+      - backend_data:/app/data
+    env_file:
+      - ./backend/.env
+
+volumes:
+  backend_data:

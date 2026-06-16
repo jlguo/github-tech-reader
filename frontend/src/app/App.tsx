@@ -124,13 +124,44 @@ export default function App() {
 
   const handleGenerateBook = async (bookId: string) => {
     setBookList(prev => prev.map(b => b.id === bookId ? { ...b, genStatus: "writing", size: "创作中...", progress: 0 } : b));
+    setSelectedBook(prev => prev && prev.id === bookId ? { ...prev, genStatus: "writing", size: "创作中...", progress: 0 } : prev);
 
     try {
-      await fetch(`${API_BASE_URL}/repos/${bookId}/fetch-readme`, { method: "POST" });
-    } catch {}
+      const rResp = await fetch(`${API_BASE_URL}/repos/${bookId}/fetch-readme`, { method: "POST" });
+      if (!rResp.ok) {
+        const err = await rResp.json().catch(() => ({ detail: "README not available" }));
+        throw new Error(err.detail || "Failed to fetch README");
+      }
 
-    fetch(`${API_BASE_URL}/agents/generate-book/${bookId}`, { method: "POST" }).catch(() => {});
+      const gResp = await fetch(`${API_BASE_URL}/agents/generate-book/${bookId}`, { method: "POST" });
+      if (!gResp.ok) {
+        const err = await gResp.json().catch(() => ({ detail: "Book generation failed" }));
+        throw new Error(err.detail || "Failed to start book generation");
+      }
+    } catch (e: any) {
+      const errorMsg = e.message || "生成失败";
+      setBookList(prev => prev.map(b => b.id === bookId ? {
+        ...b,
+        genStatus: "failed",
+        size: errorMsg,
+        progress: 0,
+      } : b));
+      setSelectedBook(prev => prev && prev.id === bookId ? {
+        ...prev,
+        genStatus: "failed",
+        size: errorMsg,
+        progress: 0,
+      } : prev);
+    }
   };
+
+  useEffect(() => {
+    if (!selectedBook) return;
+    const latest = bookList.find(b => b.id === selectedBook.id);
+    if (latest && (latest.genStatus !== selectedBook.genStatus || latest.size !== selectedBook.size || latest.progress !== selectedBook.progress)) {
+      setSelectedBook({ ...latest });
+    }
+  }, [bookList, selectedBook?.id]);
 
   const filteredBooks = useMemo(() => {
     let result = bookList;

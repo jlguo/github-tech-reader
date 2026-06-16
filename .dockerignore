@@ -1,0 +1,13 @@
+node_modules/
+.pnpm-store/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+.DS_Store
+.idea/
+.vscode/
+frontend/dist/
+backend/data/

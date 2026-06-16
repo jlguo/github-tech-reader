@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Data (mounted as volume)
+data/
+
+# IDE & OS
+.idea/
+.vscode/
+.DS_Store
+
+# Git
+.git/
+.gitignore
+
+# Env
+.env
+
+# Tests (not needed in prod image)
+tests/
