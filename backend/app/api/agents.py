@@ -1,4 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+import asyncio
+import json
+
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from datetime import datetime
@@ -7,6 +11,7 @@ from app.core.database import get_db, async_session
 from app.models.repo import Repo, ContentSection, BookGeneration
 from app.api.schemas import BookGenerationStatusResponse
 from app.agents.crew import generate_book_cover, generate_book_content
+from app.events import publish, subscribe, unsubscribe
 
 router = APIRouter()
 
@@ -35,6 +40,13 @@ async def _status_updater(repo_id: str):
                     gen.outline = {"chapters": outline}
                 gen.updated_at = datetime.utcnow()
                 await session.commit()
+
+        await publish(repo_id, {
+            "status": status,
+            "current_phase": phase,
+            "total_chapters": gen.total_chapters if gen else total_chapters,
+            "completed_chapters": gen.completed_chapters if gen else completed_chapters,
+        })
     return update
 
 
@@ -115,6 +127,13 @@ async def _run_book_pipeline(
                 gen.updated_at = datetime.utcnow()
                 await session.commit()
 
+        await publish(repo_id, {
+            "status": "writing",
+            "current_phase": "writing",
+            "total_chapters": len(outline),
+            "completed_chapters": 0,
+        })
+
         content_result = await generate_book_content(
             repo_name, outline, snapshot, update_status
         )
@@ -156,6 +175,13 @@ async def _run_book_pipeline(
 
             await session.commit()
 
+        await publish(repo_id, {
+            "status": "done",
+            "current_phase": "done",
+            "total_chapters": len(outline),
+            "completed_chapters": len(chapters),
+        })
+
     except Exception as e:
         async with async_session() as session:
             gen_result = await session.execute(
@@ -167,6 +193,13 @@ async def _run_book_pipeline(
                 gen.error_log = str(e)
                 gen.updated_at = datetime.utcnow()
                 await session.commit()
+
+        await publish(repo_id, {
+            "status": "failed",
+            "current_phase": None,
+            "total_chapters": 0,
+            "completed_chapters": 0,
+        })
 
 
 @router.get("/book-status/{repo_id}", response_model=BookGenerationStatusResponse)
@@ -186,3 +219,44 @@ async def get_book_status(repo_id: str, db: AsyncSession = Depends(get_db)):
             updated_at=datetime.utcnow(),
         )
     return gen
+
+
+@router.get("/book-status/{repo_id}/stream")
+async def stream_book_status(repo_id: str, request: Request):
+    q = await subscribe(repo_id)
+
+    async def event_generator():
+        try:
+            async with async_session() as session:
+                result = await session.execute(
+                    select(BookGeneration).where(BookGeneration.repo_id == repo_id)
+                )
+                gen = result.scalar()
+                if gen:
+                    yield f"data: {json.dumps({
+                        'status': gen.status,
+                        'current_phase': gen.current_phase,
+                        'total_chapters': gen.total_chapters,
+                        'completed_chapters': gen.completed_chapters,
+                    })}\n\n"
+
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    message = await asyncio.wait_for(q.get(), timeout=25)
+                    yield f"data: {message}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+        finally:
+            unsubscribe(repo_id, q)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

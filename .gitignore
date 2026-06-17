@@ -15,6 +15,11 @@ uv.lock
 
 # Database
 backend/data/*.db
+backend/data/uploads/
+
+# Dev artifacts
+.playwright-mcp/
+.sisyphus/
 
 # Environment
 .env

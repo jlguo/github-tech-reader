@@ -1,3 +1,6 @@
+import os
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
@@ -6,6 +9,7 @@ from datetime import datetime
 
 from app.core.database import get_db
 from app.models.repo import Repo, BookGeneration, ContentSection
+from app.models.imported_book import ImportedBook
 from app.api.schemas import BookListItem, BookContentResponse, SectionResponse, BookUpdateRequest
 
 router = APIRouter()
@@ -20,7 +24,7 @@ async def list_books(
     statuses = (
         [s.strip() for s in status.split(",") if s.strip()]
         if status
-        else ["pending", "fetching", "planning", "cover", "writing", "reviewing", "publishing", "done"]
+        else ["pending", "fetching", "planning", "cover", "writing", "reviewing", "publishing", "done", "ready"]
     )
 
     query = (
@@ -50,12 +54,40 @@ async def list_books(
             language=repo.language,
             html_url=repo.html_url,
             status=gen.status if is_book else "no_book",
+            source_type="github",
+            file_type="html",
             chapter_count=gen.total_chapters if gen else 0,
             completed_chapters=gen.completed_chapters if gen else 0,
             current_phase=gen.current_phase if gen else None,
             created_at=gen.created_at if gen else repo.added_at,
             updated_at=gen.updated_at if gen else repo.added_at,
         ))
+
+    imported_query = select(ImportedBook)
+    if search:
+        imported_query = imported_query.where(
+            (ImportedBook.title.ilike(like)) | (ImportedBook.author.ilike(like))
+        )
+    imported_query = imported_query.order_by(ImportedBook.added_at.desc())
+    imported_result = await db.execute(imported_query)
+    for ib in imported_result.scalars():
+        books.append(BookListItem(
+            repo_id="",
+            book_id=ib.id,
+            title=ib.title,
+            author=ib.author,
+            description=ib.description,
+            language=None,
+            html_url=ib.original_url or "",
+            status="ready",
+            source_type=ib.source_type,
+            file_type=ib.file_type,
+            chapter_count=0,
+            completed_chapters=0,
+            created_at=ib.added_at,
+            updated_at=ib.added_at,
+        ))
+
     return books
 
 
@@ -67,37 +99,46 @@ async def get_book_content(book_id: str, db: AsyncSession = Depends(get_db)):
         .where(BookGeneration.id == book_id)
     )
     gen = result.scalar()
-    if not gen:
-        raise HTTPException(status_code=404, detail="Book not found")
-
-    chapters_result = await db.execute(
-        select(ContentSection)
-        .where(
-            ContentSection.repo_id == gen.repo_id,
-            ContentSection.section_type == "book_chapter",
-        )
-        .order_by(ContentSection.chapter_number)
-    )
-    chapters = chapters_result.scalars().all()
-
-    return BookContentResponse(
-        book_id=gen.id,
-        title=gen.repo.name if gen.repo else "Unknown",
-        html_content=gen.html_output or "",
-        cover_html=gen.cover_html,
-        chapters=[
-            SectionResponse(
-                id=c.id,
-                section_type=c.section_type,
-                title=c.title,
-                content=c.content,
-                order_index=c.order_index,
-                metadata_=c.metadata_,
-                created_at=c.created_at,
+    if gen:
+        chapters_result = await db.execute(
+            select(ContentSection)
+            .where(
+                ContentSection.repo_id == gen.repo_id,
+                ContentSection.section_type == "book_chapter",
             )
-            for c in chapters
-        ],
+            .order_by(ContentSection.chapter_number)
+        )
+        chapters = chapters_result.scalars().all()
+        return BookContentResponse(
+            book_id=gen.id,
+            title=gen.repo.name if gen.repo else "Unknown",
+            html_content=gen.html_output or "",
+            cover_html=gen.cover_html,
+            chapters=[
+                SectionResponse(
+                    id=c.id, section_type=c.section_type,
+                    title=c.title, content=c.content,
+                    order_index=c.order_index,
+                    metadata_=c.metadata_, created_at=c.created_at,
+                )
+                for c in chapters
+            ],
+        )
+
+    imported_result = await db.execute(
+        select(ImportedBook).where(ImportedBook.id == book_id)
     )
+    imported = imported_result.scalar()
+    if imported:
+        return BookContentResponse(
+            book_id=imported.id,
+            title=imported.title,
+            html_content=imported.content_text or "",
+            cover_html=None,
+            chapters=[],
+        )
+
+    raise HTTPException(status_code=404, detail="Book not found")
 
 
 @router.get("/books/by-repo/{repo_id}", response_model=BookContentResponse)
@@ -207,7 +248,6 @@ async def update_book(
 
 @router.delete("/books/{repo_id}")
 async def delete_book(repo_id: str, db: AsyncSession = Depends(get_db)):
-    # Frontend sends repo_id — look up BookGeneration by repo_id
     gen_result = await db.execute(
         select(BookGeneration).where(BookGeneration.repo_id == repo_id)
     )
@@ -219,13 +259,82 @@ async def delete_book(repo_id: str, db: AsyncSession = Depends(get_db)):
         )
         await db.delete(gen)
 
-    # Also delete the Repo itself
+    repo_result = await db.execute(select(Repo).where(Repo.id == repo_id))
+    repo = repo_result.scalar()
+    if repo:
+        await db.delete(repo)
+        await db.commit()
+        return {"ok": True}
+
+    import_result = await db.execute(
+        select(ImportedBook).where(ImportedBook.id == repo_id)
+    )
+    imported = import_result.scalar()
+    if imported:
+        if imported.file_path and os.path.isfile(imported.file_path):
+            os.remove(imported.file_path)
+        await db.delete(imported)
+        await db.commit()
+        return {"ok": True}
+
+
+
+@router.patch("/books/{repo_id}")
+async def update_book(
+    repo_id: str,
+    body: BookUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(BookGeneration)
+        .options(selectinload(BookGeneration.repo))
+        .where(BookGeneration.repo_id == repo_id)
+    )
+    gen = result.scalar()
+
+    if gen:
+        if body.status is not None:
+            if body.status == "pending":
+                raise HTTPException(status_code=400, detail="Cannot set status to 'pending'")
+            gen.status = body.status
+            gen.updated_at = datetime.utcnow()
+
+        if gen.repo:
+            if body.description is not None:
+                gen.repo.description = body.description
+            if body.category is not None:
+                gen.repo.category = body.category
+            if body.tags is not None:
+                gen.repo.tags = body.tags
+            if body.is_favorite is not None:
+                gen.repo.is_favorite = body.is_favorite
+
+        await db.commit()
+        return {
+            "ok": True,
+            "book_id": gen.id,
+            "status": gen.status,
+            "description": gen.repo.description if gen.repo else None,
+        }
+
     repo_result = await db.execute(select(Repo).where(Repo.id == repo_id))
     repo = repo_result.scalar()
     if not repo:
         raise HTTPException(status_code=404, detail="Book not found")
 
-    repo_name = repo.full_name
-    await db.delete(repo)
+    if body.description is not None:
+        repo.description = body.description
+    if body.category is not None:
+        repo.category = body.category
+    if body.tags is not None:
+        repo.tags = body.tags
+    if body.is_favorite is not None:
+        repo.is_favorite = body.is_favorite
+
     await db.commit()
-    return {"ok": True, "deleted": repo_id, "repo": repo_name}
+    return {
+        "ok": True,
+        "book_id": repo_id,
+        "status": "no_book",
+        "description": repo.description,
+    }

@@ -24,6 +24,7 @@ async def get_db() -> AsyncSession:
 
 async def init_db():
     import app.models.repo
+    import app.models.imported_book
 
     parsed = urlparse(settings.database_url)
     db_path = Path(parsed.path.lstrip("/"))

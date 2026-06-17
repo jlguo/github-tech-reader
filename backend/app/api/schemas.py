@@ -100,6 +100,8 @@ class BookListItem(BaseModel):
     language: str | None
     html_url: str
     status: str
+    source_type: str = "github"
+    file_type: str | None = None
     chapter_count: int
     completed_chapters: int = 0
     current_phase: str | None = None

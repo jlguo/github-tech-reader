@@ -2,6 +2,17 @@ import { X, BookOpen, Heart, Share2, Download, Trash2, Tag, Calendar, HardDrive,
 import { useState } from "react";
 import { Book, typeConfig } from "./bookData";
 import { BookCover } from "./BookCover";
+import { useBookStatus, isProducing as checkIsProducing } from "../hooks/useBookStatus";
+
+const PHASE_LABELS: Record<string, string> = {
+  pending: "准备生成...",
+  fetching: "正在获取仓库文件...",
+  planning: "正在规划章节...",
+  cover: "正在设计封面...",
+  writing: "正在撰写内容...",
+  reviewing: "正在审核内容...",
+  publishing: "正在排版发布...",
+};
 
 interface BookDetailModalProps {
   book: Book | null;
@@ -19,7 +30,11 @@ export function BookDetailModal({ book, onClose, onToggleFavorite, onRead, onDel
   const [isEditing, setIsEditing] = useState(false);
   const [editDesc, setEditDesc] = useState("");
   const typeInfo = typeConfig[book.type];
-  const isProducing = book.genStatus === "writing";
+
+  const liveStatus = useBookStatus(!book.isDemo ? book.id : null);
+  const effectiveStatus = liveStatus?.status ?? book.genStatus;
+  const effectivePhase = liveStatus?.current_phase ?? undefined;
+  const producing = checkIsProducing(effectiveStatus);
 
   return (
     <div
@@ -84,15 +99,15 @@ export function BookDetailModal({ book, onClose, onToggleFavorite, onRead, onDel
             <div className="flex gap-2 flex-wrap">
               <button
                 onClick={() => onRead?.(book)}
-                disabled={isProducing}
+                disabled={producing}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{ background: "var(--primary)", color: "var(--primary-foreground)", fontFamily: "Inter, sans-serif" }}
                 data-testid="book-detail-read"
               >
                 <BookOpen size={14} />
-                {isProducing ? "生成中..." : book.progress === 0 ? "开始阅读" : book.progress === 100 ? "重新阅读" : "继续阅读"}
+                {producing ? (effectivePhase && PHASE_LABELS[effectivePhase]) || "生成中..." : book.progress === 0 ? "开始阅读" : book.progress === 100 ? "重新阅读" : "继续阅读"}
               </button>
-              {!book.isDemo && (book.genStatus === "no_book" || book.genStatus === undefined || book.genStatus === "failed") && (
+              {!book.isDemo && !producing && (effectiveStatus === "no_book" || effectiveStatus === undefined || effectiveStatus === "failed") && (
                 <button
                   onClick={() => onGenerate?.(book.id)}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all"
@@ -100,7 +115,7 @@ export function BookDetailModal({ book, onClose, onToggleFavorite, onRead, onDel
                   data-testid="book-detail-generate"
                 >
                   <Sparkles size={14} />
-                  {book.genStatus === "failed" ? "重新生成" : "生成电子书"}
+                  {effectiveStatus === "failed" ? "重新生成" : "生成电子书"}
                 </button>
               )}
               <button

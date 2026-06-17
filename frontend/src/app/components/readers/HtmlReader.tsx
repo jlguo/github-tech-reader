@@ -57,10 +57,15 @@ export function HtmlReader({ book }: HtmlReaderProps) {
         .then(r => r.json())
         .then(d => { setRealHtml(d.html_content); setLoaded(true); })
         .catch(() => setLoaded(true));
+    } else if (book.category === "documents" && !book.isDemo) {
+      fetch(`${API_BASE_URL}/books/${book.id}`)
+        .then(r => r.json())
+        .then(d => { setRealHtml(d.html_content); setLoaded(true); })
+        .catch(() => setLoaded(true));
     } else {
       setLoaded(true);
     }
-  }, [book.id, book.category]);
+  }, [book.id, book.category, book.isDemo]);
 
   const displayHtml = realHtml || mockContent.html;
   const anchoredHtml = injectAnchorIds(displayHtml);

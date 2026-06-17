@@ -6,8 +6,8 @@ class Settings(BaseSettings):
     app_name: str = "GitHub Tech Reader"
     debug: bool = True
 
-    # Database
-    database_url: str = f"sqlite+aiosqlite:///{Path(__file__).parent.parent.parent / 'data' / 'reader.db'}"
+    # Data directory — set via env for containers, auto-detected otherwise
+    data_dir: str = ""
 
     # GitHub
     github_token: str = ""
@@ -42,9 +42,15 @@ class Settings(BaseSettings):
 
     port: int = 8000
 
+    @property
+    def database_url(self) -> str:
+        data = self.data_dir or str(Path(__file__).parent.parent.parent / "data")
+        return f"sqlite+aiosqlite:///{data}/reader.db"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+        extra = "ignore"
 
 
 settings = Settings()

@@ -35,34 +35,50 @@ export default function App() {
       fetch(`${API_BASE_URL}/books`)
         .then(r => r.json())
         .then((books: Array<{
-          repo_id: string; title: string; author: string;
+          repo_id: string; book_id: string; title: string; author: string;
           description: string | null; language: string | null;
           html_url: string; status: string; chapter_count: number;
+          source_type: string; file_type: string | null;
         }>) => {
-          const generated: Book[] = books.map(b => ({
-            id: b.repo_id,
-            title: b.title,
-            author: b.author,
-            cover: `https://opengraph.githubassets.com/1/${b.author}/${b.title}`,
-            coverColor: toColor(b.title),
-            type: "html" as BookType,
-            category: "generated" as BookCategory,
-            progress: b.status === "done" ? 100 : 0,
-            totalPages: b.chapter_count,
-            currentPage: 0,
-            addedDate: new Date().toISOString().split("T")[0],
-            size: b.status === "done" ? `${b.chapter_count} 章` : b.status === "no_book" ? "未生成" : "创作中...",
-            description: b.description || "",
-            tags: b.language ? [b.language] : [],
-            isFavorite: false,
-            genStatus: b.status as "writing" | "done" | "failed" | "no_book" | undefined,
-          }));
+          const generated: Book[] = books.map(b => {
+            const isGithub = b.source_type === "github";
+            const bookId = isGithub ? b.repo_id : b.book_id;
+            const bookType = (b.file_type || "html") as BookType;
+            const category = isGithub ? "generated" as BookCategory : "documents" as BookCategory;
+            const cover = isGithub
+              ? `https://opengraph.githubassets.com/1/${b.author}/${b.title}`
+              : `https://placehold.co/200x280/${toColor(b.title).replace(/[^a-f0-9]/gi, "").slice(0, 6)}/fff?text=${encodeURIComponent(b.title.slice(0, 4))}`;
+            const size = isGithub
+              ? (b.status === "done" ? `${b.chapter_count} 章` : b.status === "no_book" ? "未生成" : "创作中...")
+              : (b.file_type || "html").toUpperCase();
+
+            return {
+              id: bookId,
+              title: b.title,
+              author: b.author,
+              cover,
+              coverColor: toColor(b.title),
+              type: bookType,
+              category,
+              progress: 0,
+              totalPages: b.chapter_count,
+              currentPage: 0,
+              addedDate: new Date().toISOString().split("T")[0],
+              size,
+              description: b.description || "",
+              tags: b.language ? [b.language] : [],
+              isFavorite: false,
+              genStatus: b.status as "pending" | "fetching" | "planning" | "cover" | "writing" | "reviewing" | "publishing" | "done" | "failed" | "no_book" | undefined,
+              sourceType: b.source_type as "github" | "file" | "url",
+            };
+          });
           setBookList(prev => {
             const existing = new Set(prev.map(b => b.id));
             const newBooks = generated.filter(b => !existing.has(b.id));
             const updated = prev.map(pb => {
               const gen = generated.find(g => g.id === pb.id);
-              return gen ? { ...pb, ...gen } : pb;
+              if (!gen) return pb;
+              return { ...gen, progress: pb.progress, currentPage: pb.currentPage };
             });
             return [...newBooks, ...updated];
           });
@@ -75,23 +91,32 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleBookImported = (info: { id: string; title: string; author: string }) => {
+  const handleBookImported = (info: { id: string; title: string; author: string; sourceType: string; fileType: string }) => {
+    const isGithub = info.sourceType === "github";
+    const bookType = (info.fileType || "html") as BookType;
+    const category = isGithub ? "generated" as BookCategory : "documents" as BookCategory;
+    const cover = isGithub
+      ? `https://opengraph.githubassets.com/1/${info.author}/${info.title}`
+      : `https://placehold.co/200x280/${toColor(info.title).replace(/[^a-f0-9]/gi, "").slice(0, 6)}/fff?text=${encodeURIComponent(info.title.slice(0, 4))}`;
+
     const newBook: Book = {
       id: info.id,
       title: info.title,
       author: info.author,
-      cover: `https://opengraph.githubassets.com/1/${info.author}/${info.title}`,
+      cover,
       coverColor: toColor(info.title),
-      type: "html" as BookType,
-      category: "generated" as BookCategory,
+      type: bookType,
+      category,
       progress: 0,
       totalPages: 0,
       currentPage: 0,
       addedDate: new Date().toISOString().split("T")[0],
-      size: "0 章",
+      size: isGithub ? "0 章" : (info.fileType || "html").toUpperCase(),
       description: "",
       tags: [],
       isFavorite: false,
+      genStatus: isGithub ? "pending" : "no_book",
+      sourceType: info.sourceType as "github" | "file" | "url",
     };
     setBookList(prev => {
       if (prev.find(b => b.id === info.id)) return prev;

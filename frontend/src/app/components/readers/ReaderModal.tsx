@@ -7,6 +7,7 @@ import { PptReader } from "./PptReader";
 import { ExcelReader } from "./ExcelReader";
 import { MangaReader } from "./MangaReader";
 import { HtmlReader } from "./HtmlReader";
+import { FileReader } from "./FileReader";
 
 interface ReaderModalProps {
   book: Book | null;
@@ -14,6 +15,7 @@ interface ReaderModalProps {
 }
 
 function ReaderContent({ book }: { book: Book }) {
+  if (book.sourceType === "file") return <FileReader book={book} />;
   if (book.category === "manga") return <MangaReader book={book} />;
   switch (book.type) {
     case "epub":
@@ -35,6 +37,7 @@ function ReaderContent({ book }: { book: Book }) {
 }
 
 function getReaderBg(book: Book) {
+  if (book.sourceType === "file") return "#faf6ed";
   switch (book.type) {
     case "pdf": return "#4a4a4a";
     case "ppt": return "#1a1a1a";

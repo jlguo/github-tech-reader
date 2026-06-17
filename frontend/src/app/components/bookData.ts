@@ -19,7 +19,8 @@ export interface Book {
   tags: string[];
   isFavorite: boolean;
   isDemo?: boolean;
-  genStatus?: "writing" | "done" | "failed" | "no_book";
+  genStatus?: "pending" | "fetching" | "planning" | "cover" | "writing" | "reviewing" | "publishing" | "done" | "failed" | "no_book";
+  sourceType?: "github" | "file" | "url";
 }
 
 export const books: Book[] = [
