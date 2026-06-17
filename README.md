@@ -1,19 +1,21 @@
 # 电子书架 · Cloud Shelf
 
-将 GitHub 技术仓库变成一本本可以翻阅的「电子书」——收藏、整理、阅读你的技术书架。
+将技术内容变成一本本可以翻阅的「电子书」——收藏、整理、阅读你的数字书架。
 
-Import GitHub repos as "books" on a digital shelf — organize, track reading progress, and read AI-generated chapter summaries.
+Import GitHub repos, upload files, or fetch web pages as "books" on a digital shelf — organize, track reading progress, and read AI-generated chapter summaries.
 
 ---
 
 ## 功能 · Features
 
 - **📚 书架界面** — 网格/列表视图，分类筛选，搜索，收藏，最近阅读
-- **📥 一键导入** — 输入 `owner/repo`（如 `facebook/react`），自动拉取仓库信息
-- **🤖 AI 书籍生成** — CrewAI 多智能体将代码仓库 README + 源码编排为章节式电子书
-- **📖 在线阅读** — 支持 HTML/Markdown 内容格式的在线翻阅
+- **📥 多类型导入** — GitHub 仓库 / 本地文件 (epub/pdf/txt/doc/ppt/xlsx/html) / 网页链接
+- **🤖 AI 书籍生成** — CrewAI 多智能体将 GitHub 仓库编排为章节式电子书
+- **📖 在线阅读** — 支持 HTML/Markdown 内容格式，PDF/图片内嵌 iframe 阅读
+- **📊 实时状态** — SSE 推送书籍生成进度，轮询兜底
 - **📊 阅读进度** — 自动记录每本书的阅读进度
 - **🐳 Docker 部署** — 多服务编排，支持热重载开发模式，开箱即用
+- **🚀 一键启动** — `./run.sh` 本地双服务并行启动
 
 ---
 
@@ -40,17 +42,23 @@ Import GitHub repos as "books" on a digital shelf — organize, track reading pr
 ### 本地开发
 
 ```sh
+# 一键启动（推荐）
+./run.sh                    # 后端 :8000 + 前端 :5173
+
+# 或手动分别启动
 # 1. 后端
 cd backend
-cp .env.example .env   # 编辑 .env，填入 LLM_API_KEY
+cp .env.example .env       # 编辑 .env，填入 LLM_API_KEY
 uv sync
 uv run uvicorn app.main:app --reload --port 8000
 
 # 2. 前端（新终端）
 cd frontend
 pnpm install
-pnpm dev                # http://localhost:5173
+pnpm dev                    # http://localhost:5173
 ```
+
+配置环境变量 `backend/.env` 后再运行。`./run.sh` 自动处理数据目录（本地默认 `backend/data/`，容器可通过 `DATA_DIR` 指定）。
 
 ### Docker 快速启动
 
@@ -131,7 +139,7 @@ BOOK_MAX_CHAPTERS=16                        # 最大章节数
 LLM_MAX_PARALLEL_CHAPTERS=3                 # 并行生成章节数
 
 # 后端配置
-DATABASE_URL=sqlite+aiosqlite:///data/reader.db
+DATA_DIR=                                    # 数据目录（留空 = 自动检测 backend/data/）
 CORS_ORIGINS=["http://localhost:5173"]
 PORT=8000
 ```
@@ -152,16 +160,33 @@ PORT=8000
 | GET | `/api/reading/progress/{repo_id}` | 获取阅读进度 |
 | POST | `/api/reading/progress` | 更新阅读进度 |
 | POST | `/api/agents/generate-book/{repo_id}` | 触发 AI 书籍生成 |
-| GET | `/api/books` | 书籍列表（含生成状态） |
-| GET | `/api/books/by-repo/{repo_id}` | 获取书籍 HTML 内容 |
+| GET | `/api/agents/book-status/{repo_id}` | 查询生成状态（轮询） |
+| GET | `/api/agents/book-status/{repo_id}/stream` | SSE 实时状态推送 |
+| GET | `/api/books` | 书籍列表（含生成状态 + 导入书籍） |
+| GET | `/api/books/{book_id}` | 书籍内容（支持生成书 + 导入书） |
+| GET | `/api/books/by-repo/{repo_id}` | 获取 GitHub 书籍 HTML 内容 |
+| POST | `/api/imports/upload` | 上传文件（multipart） |
+| POST | `/api/imports/import-url` | 导入网页链接 |
+| GET | `/api/imports/{id}/file` | 获取上传文件（内嵌显示） |
+| GET | `/api/imports/{id}/content` | 获取网页内容 |
 
 ### 导入流程
 
+**GitHub 仓库：**
 ```
 ImportDialog → POST /repos/add → POST /repos/{id}/fetch-readme → POST /agents/generate-book/{id}
 ```
+导入后书籍立即出现在书架上（状态: `pending`），AI 生成过程中通过 SSE 实时推送状态（`fetching → planning → cover → writing → reviewing → publishing → done`）。
 
-导入后书籍立即出现在书架上（状态: `writing`），AI 生成完成后可读（状态: `done`）。
+**文件上传：**
+```
+ImportDialog (拖拽) → POST /imports/upload → 书籍立即可读 → 阅读时 GET /imports/{id}/file (内嵌 iframe)
+```
+
+**网页链接：**
+```
+ImportDialog (URL) → POST /imports/import-url → 抓取网页内容 → 书籍立即可读（HtmlReader）
+```
 
 ---
 
@@ -192,8 +217,8 @@ LLM_API_KEY=sk-xxx
 LLM_BASE_URL=https://api.deepseek.com
 LLM_MODEL=deepseek-v4-flash
 GITHUB_TOKEN=ghp_xxx
-DATABASE_URL=sqlite+aiosqlite:///data/reader.db
 CORS_ORIGINS=["http://服务器IP"]
+DATA_DIR=
 PORT=8000
 EOF'
 ```
@@ -235,30 +260,34 @@ ssh -N -L 8080:localhost:80 remote-vps
 
 ```
 github-tech-reader-v2/
-├── Dockerfile                    # 多阶段构建 (生产用，单容器)
-├── docker-compose.yml            # 生产部署 (frontend + backend)
-├── docker-compose.dev.yml        # 开发模式 (热重载)
-├── frontend/                     # React SPA
-│   ├── Dockerfile                # Nginx 生产镜像
-│   ├── Dockerfile.dev            # Vite dev server 镜像
-│   ├── nginx.conf                # Nginx 反向代理配置
+├── run.sh                         # 一键启动脚本（本地开发）
+├── Dockerfile                     # 多阶段构建 (生产用，单容器)
+├── docker-compose.yml             # 生产部署 (frontend + backend)
+├── docker-compose.dev.yml         # 开发模式 (热重载)
+├── frontend/                      # React SPA
+│   ├── Dockerfile                 # Nginx 生产镜像
+│   ├── Dockerfile.dev             # Vite dev server 镜像
+│   ├── nginx.conf                 # Nginx 反向代理配置
 │   └── src/
-│       ├── app/                  # App 组件 & 页面
-│       ├── components/           # BookCard, Sidebar, ImportDialog, ReaderModal
-│       ├── components/ui/        # shadcn/ui 组件库
-│       ├── config/               # API 地址配置
-│       └── styles/               # Tailwind, 主题, 字体
-├── backend/                      # FastAPI
-│   ├── Dockerfile                # Python 生产镜像
-│   ├── pyproject.toml            # Python 依赖 (uv)
+│       ├── app/                   # App 组件 & 页面
+│       ├── components/            # BookCard, Sidebar, ImportDialog, ReaderModal
+│       ├── components/readers/    # EpubReader, PdfReader, HtmlReader, FileReader
+│       ├── components/ui/         # shadcn/ui 组件库
+│       ├── hooks/                 # useBookStatus (SSE + 轮询)
+│       ├── config/                # API 地址配置
+│       └── styles/                # Tailwind, 主题, 字体
+├── backend/                       # FastAPI
+│   ├── Dockerfile                 # Python 生产镜像
+│   ├── pyproject.toml             # Python 依赖 (uv)
 │   └── app/
-│       ├── main.py               # FastAPI 入口, CORS, 生命周期
-│       ├── core/                 # 配置, 数据库引擎
-│       ├── models/               # SQLAlchemy ORM (Repo, BookGeneration, ContentSection)
-│       ├── api/                  # REST 端点 (repos, reading, agents, books)
-│       ├── services/             # GitHub API 客户端 (httpx)
-│       └── agents/               # CrewAI 多智能体 (书籍生成)
-└── docs/                         # Figma 设计原型
+│       ├── main.py                # FastAPI 入口, CORS, 生命周期
+│       ├── core/                  # 配置, 数据库引擎
+│       ├── models/                # SQLAlchemy ORM (Repo, BookGeneration, ImportedBook, ContentSection)
+│       ├── api/                   # REST 端点 (repos, reading, agents, books, imports)
+│       ├── services/              # GitHub API 客户端 (httpx)
+│       ├── events.py              # SSE 事件发布/订阅
+│       └── agents/                # CrewAI 多智能体 (书籍生成)
+└── docs/                          # Figma 设计原型
 ```
 
 ---
