@@ -2,7 +2,8 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { List } from "lucide-react";
 import { Book } from "../bookData";
 import { htmlContent as mockContent } from "./readerData";
-import { API_BASE_URL } from "../../../config/api";
+import { getDataService, type IDataService } from "../../../services/api";
+import { useReadingProgress } from "../../hooks/useReadingProgress";
 
 const SCROLL_DEBOUNCE_MS = 2000;
 
@@ -44,44 +45,66 @@ function injectAnchorIds(html: string): string {
   });
 }
 
+const CONTENT_CSS = `
+  :root{--bg:#f5f0e8;--fg:#2c1a0e;--primary:#5c3d1e;--accent:#c17f3a;--muted-fg:#7a6248;--muted:#ede5d4;--border:rgba(92,61,30,0.15)}
+  html,body{height:100%;margin:0;padding:0}
+  body{font-family:"Source Serif 4",serif;color:var(--fg);font-size:16px;line-height:1.85;max-width:720px;margin:0 auto;padding:2rem 1.5rem 4rem;background:var(--bg);scroll-behavior:smooth}
+  h1{font-family:"Playfair Display",serif;font-size:1.6rem;color:var(--primary);margin-top:0;padding-top:1rem}
+  h2{font-family:"Playfair Display",serif;font-size:1.2rem;color:var(--primary);margin-top:2.5rem;padding-top:0.5rem}
+  h3{font-family:"Playfair Display",serif;font-size:1rem;color:#8b5a2b;margin-top:2rem}
+  a{color:var(--accent)}
+  pre{background:var(--muted);padding:1rem;border-radius:8px;overflow-x:auto}
+  code{font-family:"Fira Code",monospace;font-size:0.9em}
+  img{max-width:100%;border-radius:8px}
+  blockquote{border-left:3px solid var(--accent);padding-left:1rem;margin-left:0;color:var(--muted-fg)}
+  table{width:100%;border-collapse:collapse;margin:1rem 0}
+  th,td{border:1px solid var(--border);padding:8px 12px;text-align:left}
+`;
+
 export function HtmlReader({ book }: HtmlReaderProps) {
   const [realHtml, setRealHtml] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [activeId, setActiveId] = useState("s0");
   const [showMobileToc, setShowMobileToc] = useState(false);
-  const contentRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [service, setService] = useState<IDataService | null>(null);
+  const { save } = useReadingProgress(book.id);
 
   useEffect(() => {
+    getDataService().then(setService);
+  }, []);
+
+  useEffect(() => {
+    if (!service) return;
+
     if (book.category === "generated") {
-      fetch(`${API_BASE_URL}/books/by-repo/${book.id}`)
-        .then(r => r.json())
+      service.getBookByRepo(book.id)
         .then(d => { setRealHtml(d.html_content); setLoaded(true); })
         .catch(() => setLoaded(true));
     } else if (book.category === "documents" && !book.isDemo) {
-      fetch(`${API_BASE_URL}/books/${book.id}`)
-        .then(r => r.json())
+      service.getBookContent(book.id)
         .then(d => { setRealHtml(d.html_content); setLoaded(true); })
         .catch(() => setLoaded(true));
     } else {
+      setRealHtml(typeof mockContent === 'string' ? mockContent : (mockContent as {html: string}).html);
       setLoaded(true);
     }
-  }, [book.id, book.category, book.isDemo]);
+  }, [service, book.id, book.category, book.isDemo]);
 
-  const displayHtml = realHtml || mockContent.html;
+  const displayHtml = realHtml || "";
   const anchoredHtml = injectAnchorIds(displayHtml);
   const tocItems = extractToc(displayHtml);
 
   const scrollToSection = useCallback((id: string) => {
     setActiveId(id);
     setShowMobileToc(false);
-    const iframe = contentRef.current?.querySelector("iframe");
-    if (!iframe?.contentDocument) return;
-    const el = iframe.contentDocument.getElementById(id);
+    const iframe = wrapperRef.current?.querySelector("iframe");
+    const el = iframe?.contentDocument?.getElementById(id);
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
   const handleContentLoad = useCallback(() => {
-    const iframe = contentRef.current?.querySelector("iframe");
+    const iframe = wrapperRef.current?.querySelector("iframe");
     if (!iframe?.contentDocument) return;
 
     const doc = iframe.contentDocument;
@@ -106,106 +129,107 @@ export function HtmlReader({ book }: HtmlReaderProps) {
       const maxScroll = doc.documentElement.scrollHeight - doc.documentElement.clientHeight;
       const position = maxScroll > 0 ? doc.documentElement.scrollTop / maxScroll : 0;
       const activeIdx = tocItems.findIndex(t => t.id === activeId);
-      const section = activeIdx >= 0 ? tocItems[activeIdx].title : null;
-      if (book.category === "generated") {
-        fetch(`${API_BASE_URL}/reading/progress`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ repo_id: book.id, section, position: Math.round(position * 100), completed: position > 0.95 }),
-        }).catch(() => {});
-      }
+      const sectionTitle = activeIdx >= 0 ? tocItems[activeIdx].title : null;
+
+      save({
+        percent: Math.round(position * 100),
+        completed: position > 0.95,
+        metadata: sectionTitle ? { sectionTitle } : {},
+      });
     };
 
     let timer: ReturnType<typeof setTimeout>;
     doc.addEventListener("scroll", () => { clearTimeout(timer); timer = setTimeout(onScroll, SCROLL_DEBOUNCE_MS); }, { passive: true });
 
     return () => { observer.disconnect(); clearTimeout(timer); };
-  }, [book.id, book.category, activeId, tocItems]);
+  }, [activeId, tocItems, save]);
+
+  const scopedHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${CONTENT_CSS}</style></head><body>${anchoredHtml}</body></html>`;
 
   if (!loaded) {
-    return <div className="flex items-center justify-center h-full" data-testid="html-reader-loading" style={{ color: "var(--muted-foreground)" }}>加载中...</div>;
+    return (
+      <div className="flex items-center justify-center h-full" style={{ background: "var(--background)", color: "var(--muted-foreground)" }}>
+        加载中...
+      </div>
+    );
   }
 
-  const scopedHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-    :root{--bg:#f5f0e8;--fg:#2c1a0e;--primary:#5c3d1e;--accent:#c17f3a;--muted-fg:#7a6248;--muted:#ede5d4;--border:rgba(92,61,30,0.15)}
-    html,body{height:100%;margin:0;padding:0}
-    body{font-family:"Source Serif 4",serif;color:var(--fg);font-size:16px;line-height:1.85;max-width:720px;margin:0 auto;padding:2rem 1.5rem 4rem;background:var(--bg);scroll-behavior:smooth}
-    h1{font-family:"Playfair Display",serif;font-size:1.6rem;color:var(--primary);margin-top:0;padding-top:1rem}
-    h2{font-family:"Playfair Display",serif;font-size:1.2rem;color:var(--primary);margin-top:2.5rem;padding-top:0.5rem}
-    h3{font-family:"Playfair Display",serif;font-size:1rem;color:#8b5a2b;margin-top:2rem}
-    a{color:var(--accent)}
-    pre{background:var(--muted);padding:1rem;border-radius:8px;overflow-x:auto}
-    code{font-family:"Fira Code",monospace;font-size:0.9em}
-    img{max-width:100%;border-radius:8px}
-    blockquote{border-left:3px solid var(--accent);padding-left:1rem;margin-left:0;color:var(--muted-fg)}
-    table{width:100%;border-collapse:collapse;margin:1rem 0}
-    th,td{border:1px solid var(--border);padding:8px 12px;text-align:left}
-  </style></head><body>${anchoredHtml}</body></html>`;
-
   return (
-    <div className="flex h-full relative">
-      {/* Desktop TOC sidebar */}
-      <aside className="hidden lg:block w-56 flex-shrink-0 overflow-y-auto border-r" data-testid="html-reader-toc" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
-        <div className="p-4 font-semibold text-sm" style={{ color: "var(--foreground)", fontFamily: "Playfair Display, serif" }}>
-          目录 ({tocItems.length} 节)
-        </div>
-        {tocItems.map((item) => (
-          <button
-            key={item.id}
-            data-testid={`html-reader-toc-${item.id}`}
-            style={tocItemStyle(item.level, item.id === activeId)}
-            onClick={() => scrollToSection(item.id)}
+    <div className="flex h-full" style={{ background: "var(--background)" }}>
+      {tocItems.length > 0 && (
+        <>
+          <aside
+            className="w-56 flex-shrink-0 border-r hidden lg:flex flex-col"
+            style={{ background: "var(--card)", borderColor: "var(--border)" }}
           >
-            {item.title}
-          </button>
-        ))}
-      </aside>
-
-      {/* Mobile TOC overlay */}
-      {showMobileToc && (
-        <div className="lg:hidden fixed inset-0 z-30 flex">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setShowMobileToc(false)} data-testid="html-reader-toc-backdrop" />
-          <aside className="relative w-64 flex-shrink-0 overflow-y-auto h-full z-40" data-testid="html-reader-toc-mobile" style={{ background: "var(--card)", borderRight: "1px solid var(--border)" }}>
-            <div className="p-4 font-semibold text-sm flex items-center justify-between" style={{ color: "var(--foreground)", fontFamily: "Playfair Display, serif" }}>
-              <span>目录 ({tocItems.length} 节)</span>
-              <button onClick={() => setShowMobileToc(false)} className="text-xs px-2 py-0.5 rounded" style={{ color: "var(--muted-foreground)", background: "var(--muted)" }}>
-                关闭
-              </button>
+            <div className="px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
+              <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--muted-foreground)", fontFamily: "Inter, sans-serif" }}>
+                目录 ({tocItems.length} 节)
+              </p>
             </div>
-            {tocItems.map((item) => (
-              <button
-                key={item.id}
-                data-testid={`html-reader-toc-${item.id}`}
-                style={tocItemStyle(item.level, item.id === activeId)}
-                onClick={() => scrollToSection(item.id)}
-              >
-                {item.title}
-              </button>
-            ))}
+            <div className="flex-1 overflow-y-auto py-2">
+              {tocItems.map(item => (
+                <button
+                  key={item.id}
+                  className="block transition-colors"
+                  style={tocItemStyle(item.level, item.id === activeId)}
+                  onClick={() => scrollToSection(item.id)}
+                >
+                  {item.title}
+                </button>
+              ))}
+            </div>
           </aside>
-        </div>
+
+          {showMobileToc && (
+            <div className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm lg:hidden" onClick={() => setShowMobileToc(false)}>
+              <div
+                className="absolute left-0 top-0 bottom-0 w-64 shadow-lg overflow-y-auto flex flex-col"
+                onClick={e => e.stopPropagation()}
+                style={{ background: "var(--card)" }}
+              >
+                <div className="px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
+                  <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--muted-foreground)", fontFamily: "Inter, sans-serif" }}>
+                    目录 ({tocItems.length} 节)
+                  </p>
+                </div>
+                <div className="flex-1 overflow-y-auto py-2">
+                  {tocItems.map(item => (
+                    <button
+                      key={item.id}
+                      className="block transition-colors"
+                      style={tocItemStyle(item.level, item.id === activeId)}
+                      onClick={() => scrollToSection(item.id)}
+                    >
+                      {item.title}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
-      {/* Mobile TOC toggle button */}
-      <button
-        className="lg:hidden fixed bottom-6 left-4 z-20 w-10 h-10 rounded-full flex items-center justify-center shadow-lg"
-        style={{ background: "var(--card)", color: "var(--foreground)", border: "1px solid var(--border)" }}
-        onClick={() => setShowMobileToc(v => !v)}
-        data-testid="html-reader-toc-toggle"
-      >
-        <List size={18} />
-      </button>
+      {tocItems.length > 0 && (
+        <button
+          onClick={() => setShowMobileToc(v => !v)}
+          className="fixed bottom-16 right-4 lg:hidden z-30 w-10 h-10 rounded-full shadow-lg flex items-center justify-center"
+          style={{ background: "var(--accent)", color: "white" }}
+        >
+          <List size={18} />
+        </button>
+      )}
 
-      <main className="flex-1 h-full" data-testid="html-reader-content" style={{ background: "var(--background)" }}>
-        <div ref={contentRef} className="h-full w-full">
-          <iframe
-            srcDoc={scopedHtml}
-            style={{ width: "100%", height: "100%", border: "none" }}
-            onLoad={handleContentLoad}
-            sandbox="allow-same-origin"
-          />
-        </div>
-      </main>
+      <div ref={wrapperRef} className="flex-1">
+        <iframe
+          srcDoc={scopedHtml}
+          className="w-full h-full"
+          style={{ border: "none" }}
+          title={book.title}
+          onLoad={handleContentLoad}
+        />
+      </div>
     </div>
   );
 }

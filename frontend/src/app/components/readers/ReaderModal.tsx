@@ -15,6 +15,7 @@ interface ReaderModalProps {
 }
 
 function ReaderContent({ book }: { book: Book }) {
+  if (book.type === "pdf") return <PdfReader book={book} />;
   if (book.sourceType === "file") return <FileReader book={book} />;
   if (book.category === "manga") return <MangaReader book={book} />;
   switch (book.type) {
