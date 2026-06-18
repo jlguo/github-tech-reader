@@ -1,17 +1,8 @@
 import { useState, useEffect, useRef } from "react";
-import { API_BASE_URL } from "../../config/api";
+import { getDataService, type BookGenStatus, type GenStatus } from "../../services/api";
 
-export type GenStatus =
-  | "pending" | "fetching" | "planning" | "cover"
-  | "writing" | "reviewing" | "publishing"
-  | "done" | "failed" | "no_book" | "not_started";
-
-export interface BookStatus {
-  status: GenStatus;
-  current_phase: string | null;
-  total_chapters: number;
-  completed_chapters: number;
-}
+export type { GenStatus };
+export type BookStatus = BookGenStatus;
 
 const POLL_FALLBACK_MS = 5_000;
 
@@ -24,7 +15,10 @@ export function useBookStatus(repoId: string | null): BookStatus | null {
   useEffect(() => {
     if (!repoId) return;
 
+    let cancelled = false;
+
     const cleanup = () => {
+      cancelled = true;
       esRef.current?.close();
       esRef.current = null;
       if (pollRef.current) {
@@ -33,44 +27,48 @@ export function useBookStatus(repoId: string | null): BookStatus | null {
       }
     };
 
-    const startPolling = () => {
-      if (pollRef.current) return;
-      const poll = async () => {
+    getDataService().then((svc) => {
+      if (cancelled) return;
+
+      const startPolling = () => {
+        if (pollRef.current) return;
+        const poll = async () => {
+          try {
+            const data = await svc.getBookStatus(repoId);
+            if (data && !cancelled) {
+              setStatus({
+                status: data.status,
+                current_phase: data.current_phase,
+                total_chapters: data.total_chapters,
+                completed_chapters: data.completed_chapters,
+              });
+            }
+          } catch {}
+        };
+        poll();
+        pollRef.current = setInterval(poll, POLL_FALLBACK_MS);
+      };
+
+      const es = new EventSource(svc.getBookStatusStreamUrl(repoId));
+      esRef.current = es;
+
+      es.onmessage = (event) => {
+        usingFallback.current = false;
+        if (cancelled) return;
         try {
-          const r = await fetch(`${API_BASE_URL}/agents/book-status/${repoId}`);
-          if (r.ok) {
-            const data = await r.json();
-            setStatus({
-              status: data.status,
-              current_phase: data.current_phase,
-              total_chapters: data.total_chapters,
-              completed_chapters: data.completed_chapters,
-            });
-          }
+          setStatus(JSON.parse(event.data));
         } catch {}
       };
-      poll();
-      pollRef.current = setInterval(poll, POLL_FALLBACK_MS);
-    };
 
-    const es = new EventSource(`${API_BASE_URL}/agents/book-status/${repoId}/stream`);
-    esRef.current = es;
-
-    es.onmessage = (event) => {
-      usingFallback.current = false;
-      try {
-        setStatus(JSON.parse(event.data));
-      } catch {}
-    };
-
-    es.onerror = () => {
-      es.close();
-      esRef.current = null;
-      if (!usingFallback.current) {
-        usingFallback.current = true;
-        startPolling();
-      }
-    };
+      es.onerror = () => {
+        es.close();
+        esRef.current = null;
+        if (!usingFallback.current && !cancelled) {
+          usingFallback.current = true;
+          startPolling();
+        }
+      };
+    });
 
     return cleanup;
   }, [repoId]);
