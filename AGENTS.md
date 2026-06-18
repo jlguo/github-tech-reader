@@ -106,7 +106,7 @@ The app supports two data access modes, switched via `VITE_DATA_SOURCE` env var:
 - **APK rebuild**: after `pnpm build`, copy `frontend/dist/**` into APK assets, rebuild with Gradle
 - **File uploads**: `WebChromeClient#onShowFileChooser()` implemented in `MainActivity.java` to open system file picker for `<input type="file">` elements (WebView does not handle file choosers by default)
 - **App icon**: generated via `generate_icons.py` (Pillow), placed in mipmap densities (mdpi–xxxhdpi) + adaptive icon XML
-- **Signing**: debug keystore at `app/bookshelf.keystore` (alias: `bookshelf`, password: `bookshelf`)
+- **Signing**: debug keystore at `/tmp/bookshelf.keystore` (alias: `bookshelf`, password: `bookshelf`)
 
 ### Local Dev Mode
 
