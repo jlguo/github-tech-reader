@@ -43,11 +43,16 @@ frontend/          # React SPA (Vite)
     components/    # shadcn/ui, BookCard, Sidebar, readers
     components/readers/  # EpubReader, PdfReader, HtmlReader, FileReader
     hooks/         # useBookStatus (SSE + poll fallback)
+    services/      # Data layer abstraction + on-device PWA runtime
     styles/        # fonts, tailwind, theme CSS
     assets/        # static assets (figma:asset/ resolves here)
     config/        # api.ts (API_BASE_URL, POLL_INTERVAL_MS)
+  public/
+    sql-wasm.wasm  # SQLite engine (645 KB, loaded by sql.js)
+    icon-192.png   # PWA icons (placeholder)
+    icon-512.png
 
-backend/           # FastAPI (Python)
+backend/           # FastAPI (Python) — UNTOUCHED
   app/
     main.py        # FastAPI entrypoint, CORS, lifespan
     core/          # config.py (settings), database.py (SQLAlchemy async engine)
@@ -58,6 +63,64 @@ backend/           # FastAPI (Python)
     events.py      # In-process pub/sub for SSE status streaming
   data/            # SQLite database + uploads/ (auto-created)
 ```
+
+### `frontend/src/services/` — Data Layer
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `api.ts` | 138 | `IDataService` interface + factory (`getDataService()`, `switchToLocal()`) |
+| `remoteService.ts` | 191 | `RemoteDataService` — 1:1 fetch wrapper for Python backend |
+| `localService.ts` | 312 | `LocalDataService` — full on-device implementation (sql.js + OPFS + book generation) |
+| `db.ts` | 660 | `BookDatabase` — SQLite via sql.js, 5 tables, full CRUD, book list JOIN |
+| `bookGenerator.ts` | 334 | Port of CrewAI pipeline (`crew.py`) to TypeScript: planning → cover → writing → review → publish |
+| `githubApi.ts` | 187 | `GitHubApi` — GitHub REST API via browser fetch (readme, issues, repo info) |
+| `llmClient.ts` | 60 | `LlmClient` — OpenAI-compatible chat completions via browser fetch |
+
+### Dual-Mode Architecture
+
+The app supports two data access modes, switched via `VITE_DATA_SOURCE` env var:
+
+| Mode | `VITE_DATA_SOURCE` | Backend | Storage | Book Gen |
+|------|-------------------|---------|---------|----------|
+| **Remote** (default) | `remote` | Python FastAPI server | Server-side SQLite | CrewAI (Python LLM agents) |
+| **Local** (on-device) | `local` | None — everything in browser | sql.js + OPFS (browser-native SQLite) | TypeScript pipeline (browser fetch to LLM API) |
+
+- **Strategy pattern**: `IDataService` interface — `RemoteDataService` and `LocalDataService` both implement it
+- **Consumer code** calls `getDataService()` (returns `Promise<IDataService>`), never raw `fetch()`
+- **Python backend is untouched** — `backend/` has zero changes regardless of mode
+- **Timing**: `getDataService()` pre-resolves `RemoteDataService` for remote mode (no async import delay)
+
+### PWA Support
+
+- `vite-plugin-pwa` with Workbox for service worker generation
+- Manifest: standalone display, portrait-primary orientation, brown theme (`#5c3d1e`)
+- Runtime caching: GitHub API (NetworkFirst), OpenAI API (NetworkOnly), OG images (CacheFirst)
+- WASM included in precache glob (`sql-wasm.wasm`)
+
+### Android APK (Self-Contained)
+
+- **`bookshelf.apk`** (1.4 MB): Entire PWA bundled inside WebView via `WebViewAssetLoader`
+- Zero network needed — no server, no WiFi, just install and open
+- Built with Gradle 8.5 + JDK 17 (`/tmp/bookshelf-apk/` — ephemeral build directory)
+- Android manifest: no TWA/remote URLs, all assets loaded from `file:///android_asset/`
+- **APK rebuild**: after `pnpm build`, copy `frontend/dist/**` into APK assets, rebuild with Gradle
+- **File uploads**: `WebChromeClient#onShowFileChooser()` implemented in `MainActivity.java` to open system file picker for `<input type="file">` elements (WebView does not handle file choosers by default)
+- **App icon**: generated via `generate_icons.py` (Pillow), placed in mipmap densities (mdpi–xxxhdpi) + adaptive icon XML
+- **Signing**: debug keystore at `app/bookshelf.keystore` (alias: `bookshelf`, password: `bookshelf`)
+
+### Local Dev Mode
+
+```sh
+./run-local.sh                    # Start PWA in local mode (VITE_DATA_SOURCE=local)
+pnpm dev                          # Standard mode (remote backend needed)
+```
+
+- **`run-local.sh`**: sets `VITE_DATA_SOURCE=local`, starts Vite on port 5173, no backend required
+- **API keys for local mode** (stored in `localStorage`, set via DevTools):
+  - `bookshelf_llm_key` — OpenAI-compatible API key for book generation
+  - `bookshelf_llm_url` — LLM API base URL (default: `https://api.openai.com/v1`)
+  - `bookshelf_llm_model` — Model name (default: `gpt-4o-mini`)
+  - `bookshelf_gh_token` — GitHub token for higher rate limits (optional)
 
 ### Key architectural details
 
