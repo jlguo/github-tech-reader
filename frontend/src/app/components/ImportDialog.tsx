@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, DragEvent } from "react";
 import { X, Github, Loader2, CheckCircle, AlertCircle, BookOpen, Sparkles, Upload, Link, FileText } from "lucide-react";
-import { API_BASE_URL } from "../../config/api";
+import { getDataService, type IDataService } from "../../services/api";
 
 type ImportTab = "github" | "file" | "url";
 type ImportStep = "input" | "loading" | "success" | "error";
@@ -26,7 +26,7 @@ function parseRepo(input: string): string | null {
 interface ImportDialogProps {
   open: boolean;
   onClose: () => void;
-  onImported: (book: { id: string; title: string; author: string; sourceType: string; fileType: string }) => void;
+  onImported: (book: { id: string; title: string; author: string; sourceType: string; fileType: string; totalPages?: number }) => void;
 }
 
 const TABS: { key: ImportTab; label: string; icon: typeof Github }[] = [
@@ -44,6 +44,11 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
   const [dragOver, setDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [service, setService] = useState<IDataService | null>(null);
+
+  useEffect(() => {
+    getDataService().then(setService);
+  }, []);
 
   const reset = () => {
     setInput("");
@@ -67,33 +72,21 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
   const fullName = parseRepo(input);
 
   const handleGithubImport = async () => {
-    if (!fullName) return;
+    if (!fullName || !service) return;
     setStep("loading");
     setError("");
 
     try {
-      const addResp = await fetch(`${API_BASE_URL}/repos/add`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ full_name: fullName }),
-      });
-      if (!addResp.ok) {
-        const err = await addResp.json();
-        throw new Error(err.detail || `Failed to add repo (${addResp.status})`);
-      }
-      const repo = await addResp.json();
+      const repo = await service.addRepo(fullName);
 
       let readmeLen = 0;
       try {
-        const rResp = await fetch(`${API_BASE_URL}/repos/${repo.id}/fetch-readme`, { method: "POST" });
-        if (rResp.ok) {
-          const rData = await rResp.json();
-          readmeLen = rData.length;
-        }
+        await service.fetchReadme(repo.id);
+        readmeLen = 1;
       } catch { readmeLen = 0; }
 
       if (readmeLen > 0) {
-        fetch(`${API_BASE_URL}/agents/generate-book/${repo.id}`, { method: "POST" }).catch(() => {});
+        service.generateBook(repo.id).catch(() => {});
       }
 
       setResult({ id: repo.id, title: repo.name, author: repo.owner, source_type: "github", readme_length: readmeLen });
@@ -118,28 +111,16 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
   };
 
   const handleFileUpload = async () => {
-    if (!selectedFile) return;
+    if (!selectedFile || !service) return;
     setStep("loading");
     setError("");
 
     try {
-      const form = new FormData();
-      form.append("file", selectedFile);
-      form.append("title", selectedFile.name.replace(/\.[^.]+$/, ""));
-      form.append("author", "Unknown");
-
-      const resp = await fetch(`${API_BASE_URL}/imports/upload`, {
-        method: "POST",
-        body: form,
-      });
-      if (!resp.ok) {
-        const err = await resp.json();
-        throw new Error(err.detail || "Upload failed");
-      }
-      const data = await resp.json();
+      const title = selectedFile.name.replace(/\.[^.]+$/, "");
+      const data = await service.uploadFile(selectedFile, title, "Unknown");
       setResult({ ...data, source_type: "file" });
       setStep("success");
-      onImported({ id: data.id, title: data.title, author: data.author, sourceType: "file", fileType: data.file_type });
+      onImported({ id: data.id, title: data.title, author: data.author, sourceType: "file", fileType: data.file_type, totalPages: data.totalPages });
     } catch (e: any) {
       setError(e.message || "Upload failed");
       setStep("error");
@@ -148,23 +129,12 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
 
   const handleUrlImport = async () => {
     const url = input.trim();
-    if (!url) return;
+    if (!url || !service) return;
     setStep("loading");
     setError("");
 
     try {
-      const form = new FormData();
-      form.append("url", url);
-
-      const resp = await fetch(`${API_BASE_URL}/imports/import-url`, {
-        method: "POST",
-        body: form,
-      });
-      if (!resp.ok) {
-        const err = await resp.json();
-        throw new Error(err.detail || "Import failed");
-      }
-      const data = await resp.json();
+      const data = await service.importUrl(url);
       setResult({ ...data, source_type: "url" });
       setStep("success");
       onImported({ id: data.id, title: data.title, author: data.author, sourceType: "url", fileType: data.file_type });

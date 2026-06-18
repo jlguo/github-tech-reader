@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect } from "react";
 import { Search, LayoutGrid, List, SlidersHorizontal, X, Clock, TrendingUp, BookOpen } from "lucide-react";
 import { books as initialBooks, categories, Book, BookCategory, typeConfig, BookType } from "./components/bookData";
-import { API_BASE_URL, POLL_INTERVAL_MS } from "../config/api";
+import { POLL_INTERVAL_MS } from "../config/api";
+import { getDataService, type IDataService, type RemoteBook } from "../services/api";
 
 const getTypeInfo = (type: BookType) => typeConfig[type] ?? { label: "FILE", color: "#5a5a5a", bg: "#f0f0f0" };
 import { BookCard } from "./components/BookCard";
@@ -23,6 +24,11 @@ export default function App() {
   const [sortBy, setSortBy] = useState<"recent" | "title" | "progress">("recent");
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
+  const [service, setService] = useState<IDataService | null>(null);
+
+  useEffect(() => {
+    getDataService().then(setService);
+  }, []);
 
   const toColor = (s: string) => {
     let hash = 0;
@@ -31,15 +37,14 @@ export default function App() {
   };
 
   useEffect(() => {
-    const syncBooks = () => {
-      fetch(`${API_BASE_URL}/books`)
-        .then(r => r.json())
-        .then((books: Array<{
-          repo_id: string; book_id: string; title: string; author: string;
-          description: string | null; language: string | null;
-          html_url: string; status: string; chapter_count: number;
-          source_type: string; file_type: string | null;
-        }>) => {
+    let cancelled = false;
+
+        const syncBooks = () => {
+      getDataService().then(svc => {
+        if (cancelled) return;
+        svc.getBooks()
+          .then((books: RemoteBook[]) => {
+            if (cancelled) return;
           const generated: Book[] = books.map(b => {
             const isGithub = b.source_type === "github";
             const bookId = isGithub ? b.repo_id : b.book_id;
@@ -52,6 +57,11 @@ export default function App() {
               ? (b.status === "done" ? `${b.chapter_count} 章` : b.status === "no_book" ? "未生成" : "创作中...")
               : (b.file_type || "html").toUpperCase();
 
+            let meta: Record<string, unknown> = {};
+            try { meta = b.progress_metadata ? JSON.parse(b.progress_metadata) : {}; } catch {}
+            const metaTotal = (meta.totalPages as number) || 0;
+            const metaPage = (meta.page as number) || 0;
+
             return {
               id: bookId,
               title: b.title,
@@ -60,9 +70,9 @@ export default function App() {
               coverColor: toColor(b.title),
               type: bookType,
               category,
-              progress: 0,
-              totalPages: b.chapter_count,
-              currentPage: 0,
+              progress: b.progress ?? 0,
+              totalPages: metaTotal || b.chapter_count,
+              currentPage: metaPage,
               addedDate: new Date().toISOString().split("T")[0],
               size,
               description: b.description || "",
@@ -78,20 +88,30 @@ export default function App() {
             const updated = prev.map(pb => {
               const gen = generated.find(g => g.id === pb.id);
               if (!gen) return pb;
-              return { ...gen, progress: pb.progress, currentPage: pb.currentPage };
+              return {
+                ...gen,
+                progress: gen.progress,
+                totalPages: gen.totalPages || pb.totalPages,
+                currentPage: gen.currentPage || pb.currentPage,
+                isFavorite: pb.isFavorite,
+              };
             });
             return [...newBooks, ...updated];
           });
         })
         .catch(() => {});
+      });
     };
 
     syncBooks();
     const interval = setInterval(syncBooks, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, []);
 
-  const handleBookImported = (info: { id: string; title: string; author: string; sourceType: string; fileType: string }) => {
+  const handleBookImported = (info: { id: string; title: string; author: string; sourceType: string; fileType: string; totalPages?: number }) => {
     const isGithub = info.sourceType === "github";
     const bookType = (info.fileType || "html") as BookType;
     const category = isGithub ? "generated" as BookCategory : "documents" as BookCategory;
@@ -108,7 +128,7 @@ export default function App() {
       type: bookType,
       category,
       progress: 0,
-      totalPages: 0,
+      totalPages: info.totalPages ?? 0,
       currentPage: 0,
       addedDate: new Date().toISOString().split("T")[0],
       size: isGithub ? "0 章" : (info.fileType || "html").toUpperCase(),
@@ -122,7 +142,7 @@ export default function App() {
       if (prev.find(b => b.id === info.id)) return prev;
       return [newBook, ...prev];
     });
-    setActiveCategory("generated");
+    if (isGithub) setActiveCategory("generated");
   };
 
   const toggleFavorite = (id: string) => {
@@ -130,39 +150,29 @@ export default function App() {
   };
 
   const handleDeleteBook = async (bookId: string) => {
+    if (!service) return;
     try {
-      await fetch(`${API_BASE_URL}/books/${bookId}`, { method: "DELETE" });
+      await service.deleteBook(bookId);
     } catch {}
     setBookList(prev => prev.filter(b => b.id !== bookId));
     setSelectedBook(null);
   };
 
   const handleUpdateBook = async (bookId: string, data: Record<string, any>) => {
+    if (!service) return;
     try {
-      await fetch(`${API_BASE_URL}/books/${bookId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
+      await service.updateBook(bookId, data);
     } catch {}
   };
 
   const handleGenerateBook = async (bookId: string) => {
+    if (!service) return;
     setBookList(prev => prev.map(b => b.id === bookId ? { ...b, genStatus: "writing", size: "创作中...", progress: 0 } : b));
     setSelectedBook(prev => prev && prev.id === bookId ? { ...prev, genStatus: "writing", size: "创作中...", progress: 0 } : prev);
 
     try {
-      const rResp = await fetch(`${API_BASE_URL}/repos/${bookId}/fetch-readme`, { method: "POST" });
-      if (!rResp.ok) {
-        const err = await rResp.json().catch(() => ({ detail: "README not available" }));
-        throw new Error(err.detail || "Failed to fetch README");
-      }
-
-      const gResp = await fetch(`${API_BASE_URL}/agents/generate-book/${bookId}`, { method: "POST" });
-      if (!gResp.ok) {
-        const err = await gResp.json().catch(() => ({ detail: "Book generation failed" }));
-        throw new Error(err.detail || "Failed to start book generation");
-      }
+      await service.fetchReadme(bookId);
+      await service.generateBook(bookId);
     } catch (e: any) {
       const errorMsg = e.message || "生成失败";
       setBookList(prev => prev.map(b => b.id === bookId ? {

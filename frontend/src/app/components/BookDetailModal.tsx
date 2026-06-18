@@ -156,7 +156,7 @@ export function BookDetailModal({ book, onClose, onToggleFavorite, onRead, onDel
         </div>
 
         {/* Progress */}
-        {book.progress > 0 && (
+        {book.progress > 0 && book.type !== "pdf" && (
           <div className="px-6 pb-4" data-testid="book-detail-progress">
             <div className="flex justify-between text-xs mb-2" style={{ color: "var(--muted-foreground)", fontFamily: "Inter, sans-serif" }}>
               <span>{book.progress === 100 ? "已读完" : `已读 ${book.progress}%`}</span>

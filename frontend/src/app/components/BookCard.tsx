@@ -65,7 +65,7 @@ export function BookCard({ book, viewMode, onToggleFavorite, onOpen }: BookCardP
               </button>
             </div>
           </div>
-          {book.progress > 0 && (
+          {book.progress > 0 && book.type !== "pdf" && (
             <div className="mt-2" data-testid={`book-progress-${book.id}`}>
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs" style={{ color: "var(--muted-foreground)", fontFamily: "Inter, sans-serif" }}>
@@ -125,8 +125,8 @@ export function BookCard({ book, viewMode, onToggleFavorite, onOpen }: BookCardP
           {book.author}
         </p>
 
-        {book.progress > 0 && (
-          <div className="mt-auto">
+        {book.progress > 0 && book.type !== "pdf" && (
+          <div className="mt-auto" data-testid={`book-progress-${book.id}`}>
             <div className="h-1 rounded-full overflow-hidden mb-1" style={{ background: "var(--muted)" }}>
               <div
                 className="h-full rounded-full"
