@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 from datetime import datetime
 
 from app.core.database import get_db
-from app.models.repo import Repo, BookGeneration, ContentSection
+from app.models.repo import Repo, BookGeneration, ContentSection, ReadingProgress
 from app.models.imported_book import ImportedBook
 from app.api.schemas import BookListItem, BookContentResponse, SectionResponse, BookUpdateRequest
 
@@ -30,6 +30,7 @@ async def list_books(
     query = (
         select(Repo, BookGeneration)
         .outerjoin(BookGeneration, BookGeneration.repo_id == Repo.id)
+        .options(selectinload(Repo.reading_progress))
     )
 
     if search:
@@ -45,6 +46,9 @@ async def list_books(
     books = []
     for repo, gen in rows:
         is_book = gen is not None and gen.status in statuses
+        rp = None
+        if repo.reading_progress:
+            rp = max(repo.reading_progress, key=lambda p: p.updated_at)
         books.append(BookListItem(
             repo_id=repo.id,
             book_id=gen.id if gen else "",
@@ -59,6 +63,8 @@ async def list_books(
             chapter_count=gen.total_chapters if gen else 0,
             completed_chapters=gen.completed_chapters if gen else 0,
             current_phase=gen.current_phase if gen else None,
+            progress=rp.position if rp else None,
+            progress_metadata=None,
             created_at=gen.created_at if gen else repo.added_at,
             updated_at=gen.updated_at if gen else repo.added_at,
         ))

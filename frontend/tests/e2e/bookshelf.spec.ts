@@ -850,3 +850,59 @@ test.describe("Bookshelf - Read Button While Generating", () => {
     await expect(readBtn).toContainText("生成中...");
   });
 });
+
+test.describe("Bookshelf - HTML Reading Progress", () => {
+  test("shows progress bar on book card after scrolling through HTML content", async ({ page }) => {
+    test.setTimeout(90000);
+
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(2000);
+
+    // Find youtoarticle card (real data from backend)
+    const card = page.locator('[data-testid^="book-card-"]', { has: page.locator('h3:text("youtoarticle")') });
+    await expect(card).toBeVisible({ timeout: 15000 });
+
+    // Verify no progress bar initially (progress may be 0 from fresh state)
+    const initialPb = card.locator('[data-testid^="book-progress-"]');
+
+    // Open detail modal
+    await card.click();
+    await expect(page.locator('[data-testid="book-detail-content"]')).toBeVisible({ timeout: 5000 });
+
+    // Click "Read" to open reader
+    await page.locator('[data-testid="book-detail-read"]').click();
+    await expect(page.locator('[data-testid="reader-modal"]')).toBeVisible({ timeout: 15000 });
+
+    // Wait for real content to load, then scroll
+    const iframe = page.locator('[data-testid="reader-modal"] iframe');
+    await expect(iframe).toBeVisible({ timeout: 10000 });
+
+    // Scroll the iframe to ~60% to trigger progress save
+    await page.evaluate(() => {
+      const el = document.querySelector('[data-testid="reader-modal"] iframe') as HTMLIFrameElement;
+      if (el?.contentDocument) {
+        const docEl = el.contentDocument.documentElement;
+        docEl.scrollTop = Math.round(docEl.scrollHeight * 0.6);
+        el.contentDocument.dispatchEvent(new Event("scroll", { bubbles: true }));
+      }
+    });
+
+    // Wait for debounced save (2s debounce + 500ms flush)
+    await page.waitForTimeout(4000);
+
+    // Close reader
+    await page.locator('[data-testid="reader-back"]').click();
+    await page.waitForTimeout(2000);
+
+    // Reload to pick up saved progress
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(3000);
+
+    const cardAfter = page.locator('[data-testid^="book-card-"]', { has: page.locator('h3:text("youtoarticle")') });
+    await expect(cardAfter).toBeVisible({ timeout: 15000 });
+
+    const pb = cardAfter.locator('[data-testid^="book-progress-"]');
+    await expect(pb).toBeVisible({ timeout: 5000 });
+    await expect(pb).toContainText(/\d+%/);
+  });
+});

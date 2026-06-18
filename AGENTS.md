@@ -137,6 +137,27 @@ pnpm dev                          # Standard mode (remote backend needed)
 - **File uploads**: stored in `backend/data/uploads/`, served via `GET /api/imports/{id}/file` with `inline` Content-Disposition for iframe embedding
 - **URL imports**: fetched via `httpx`, `<title>` extracted, stored as `content_text` in `ImportedBook`
 
+### Reading Progress
+
+- **`useReadingProgress(bookId)`** hook — debounced (500ms) save with unmount flush via `useEffect` cleanup
+- **Scroll tracking**: `HtmlReader` and `FileReader` listen to iframe scroll events, compute position as `scrollTop / (scrollHeight - clientHeight)`
+- **Persistence**: `useReadingProgress.save()` → `IDataService.updateReadingProgress()` → POST `/api/reading/progress` → `reading_progress` table
+- **BookCard display**: progress bar shown when `book.progress > 0 && book.type !== "pdf"` (PDF progress hidden since Chrome's built-in viewer is sealed)
+- **Backend**: `/api/books` returns `progress` (latest `reading_progress.position` by `updated_at`) and `progress_metadata`
+- **Multiple progress rows**: reading_progress table appends rows (no unique constraint); `/api/books` picks max by `updated_at`
+
+### E2E Tests
+
+```sh
+cd frontend && npx playwright test          # all specs
+cd frontend && npx playwright test --headed  # visible browser
+```
+
+- **Config**: `playwright.config.ts` — testDir `tests/e2e`, 30s timeout, 1 retry, system Chrome via `executablePath`
+- **Web server**: reuses existing Vite on port 5173 (`reuseExistingServer: true`)
+- **Key tests**: layout, view mode toggle, search, sort, book detail modal, import dialog validation, reading progress smoke test
+- **Smoke test tip**: use `waitUntil: "domcontentloaded"` — `waitUntil: "load"` blocks on OpenGraph cover images (8.5s each)
+
 ### API Routes
 
 | Method | Path | Purpose |
@@ -222,4 +243,5 @@ The `docs/` directory contains a **Figma-generated prototype** with hardcoded mo
 - **SSE**: `useBookStatus` hook for real-time status; SSE primary, 5s polling fallback; open only for selected book (detail modal), not shelf-wide
 - **Imported books**: use `ImportedBook` model for file uploads and URL imports; `GET /api/books` unions them with repo-generated books via `source_type` field
 - **genStatus type**: `"pending" | "fetching" | "planning" | "cover" | "writing" | "reviewing" | "publishing" | "done" | "failed" | "no_book"` — all 10 statuses recognized in UI
+- **Progress field**: `book.progress` is reading progress (0–100), NOT generation progress. Never set it based on `status === "done"`
 - **Progress field**: `book.progress` is reading progress (0–100), NOT generation progress. Never set it based on `status === "done"`

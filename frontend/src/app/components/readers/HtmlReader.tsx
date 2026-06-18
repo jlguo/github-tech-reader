@@ -66,6 +66,8 @@ export function HtmlReader({ book }: HtmlReaderProps) {
   const [loaded, setLoaded] = useState(false);
   const [activeId, setActiveId] = useState("s0");
   const [showMobileToc, setShowMobileToc] = useState(false);
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [service, setService] = useState<IDataService | null>(null);
   const { save } = useReadingProgress(book.id);
@@ -128,13 +130,12 @@ export function HtmlReader({ book }: HtmlReaderProps) {
     const onScroll = () => {
       const maxScroll = doc.documentElement.scrollHeight - doc.documentElement.clientHeight;
       const position = maxScroll > 0 ? doc.documentElement.scrollTop / maxScroll : 0;
-      const activeIdx = tocItems.findIndex(t => t.id === activeId);
-      const sectionTitle = activeIdx >= 0 ? tocItems[activeIdx].title : null;
+      const pct = Math.round(position * 100);
 
       save({
-        percent: Math.round(position * 100),
+        percent: pct,
         completed: position > 0.95,
-        metadata: sectionTitle ? { sectionTitle } : {},
+        metadata: {},
       });
     };
 
@@ -142,7 +143,7 @@ export function HtmlReader({ book }: HtmlReaderProps) {
     doc.addEventListener("scroll", () => { clearTimeout(timer); timer = setTimeout(onScroll, SCROLL_DEBOUNCE_MS); }, { passive: true });
 
     return () => { observer.disconnect(); clearTimeout(timer); };
-  }, [activeId, tocItems, save]);
+  }, [save]);
 
   const scopedHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${CONTENT_CSS}</style></head><body>${anchoredHtml}</body></html>`;
 

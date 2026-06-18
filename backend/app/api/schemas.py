@@ -105,6 +105,8 @@ class BookListItem(BaseModel):
     chapter_count: int
     completed_chapters: int = 0
     current_phase: str | None = None
+    progress: float | None = None
+    progress_metadata: str | None = None
     created_at: datetime
     updated_at: datetime
 
