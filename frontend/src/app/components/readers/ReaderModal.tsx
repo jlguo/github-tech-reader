@@ -9,6 +9,7 @@ import { ExcelReader } from "./ExcelReader";
 import { MangaReader } from "./MangaReader";
 import { HtmlReader } from "./HtmlReader";
 import { FileReader } from "./FileReader";
+import { TxtReader } from "./TxtReader";
 
 interface ReaderModalProps {
   book: Book | null;
@@ -18,30 +19,33 @@ interface ReaderModalProps {
 const AUTO_HIDE_MS = 2500;
 
 function ReaderContent({ book }: { book: Book }) {
-  if (book.type === "pdf") return <PdfReader book={book} />;
-  if (book.sourceType === "file") return <FileReader book={book} />;
-  if (book.category === "manga") return <MangaReader book={book} />;
+  if (book.isDemo) {
+    if (book.category === "manga") return <MangaReader book={book} />;
+    switch (book.type) {
+      case "epub": return <EpubReader book={book} />;
+      case "pdf": return <PdfReader book={book} />;
+      case "word": return <DocReader book={book} />;
+      case "ppt": return <PptReader book={book} />;
+      case "excel": return <ExcelReader book={book} />;
+      case "html": return <HtmlReader book={book} />;
+      default: return <EpubReader book={book} />;
+    }
+  }
   switch (book.type) {
-    case "epub":
-    case "txt":
-      return <EpubReader book={book} />;
-    case "pdf":
-      return <PdfReader book={book} />;
-    case "word":
-      return <DocReader book={book} />;
-    case "ppt":
-      return <PptReader book={book} />;
-    case "excel":
-      return <ExcelReader book={book} />;
+    case "pdf": return <PdfReader book={book} />;
+    case "epub": return <EpubReader book={book} />;
+    case "txt": return <TxtReader book={book} />;
+    case "word": return <DocReader book={book} />;
+    case "ppt": return <PptReader book={book} />;
+    case "excel": return <ExcelReader book={book} />;
     case "html":
-      return <HtmlReader book={book} />;
+      return book.sourceType === "url" ? <HtmlReader book={book} /> : <FileReader book={book} />;
     default:
-      return <EpubReader book={book} />;
+      return book.sourceType === "file" ? <FileReader book={book} /> : <HtmlReader book={book} />;
   }
 }
 
 function getReaderBg(book: Book) {
-  if (book.sourceType === "file") return "#faf6ed";
   switch (book.type) {
     case "pdf": return "#4a4a4a";
     case "ppt": return "#1a1a1a";

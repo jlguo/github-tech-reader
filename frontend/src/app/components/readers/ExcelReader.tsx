@@ -1,31 +1,132 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { TrendingUp, TrendingDown } from "lucide-react";
+import * as XLSX from "xlsx";
 import { excelData } from "./readerData";
 import { Book } from "../bookData";
+import { getDataService } from "../../../services/api";
+import { useReadingProgress } from "../../hooks/useReadingProgress";
 
 interface ExcelReaderProps {
   book: Book;
 }
 
+const MAX_ROWS = 100;
+const toolbarTabs = ["文件", "开始", "插入", "页面布局", "公式", "数据", "审阅", "视图"];
+
 export function ExcelReader({ book }: ExcelReaderProps) {
+  const isDemo = book.isDemo ?? false;
+  const { save } = useReadingProgress(book.id);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [wb, setWb] = useState<XLSX.WorkBook | null>(null);
   const [activeSheet, setActiveSheet] = useState(0);
   const [selectedCell, setSelectedCell] = useState<[number, number] | null>(null);
 
-  const isHighlighted = (rowIndex: number) => excelData.highlights.includes(rowIndex);
+  const sheets = useMemo(() => {
+    if (isDemo) return excelData.sheets;
+    if (!wb) return [];
+    return wb.SheetNames;
+  }, [isDemo, wb]);
+
+  const tableData = useMemo(() => {
+    if (isDemo) {
+      return [excelData.headers, ...excelData.rows];
+    }
+    if (!wb) return [];
+    const ws = wb.Sheets[wb.SheetNames[activeSheet]];
+    if (!ws) return [];
+    const rawData: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
+    return rawData.map(row => row.map(cell => (cell == null ? "" : String(cell))));
+  }, [isDemo, wb, activeSheet]);
+
+  const headerRow = tableData.length > 0 ? tableData[0] : [];
+  const allDataRows = tableData.slice(1);
+  const exceedsMax = allDataRows.length > MAX_ROWS;
+  const visibleRows = exceedsMax ? allDataRows.slice(0, MAX_ROWS) : allDataRows;
+
+  const isHighlighted = (ri: number) => isDemo && excelData.highlights.includes(ri);
+  const isGrowth = (cell: string) => isDemo && cell.startsWith("+");
+  const isNegGrowth = (cell: string) => isDemo && cell.startsWith("-");
 
   const getCellValue = () => {
     if (!selectedCell) return "";
     const [r, c] = selectedCell;
-    if (r === -1) return excelData.headers[c];
-    return excelData.rows[r]?.[c] || "";
+    if (r === -1) return headerRow[c] || "";
+    return allDataRows[r]?.[c] || "";
   };
+
+  const handleSheetChange = (i: number) => {
+    setActiveSheet(i);
+    setSelectedCell(null);
+  };
+
+  useEffect(() => {
+    if (isDemo) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const svc = await getDataService();
+        const blobUrl = await svc.getImportedFileBlobUrl(book.id);
+        if (cancelled) return;
+        if (!blobUrl) {
+          setError("加载 Excel 文件失败");
+          return;
+        }
+        const resp = await fetch(blobUrl);
+        const buf = await resp.arrayBuffer();
+        if (cancelled) return;
+        const workbook = XLSX.read(buf, { type: "array" });
+        if (cancelled) return;
+        setWb(workbook);
+        setLoading(false);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "加载 Excel 文件失败");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [book.id, isDemo]);
+
+  useEffect(() => {
+    if (isDemo || sheets.length === 0) return;
+    save({
+      percent: ((activeSheet + 1) / sheets.length) * 100,
+      completed: activeSheet === sheets.length - 1,
+      metadata: {},
+    });
+  }, [activeSheet, sheets, isDemo, save]);
+
+  if (loading) {
+    return (
+      <div className="w-full h-full flex items-center justify-center text-gray-500">
+        加载中...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="w-full h-full flex items-center justify-center text-red-500 p-4">
+        {error}
+      </div>
+    );
+  }
+
+  if (tableData.length === 0) {
+    return (
+      <div className="w-full h-full flex items-center justify-center text-gray-500">
+        无数据
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full" style={{ background: "#f5f5f5" }}>
-      {/* Excel-style toolbar */}
       <div className="flex-shrink-0 border-b" data-testid="excel-reader-toolbar" style={{ background: "#217346", borderColor: "#1a5c38" }}>
         <div className="flex items-center gap-4 px-4 py-2">
-          {["文件", "开始", "插入", "页面布局", "公式", "数据", "审阅", "视图"].map((tab, i) => (
+          {toolbarTabs.map((tab, i) => (
             <button
               key={tab}
               data-testid={`excel-reader-tab-${tab}`}
@@ -43,7 +144,6 @@ export function ExcelReader({ book }: ExcelReaderProps) {
         </div>
       </div>
 
-      {/* Formula bar */}
       <div
         className="flex items-center gap-3 px-3 py-1.5 border-b flex-shrink-0"
         data-testid="excel-reader-formula-bar"
@@ -66,10 +166,13 @@ export function ExcelReader({ book }: ExcelReaderProps) {
         </div>
       </div>
 
-      {/* Spreadsheet */}
       <div className="flex-1 overflow-auto" data-testid="excel-reader-table">
+        {exceedsMax && (
+          <div className="text-xs text-gray-500 px-3 py-1 bg-yellow-50 border-b">
+            显示前 {MAX_ROWS} 行（共 {allDataRows.length} 行）
+          </div>
+        )}
         <table style={{ borderCollapse: "collapse", width: "100%", minWidth: "700px" }}>
-          {/* Row number + column headers */}
           <thead>
             <tr>
               <th
@@ -84,7 +187,7 @@ export function ExcelReader({ book }: ExcelReaderProps) {
                   zIndex: 3,
                 }}
               />
-              {excelData.headers.map((h, ci) => (
+              {headerRow.map((_, ci) => (
                 <th
                   key={ci}
                   className="text-xs font-medium px-3 py-1.5 text-center cursor-pointer"
@@ -105,7 +208,6 @@ export function ExcelReader({ book }: ExcelReaderProps) {
                 </th>
               ))}
             </tr>
-            {/* Column name row */}
             <tr>
               <td
                 className="text-xs text-center"
@@ -123,7 +225,7 @@ export function ExcelReader({ book }: ExcelReaderProps) {
               >
                 1
               </td>
-              {excelData.headers.map((h, ci) => (
+              {headerRow.map((h, ci) => (
                 <td
                   key={ci}
                   onClick={() => setSelectedCell([-1, ci])}
@@ -146,7 +248,7 @@ export function ExcelReader({ book }: ExcelReaderProps) {
             </tr>
           </thead>
           <tbody>
-            {excelData.rows.map((row, ri) => {
+            {visibleRows.map((row, ri) => {
               const highlighted = isHighlighted(ri);
               return (
                 <tr key={ri} style={{ background: highlighted ? "#e2efda" : ri % 2 === 0 ? "white" : "#f9f9f9" }}>
@@ -167,8 +269,8 @@ export function ExcelReader({ book }: ExcelReaderProps) {
                   </td>
                   {row.map((cell, ci) => {
                     const isSelected = selectedCell?.[0] === ri && selectedCell?.[1] === ci;
-                    const isGrowth = ci === row.length - 1 && cell.startsWith("+");
-                    const isNegGrowth = ci === row.length - 1 && cell.startsWith("-");
+                    const growth = isGrowth(cell);
+                    const negGrowth = isNegGrowth(cell);
                     return (
                       <td
                         key={ci}
@@ -178,9 +280,9 @@ export function ExcelReader({ book }: ExcelReaderProps) {
                           border: isSelected ? "2px solid #217346" : "1px solid #d0d0d0",
                           color: highlighted
                             ? "#1a5c38"
-                            : isGrowth
+                            : growth
                             ? "#217346"
-                            : isNegGrowth
+                            : negGrowth
                             ? "#c0392b"
                             : "#333",
                           fontFamily: "Inter, sans-serif",
@@ -191,8 +293,8 @@ export function ExcelReader({ book }: ExcelReaderProps) {
                         }}
                       >
                         <span className="flex items-center justify-end gap-1">
-                          {isGrowth && <TrendingUp size={10} style={{ color: "#217346", flexShrink: 0 }} />}
-                          {isNegGrowth && <TrendingDown size={10} style={{ color: "#c0392b", flexShrink: 0 }} />}
+                          {growth && <TrendingUp size={10} style={{ color: "#217346", flexShrink: 0 }} />}
+                          {negGrowth && <TrendingDown size={10} style={{ color: "#c0392b", flexShrink: 0 }} />}
                           {cell}
                         </span>
                       </td>
@@ -205,16 +307,15 @@ export function ExcelReader({ book }: ExcelReaderProps) {
         </table>
       </div>
 
-      {/* Sheet tabs */}
       <div
         className="flex items-center gap-0 border-t flex-shrink-0 px-2"
         style={{ background: "#f5f5f5", borderColor: "#d0d0d0", height: "32px" }}
       >
-        {excelData.sheets.map((sheet, i) => (
+        {sheets.map((sheet, i) => (
           <button
             key={sheet}
             data-testid={`excel-reader-sheet-${sheet}`}
-            onClick={() => setActiveSheet(i)}
+            onClick={() => handleSheetChange(i)}
             className="px-4 h-full text-xs border-r border-t transition-colors"
             style={{
               background: i === activeSheet ? "white" : "#e0e0e0",

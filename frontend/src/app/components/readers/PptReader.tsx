@@ -1,7 +1,10 @@
-import { useState } from "react";
-import { ChevronLeft, ChevronRight, Maximize2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { pptSlides } from "./readerData";
 import { Book } from "../bookData";
+import { getDataService } from "../../../services/api";
+import { useReadingProgress } from "../../hooks/useReadingProgress";
+import JSZip from "jszip";
 
 interface PptReaderProps {
   book: Book;
@@ -46,7 +49,7 @@ function SlideContent({ slide }: { slide: (typeof pptSlides)[0] }) {
       >
         <div className="w-1/3 h-full flex items-center justify-center" style={{ background: slide.accent }}>
           <h2
-            style={{ fontFamily: "Playfair Display, serif", color: "white", fontSize: "clamp(1.2rem, 3vw, 2rem)", fontWeight: 700, writingMode: "vertical-rl" as any, textOrientation: "mixed" as any, letterSpacing: "0.2em" }}
+            style={{ fontFamily: "Playfair Display, serif", color: "white", fontSize: "clamp(1.2rem, 3vw, 2rem)", fontWeight: 700, writingMode: "vertical-rl", textOrientation: "mixed", letterSpacing: "0.2em" }}
           >
             {slide.title}
           </h2>
@@ -141,7 +144,6 @@ function SlideContent({ slide }: { slide: (typeof pptSlides)[0] }) {
     );
   }
 
-  // closing
   return (
     <div
       className="w-full h-full flex flex-col items-center justify-center"
@@ -166,17 +168,172 @@ function SlideContent({ slide }: { slide: (typeof pptSlides)[0] }) {
   );
 }
 
+function TextSlide({ title, body }: { title: string; body: string }) {
+  return (
+    <div
+      className="w-full h-full flex flex-col items-center justify-center p-12"
+      style={{ background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)" }}
+    >
+      {title && (
+        <h1
+          className="text-center mb-6 px-8"
+          style={{ fontFamily: "Playfair Display, serif", color: "white", fontSize: "clamp(1.2rem, 3vw, 2rem)", fontWeight: 700, lineHeight: 1.3 }}
+        >
+          {title}
+        </h1>
+      )}
+      {body ? (
+        <div
+          className="text-center max-w-2xl px-8 leading-relaxed"
+          style={{ fontFamily: "Inter, sans-serif", color: "rgba(255,255,255,0.8)", fontSize: "clamp(0.85rem, 1.8vw, 1.1rem)", lineHeight: 1.7 }}
+        >
+          {body.split("\n").map((line, i) => (
+            <p key={i} className={line.trim() === "" ? "h-4" : ""}>
+              {line}
+            </p>
+          ))}
+        </div>
+      ) : (
+        <p style={{ fontFamily: "Inter, sans-serif", color: "rgba(255,255,255,0.4)", fontSize: "1rem" }}>
+          空白页
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function PptReader({ book }: PptReaderProps) {
   const [current, setCurrent] = useState(0);
-  const slide = pptSlides[current];
+  const [slides, setSlides] = useState<string[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { save } = useReadingProgress(book.id);
+
+  const isDemo = book.isDemo === true;
+  const slideCount = isDemo ? pptSlides.length : (slides?.length ?? 0);
+
+  useEffect(() => {
+    if (slideCount === 0) return;
+    save({
+      percent: ((current + 1) / slideCount) * 100,
+      completed: current === slideCount - 1,
+      metadata: {},
+    });
+  }, [current, slideCount, save]);
+
+  useEffect(() => {
+    if (isDemo) {
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const svc = await getDataService();
+        const blobUrl = await svc.getImportedFileBlobUrl(book.id);
+        if (cancelled) return;
+        if (!blobUrl) {
+          setError("Failed to load PPT");
+          return;
+        }
+        const resp = await fetch(blobUrl);
+        const buf = await resp.arrayBuffer();
+        if (cancelled) return;
+
+        const zip = await JSZip.loadAsync(buf);
+        const slideFiles = Object.keys(zip.files)
+          .filter(name => /^ppt\/slides\/slide\d+\.xml$/.test(name))
+          .sort((a, b) => {
+            const na = parseInt(a.match(/slide(\d+)/)?.[1] || "0");
+            const nb = parseInt(b.match(/slide(\d+)/)?.[1] || "0");
+            return na - nb;
+          });
+
+        if (slideFiles.length === 0) {
+          setError("No slides found in PPTX");
+          return;
+        }
+
+        const extracted = await Promise.all(
+          slideFiles.map(async (name) => {
+            const xml = await zip.files[name].async("text");
+            const texts = [...xml.matchAll(/<a:t>(.*?)<\/a:t>/g)].map(m => m[1]);
+            return texts.join("\n");
+          })
+        );
+
+        if (cancelled) return;
+        setSlides(extracted);
+        setLoading(false);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load PPT");
+          setLoading(false);
+        }
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [book.id, isDemo]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (slideCount === 0) return;
+      if (e.key === "ArrowLeft" && current > 0) setCurrent(v => v - 1);
+      if (e.key === "ArrowRight" && current < slideCount - 1) setCurrent(v => v + 1);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [current, slideCount]);
+
+  if (!isDemo && loading) {
+    return (
+      <div className="w-full h-full flex items-center justify-center" style={{ background: "#1a1a1a" }}>
+        <span style={{ fontFamily: "Inter, sans-serif", color: "rgba(255,255,255,0.6)", fontSize: "1rem" }}>
+          加载中...
+        </span>
+      </div>
+    );
+  }
+
+  if (!isDemo && error) {
+    return (
+      <div className="w-full h-full flex items-center justify-center p-4" style={{ background: "#1a1a1a" }}>
+        <span style={{ fontFamily: "Inter, sans-serif", color: "#ef4444", fontSize: "1rem" }}>
+          {error}
+        </span>
+      </div>
+    );
+  }
+
+  if (slideCount === 0) {
+    return (
+      <div className="w-full h-full flex items-center justify-center" style={{ background: "#1a1a1a" }}>
+        <span style={{ fontFamily: "Inter, sans-serif", color: "rgba(255,255,255,0.4)", fontSize: "1rem" }}>
+          暂无内容
+        </span>
+      </div>
+    );
+  }
+
+  const renderSlideContent = () => {
+    if (isDemo) {
+      return <SlideContent slide={pptSlides[current]} />;
+    }
+    const text = slides![current];
+    const lines = text.split("\n").filter(l => l.trim());
+    const title = lines[0] || "";
+    const body = lines.slice(1).join("\n");
+    return <TextSlide title={title} body={body} />;
+  };
 
   return (
     <div className="flex h-full" style={{ background: "#1a1a1a" }}>
-      {/* Thumbnails */}
       <div className="hidden sm:flex flex-col w-36 flex-shrink-0 overflow-y-auto py-3 px-2 gap-2" data-testid="ppt-reader-thumbnails" style={{ background: "#111" }}>
-        {pptSlides.map((s, i) => (
+        {Array.from({ length: slideCount }, (_, i) => (
           <button
-            key={s.id}
+            key={i}
             data-testid={`ppt-reader-thumb-${i}`}
             onClick={() => setCurrent(i)}
             className="relative rounded overflow-hidden flex-shrink-0 transition-all"
@@ -193,19 +350,16 @@ export function PptReader({ book }: PptReaderProps) {
         ))}
       </div>
 
-      {/* Main slide */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Slide canvas */}
         <div className="flex-1 flex items-center justify-center p-4 lg:p-8" data-testid="ppt-reader-slide">
           <div
             className="w-full rounded-xl overflow-hidden shadow-2xl"
             style={{ maxWidth: "800px", aspectRatio: "16/9" }}
           >
-            <SlideContent slide={slide} />
+            {renderSlideContent()}
           </div>
         </div>
 
-        {/* Controls */}
         <div
           className="flex items-center justify-between px-6 py-3 flex-shrink-0"
           style={{ background: "#111" }}
@@ -221,7 +375,7 @@ export function PptReader({ book }: PptReaderProps) {
           </button>
 
           <div className="flex items-center gap-1.5">
-            {pptSlides.map((_, i) => (
+            {Array.from({ length: slideCount }, (_, i) => (
               <button
                 key={i}
                 data-testid={`ppt-reader-dot-${i}`}
@@ -237,8 +391,8 @@ export function PptReader({ book }: PptReaderProps) {
           </div>
 
           <button
-            onClick={() => setCurrent(v => Math.min(pptSlides.length - 1, v + 1))}
-            disabled={current === pptSlides.length - 1}
+            onClick={() => setCurrent(v => Math.min(slideCount - 1, v + 1))}
+            disabled={current === slideCount - 1}
             data-testid="ppt-reader-next"
             className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm disabled:opacity-30 transition-colors hover:bg-white/10"
             style={{ color: "#aaa", fontFamily: "Inter, sans-serif" }}

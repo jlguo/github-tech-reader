@@ -105,12 +105,13 @@ function makeRepoRow(info: RepoInfo, id: string): RepoRow {
   };
 }
 
-function detectFileType(filename: string): string {
-  const map: Record<string, string> = {
-    ".epub":"epub", ".pdf":"pdf", ".txt":"txt", ".doc":"doc", ".docx":"doc",
-    ".ppt":"ppt", ".pptx":"ppt", ".xls":"xls", ".xlsx":"xlsx",
-    ".html":"html", ".htm":"html", ".md":"txt",
-  };
+  function detectFileType(filename: string): string {
+    const map: Record<string, string> = {
+      ".epub":"epub", ".pdf":"pdf", ".txt":"txt", ".doc":"word", ".docx":"word",
+      ".ppt":"ppt", ".pptx":"ppt", ".xls":"excel", ".xlsx":"excel",
+      ".html":"html", ".htm":"html", ".md":"txt",
+      ".cbz":"cbz", ".cbr":"cbz",
+    };
   const ext = filename.slice(filename.lastIndexOf(".")).toLowerCase();
   return map[ext] ?? "txt";
 }
