@@ -101,7 +101,7 @@ The app supports two data access modes, switched via `VITE_DATA_SOURCE` env var:
 
 - **`bookshelf.apk`** (1.3 MB): Entire PWA bundled inside WebView
 - Zero network needed — no server, no WiFi, just install and open
-- Android manifest: `package="io.sisyphus.bookshelf"`, `android:icon="@mipmap/ic_launcher"`, `Theme.NoTitleBar` (no action bar), minSdkVersion 21, targetSdkVersion 34
+- Android manifest: `package="io.sisyphus.bookshelf"`, `android:icon="@mipmap/ic_launcher"`, `android:label="@string/app_name"` (= "电子书架" in `res/values/strings.xml`), `Theme.NoTitleBar` (no action bar), minSdkVersion 21, targetSdkVersion 34
 - All assets loaded from `file:///android_asset/` via `WebViewAssetLoader`
 - **File uploads**: `WebChromeClient#onShowFileChooser()` implemented in `MainActivity.java` to open system file picker for `<input type="file">` elements (WebView does not handle file choosers by default)
 - **Signing**: debug keystore at `/tmp/bookshelf.keystore` (alias: `bookshelf`, password: `bookshelf`)
