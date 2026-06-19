@@ -76,6 +76,11 @@ export function ReaderModal({ book, onClose }: ReaderModalProps) {
     scheduleHide();
   }, [scheduleHide]);
 
+  const hideTopbar = useCallback(() => {
+    clearHideTimer();
+    setTopbarVisible(false);
+  }, [clearHideTimer]);
+
   useEffect(() => {
     if (!book) return;
     setTopbarVisible(true);
@@ -160,16 +165,14 @@ export function ReaderModal({ book, onClose }: ReaderModalProps) {
       >
         <ReaderContent book={book} />
       </div>
-      {!topbarVisible && (
-        <button
-          type="button"
-          aria-label="Show toolbar"
-          onPointerDown={(e) => { e.stopPropagation(); showTopbar(); }}
-          className="absolute inset-x-0 top-0"
-          style={{ height: 24, background: "transparent", border: 0, padding: 0, cursor: "pointer", zIndex: 30 }}
-          data-testid="reader-tap-strip"
-        />
-      )}
+      <button
+        type="button"
+        aria-label={topbarVisible ? "Hide toolbar" : "Show toolbar"}
+        onPointerDown={(e) => { e.stopPropagation(); topbarVisible ? hideTopbar() : showTopbar(); }}
+        className="absolute inset-x-0 bottom-0"
+        style={{ height: 60, background: "transparent", border: 0, padding: 0, cursor: "pointer", zIndex: 30 }}
+        data-testid="reader-tap-strip"
+      />
 
       {book.progress > 0 && (
         <div className="absolute bottom-0 left-0 right-0 h-0.5" style={{ background: "rgba(0,0,0,0.1)" }} data-testid="reader-progress-bar">
