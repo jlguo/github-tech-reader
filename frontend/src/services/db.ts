@@ -661,6 +661,11 @@ export class BookDatabase {
       `UPDATE repos SET ${setClauses.join(', ')} WHERE id = ?`,
       values,
     );
+    this.db.run(
+      `UPDATE imported_books SET ${setClauses.join(', ')} WHERE id = ?`,
+      values,
+    );
+
     await this.persist();
   }
 }

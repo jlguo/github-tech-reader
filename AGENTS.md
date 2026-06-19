@@ -99,14 +99,117 @@ The app supports two data access modes, switched via `VITE_DATA_SOURCE` env var:
 
 ### Android APK (Self-Contained)
 
-- **`bookshelf.apk`** (1.4 MB): Entire PWA bundled inside WebView via `WebViewAssetLoader`
+- **`bookshelf.apk`** (1.3 MB): Entire PWA bundled inside WebView
 - Zero network needed — no server, no WiFi, just install and open
-- Built with Gradle 8.5 + JDK 17 (`/tmp/bookshelf-apk/` — ephemeral build directory)
-- Android manifest: no TWA/remote URLs, all assets loaded from `file:///android_asset/`
-- **APK rebuild**: after `pnpm build`, copy `frontend/dist/**` into APK assets, rebuild with Gradle
+- Android manifest: `package="io.sisyphus.bookshelf"`, `android:icon="@mipmap/ic_launcher"`, `Theme.NoTitleBar` (no action bar), minSdkVersion 21, targetSdkVersion 34
+- All assets loaded from `file:///android_asset/` via `WebViewAssetLoader`
 - **File uploads**: `WebChromeClient#onShowFileChooser()` implemented in `MainActivity.java` to open system file picker for `<input type="file">` elements (WebView does not handle file choosers by default)
-- **App icon**: generated via `generate_icons.py` (Pillow), placed in mipmap densities (mdpi–xxxhdpi) + adaptive icon XML
 - **Signing**: debug keystore at `/tmp/bookshelf.keystore` (alias: `bookshelf`, password: `bookshelf`)
+
+#### Android Dev Environment (WSL + Windows SDK)
+
+Android SDK tools live on the Windows side (`D:\Android\Sdk\`) — accessed from WSL via `/mnt/d/Android/Sdk/`.
+
+| Tool | Path | Purpose |
+|------|------|---------|
+| `aapt2.exe` | `/mnt/d/Android/Sdk/build-tools/36.1.0/aapt2.exe` | Compile/link resources, build APK from source |
+| `adb.exe` | `/mnt/d/Android/Sdk/platform-tools/adb.exe` | Device/emulator management, install, shell |
+| `apksigner.jar` | `/mnt/d/Android/Sdk/build-tools/36.1.0/lib/apksigner.jar` | Sign APKs (v1+v2+v3) |
+| `android.jar` | `/mnt/d/Android/Sdk/platforms/android-36.1/android.jar` | Compile-time Android framework stub |
+| `dexdump.exe` | `/mnt/d/Android/Sdk/build-tools/36.1.0/dexdump.exe` | Dump dex bytecode |
+| `d8.jar` | `/mnt/d/Android/Sdk/build-tools/36.1.0/lib/d8.jar` | Compile `.class` → `classes.dex` |
+
+**IMPORTANT**: Windows binaries (`aapt2.exe`, `adb.exe`, etc.) cannot access WSL-native paths (`/tmp/`, `/home/`). Always copy files to Linux-native paths before passing to them, or use Windows paths (`D:\temp\`, `C:\Users\`).
+
+**Emulator**: Android emulator `emulator-5556` (x86_64, API 36).
+
+```sh
+# List devices
+/mnt/d/Android/Sdk/platform-tools/adb.exe devices
+
+# Screenshot from emulator
+/mnt/d/Android/Sdk/platform-tools/adb.exe -s emulator-5556 shell screencap -p /sdcard/screen.png
+/mnt/d/Android/Sdk/platform-tools/adb.exe -s emulator-5556 pull /sdcard/screen.png /tmp/screen.png
+
+# UI hierarchy dump (check visible text without image analysis)
+/mnt/d/Android/Sdk/platform-tools/adb.exe -s emulator-5556 shell uiautomator dump /sdcard/ui.xml
+/mnt/d/Android/Sdk/platform-tools/adb.exe -s emulator-5556 pull /sdcard/ui.xml /tmp/ui.xml
+
+# Install/launch
+/mnt/d/Android/Sdk/platform-tools/adb.exe -s emulator-5556 install -r <apk_path>
+/mnt/d/Android/Sdk/platform-tools/adb.exe -s emulator-5556 shell am start -n io.sisyphus.bookshelf/.MainActivity
+```
+
+#### APK Build Procedure (aapt2-based, NOT zip-repack)
+
+The correct way to rebuild `bookshelf.apk` is from source via `aapt2`, **not** by repacking the old binary zip. Repacking causes silent resource linking failures (icon, labels, etc.) because `resources.arsc` must be compiled together with the manifest.
+
+**Assets directory** at `/tmp/apk-repack/assets/` contains the `pnpm build` output (`index.html`, JS/CSS bundles, `sql-wasm.wasm`, PWA icons, service worker). **Real dex** at `/tmp/apk-repack/classes.dex` (2.6 MB, from original Gradle build — contains `MainActivity` with WebView + `WebChromeClient`).
+
+**Build steps:**
+
+```sh
+# 0. Prepare manifest and icon resources
+TESTDIR=/tmp/icon-test   # manifest at $TESTDIR/manifest/AndroidManifest.xml
+                          # icons at $TESTDIR/res/mipmap-*/ic_launcher.png
+                          # adaptive icon at $TESTDIR/res/mipmap-anydpi-v26/ic_launcher.xml
+                          # foreground drawable at $TESTDIR/res/drawable/ic_launcher_foreground.png
+
+# 1. Copy android.jar to Linux path (Windows binary can't read WSL paths)
+cp /mnt/d/Android/Sdk/platforms/android-36.1/android.jar /tmp/android.jar
+
+# 2. Compile resources to .flat files
+SDK=/mnt/d/Android/Sdk BJ=$SDK/build-tools/36.1.0
+$BJ/aapt2.exe compile -o $TESTDIR/flat --dir $TESTDIR/res
+
+# 3. Link into base APK (manifest + compiled resources + android.jar)
+$BJ/aapt2.exe link -o $TESTDIR/out/base.apk \
+  --manifest $TESTDIR/manifest/AndroidManifest.xml \
+  -R $TESTDIR/flat/*.flat \
+  -I /tmp/android.jar \
+  --auto-add-overlay
+
+# 4. Inject real dex + assets into base APK (Python zipfile)
+#    - Replace template classes.dex with real 2.6 MB dex
+#    - Add all assets from /tmp/apk-repack/assets/
+#    - resources.arsc must be ZIP_STORED (uncompressed) for Android R+
+
+# 5. Sign (v1+v2+v3)
+java -jar $BJ/lib/apksigner.jar sign \
+  --ks /tmp/bookshelf.keystore \
+  --ks-pass pass:bookshelf \
+  --ks-key-alias bookshelf \
+  --key-pass pass:bookshelf \
+  --out bookshelf.apk \
+  /tmp/bookshelf-unsigned.apk
+```
+
+**Icon generation**: `generate_icons.py` (Pillow-based) creates icons at 5 mipmap densities (mdpi=48px through xxxhdpi=192px) + adaptive icon foreground (512px) + `mipmap-anydpi-v26/ic_launcher.xml`.
+
+**Manifest template** (`$TESTDIR/manifest/AndroidManifest.xml`):
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="io.sisyphus.bookshelf">
+    <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34"/>
+    <application
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="true"
+        android:supportsRtl="true">
+        <activity
+            android:name=".MainActivity"
+            android:theme="@android:style/Theme.NoTitleBar"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
+```
+
+**Critical: NEVER use zip-repack for the binary manifest/resources.arsc**. `resources.arsc` must be compiled by `aapt2 link` together with the manifest — manual binary patching of the manifest does NOT update the resource table, causing Android to silently ignore the icon, theme, and label attributes.
 
 ### Local Dev Mode
 

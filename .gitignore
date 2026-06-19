@@ -20,6 +20,8 @@ backend/data/uploads/
 # Dev artifacts
 .playwright-mcp/
 .sisyphus/
+bookshelf.apk.idsig
+emulator-screen.png
 
 # Environment
 .env

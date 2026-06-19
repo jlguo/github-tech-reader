@@ -12,7 +12,13 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: {
+        ...devices["Desktop Chrome"],
+        launchOptions: {
+          executablePath:
+            process.env.CHROME_PATH || "/home/jlguo/.local/bin/google-chrome",
+        },
+      },
     },
   ],
   webServer: {
