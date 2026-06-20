@@ -18,6 +18,7 @@ export function MangaReader({ book }: MangaReaderProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const urlsRef = useRef<string[]>([]);
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const { save } = useReadingProgress(book.id);
   const isDemo = book.isDemo === true;
 
@@ -163,6 +164,20 @@ export function MangaReader({ book }: MangaReaderProps) {
             x < rect.width / 2 ? next() : prev();
           } else {
             x > rect.width / 2 ? next() : prev();
+          }
+        }}
+        onPointerDown={(e) => { swipeStartRef.current = { x: e.clientX, y: e.clientY }; }}
+        onPointerUp={(e) => {
+          if (!swipeStartRef.current) return;
+          const dx = e.clientX - swipeStartRef.current.x;
+          const dy = e.clientY - swipeStartRef.current.y;
+          swipeStartRef.current = null;
+          if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+            if (direction === "rtl") {
+              if (dx > 0) prev(); else next();
+            } else {
+              if (dx > 0) next(); else prev();
+            }
           }
         }}
       >

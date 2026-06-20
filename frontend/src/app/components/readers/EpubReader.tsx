@@ -33,6 +33,7 @@ export function EpubReader({ book }: EpubReaderProps) {
   const [tocItems, setTocItems] = useState<NavItem[]>([]);
   const [currentChapter, setCurrentChapter] = useState("");
   const [currentPercent, setCurrentPercent] = useState(0);
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const renditionRef = useRef<Rendition | null>(null);
@@ -265,7 +266,21 @@ export function EpubReader({ book }: EpubReaderProps) {
             </div>
           )}
 
-          <div className="flex-1 overflow-y-auto" data-testid="epub-reader-area">
+          <div
+            className="flex-1 overflow-y-auto"
+            data-testid="epub-reader-area"
+            onPointerDown={(e) => { swipeStartRef.current = { x: e.clientX, y: e.clientY }; }}
+            onPointerUp={(e) => {
+              if (!swipeStartRef.current) return;
+              const dx = e.clientX - swipeStartRef.current.x;
+              const dy = e.clientY - swipeStartRef.current.y;
+              swipeStartRef.current = null;
+              if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+                if (dx > 0) setPage(v => Math.max(0, v - 1));
+                else setPage(v => Math.min(pages.length - 1, v + 1));
+              }
+            }}
+          >
             <div className="max-w-[640px] mx-auto px-6 py-12">
               <p
                 className="leading-[2] whitespace-pre-wrap"

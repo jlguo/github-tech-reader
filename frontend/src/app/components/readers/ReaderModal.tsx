@@ -174,7 +174,7 @@ export function ReaderModal({ book, onClose }: ReaderModalProps) {
         aria-label={topbarVisible ? "Hide toolbar" : "Show toolbar"}
         onPointerDown={(e) => { e.stopPropagation(); topbarVisible ? hideTopbar() : showTopbar(); }}
         className="absolute inset-x-0 bottom-0"
-        style={{ height: 60, background: "transparent", border: 0, padding: 0, cursor: "pointer", zIndex: 30 }}
+        style={{ height: 12, background: "transparent", border: 0, padding: 0, cursor: "pointer", zIndex: 30 }}
         data-testid="reader-tap-strip"
       />
 

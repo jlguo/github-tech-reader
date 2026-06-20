@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { pptSlides } from "./readerData";
 import { Book } from "../bookData";
@@ -208,6 +208,7 @@ export function PptReader({ book }: PptReaderProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { save } = useReadingProgress(book.id);
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const isDemo = book.isDemo === true;
   const slideCount = isDemo ? pptSlides.length : (slides?.length ?? 0);
@@ -351,7 +352,20 @@ export function PptReader({ book }: PptReaderProps) {
       </div>
 
       <div className="flex-1 flex flex-col min-w-0">
-        <div className="flex-1 flex items-center justify-center p-4 lg:p-8" data-testid="ppt-reader-slide">
+        <div className="flex-1 flex items-center justify-center p-4 lg:p-8"
+          data-testid="ppt-reader-slide"
+          onPointerDown={(e) => { swipeStartRef.current = { x: e.clientX, y: e.clientY }; }}
+          onPointerUp={(e) => {
+            if (!swipeStartRef.current) return;
+            const dx = e.clientX - swipeStartRef.current.x;
+            const dy = e.clientY - swipeStartRef.current.y;
+            swipeStartRef.current = null;
+            if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+              if (dx > 0) setCurrent(v => Math.max(0, v - 1));
+              else setCurrent(v => Math.min(slideCount - 1, v + 1));
+            }
+          }}
+        >
           <div
             className="w-full rounded-xl overflow-hidden shadow-2xl"
             style={{ maxWidth: "800px", aspectRatio: "16/9" }}
