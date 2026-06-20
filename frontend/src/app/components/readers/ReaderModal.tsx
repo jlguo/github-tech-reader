@@ -17,6 +17,10 @@ interface ReaderModalProps {
 }
 
 const AUTO_HIDE_MS = 2500;
+const TAP_MAX_MS = 300;
+const TAP_MAX_PX = 10;
+const CENTER_MIN = 0.3;
+const CENTER_MAX = 0.7;
 
 function ReaderContent({ book }: { book: Book }) {
   if (book.isDemo) {
@@ -59,6 +63,7 @@ function getReaderBg(book: Book) {
 export function ReaderModal({ book, onClose }: ReaderModalProps) {
   const [topbarVisible, setTopbarVisible] = useState(true);
   const hideTimerRef = useRef<number | null>(null);
+  const tapStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
 
   const clearHideTimer = useCallback(() => {
     if (hideTimerRef.current !== null) {
@@ -91,6 +96,41 @@ export function ReaderModal({ book, onClose }: ReaderModalProps) {
     scheduleHide();
     return clearHideTimer;
   }, [book, scheduleHide, clearHideTimer]);
+
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === "reader-center-tap") {
+        topbarVisible ? hideTopbar() : showTopbar();
+      }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, [topbarVisible, hideTopbar, showTopbar]);
+
+  const onContentPointerDown = (e: React.PointerEvent) => {
+    tapStartRef.current = { x: e.clientX, y: e.clientY, time: Date.now() };
+  };
+
+  const onContentPointerUp = (e: React.PointerEvent) => {
+    const start = tapStartRef.current;
+    tapStartRef.current = null;
+    if (!start) return;
+
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const duration = Date.now() - start.time;
+
+    if (duration >= TAP_MAX_MS) return;
+    if (dist >= TAP_MAX_PX) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const relX = (e.clientX - rect.x) / rect.width;
+    const relY = (e.clientY - rect.y) / rect.height;
+    if (relX < CENTER_MIN || relX > CENTER_MAX || relY < CENTER_MIN || relY > CENTER_MAX) return;
+
+    topbarVisible ? hideTopbar() : showTopbar();
+  };
 
   if (!book) return null;
   const typeInfo = typeConfig[book.type];
@@ -166,17 +206,11 @@ export function ReaderModal({ book, onClose }: ReaderModalProps) {
       <div
         className="flex-1 min-h-0 relative"
         data-testid="reader-content"
+        onPointerDown={onContentPointerDown}
+        onPointerUp={onContentPointerUp}
       >
         <ReaderContent book={book} />
       </div>
-      <button
-        type="button"
-        aria-label={topbarVisible ? "Hide toolbar" : "Show toolbar"}
-        onPointerDown={(e) => { e.stopPropagation(); topbarVisible ? hideTopbar() : showTopbar(); }}
-        className="absolute inset-x-0 bottom-0"
-        style={{ height: 12, background: "transparent", border: 0, padding: 0, cursor: "pointer", zIndex: 30 }}
-        data-testid="reader-tap-strip"
-      />
 
       {book.progress > 0 && (
         <div className="absolute bottom-0 left-0 right-0 h-0.5" style={{ background: "rgba(0,0,0,0.1)" }} data-testid="reader-progress-bar">

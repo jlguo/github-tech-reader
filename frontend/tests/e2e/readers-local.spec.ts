@@ -150,13 +150,14 @@ test.describe("Readers - Local Mode", () => {
 
     await page.waitForTimeout(4000);
 
-    const tapStrip = page.locator('[data-testid="reader-tap-strip"]');
-    if (await tapStrip.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await tapStrip.click();
+    const content = page.locator('[data-testid="reader-content"]');
+    const box = await content.boundingBox();
+    if (box) {
+      await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
       await page.waitForTimeout(1000);
       await expect(page.locator('[data-testid="reader-topbar"]')).toBeVisible({ timeout: 3000 });
 
-      await tapStrip.click();
+      await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
       await page.waitForTimeout(1000);
     }
 

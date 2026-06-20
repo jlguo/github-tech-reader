@@ -60,6 +60,7 @@ export function FileReader({ book }: FileReaderProps) {
       const win = iframeRef.current?.contentWindow;
       if (win && win.document.readyState === "complete") {
         setupScrollTracking(win);
+        injectTapDetector(win.document);
         return;
       }
     } catch { /* cross-origin */ }

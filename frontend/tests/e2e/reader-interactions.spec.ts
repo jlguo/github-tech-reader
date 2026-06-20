@@ -21,9 +21,17 @@ async function openDemoBook(page: Page, cardId: string) {
   await expect(page.locator('[data-testid="reader-content"]')).toBeVisible({ timeout: 10000 });
 }
 
+async function centerTap(page: Page) {
+  const content = page.locator('[data-testid="reader-content"]');
+  const box = await content.boundingBox();
+  if (!box) return;
+  await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
+  await page.waitForTimeout(500);
+}
+
 async function closeReader(page: Page) {
   await page.waitForTimeout(3500);
-  await page.click('[data-testid="reader-tap-strip"]');
+  await centerTap(page);
   await page.waitForTimeout(800);
   await page.click('[data-testid="reader-back"]');
   await page.waitForTimeout(1000);
@@ -61,7 +69,7 @@ test.describe("Reader - Topbar Tap Operations", () => {
     await page.waitForTimeout(3500);
     await expect(page.locator('[data-testid="reader-topbar"]')).toHaveAttribute("data-visible", "false");
 
-    await page.click('[data-testid="reader-tap-strip"]');
+    await centerTap(page);
     await page.waitForTimeout(500);
     await expect(page.locator('[data-testid="reader-topbar"]')).toHaveAttribute("data-visible", "true");
 
@@ -72,15 +80,15 @@ test.describe("Reader - Topbar Tap Operations", () => {
     await openDemoBook(page, DEMO_BOOKS.epub.cardId);
 
     await page.waitForTimeout(3500);
-    await page.click('[data-testid="reader-tap-strip"]');
+    await centerTap(page);
     await page.waitForTimeout(500);
     await expect(page.locator('[data-testid="reader-topbar"]')).toHaveAttribute("data-visible", "true");
 
-    await page.click('[data-testid="reader-tap-strip"]');
+    await centerTap(page);
     await page.waitForTimeout(500);
     await expect(page.locator('[data-testid="reader-topbar"]')).toHaveAttribute("data-visible", "false");
 
-    await page.click('[data-testid="reader-tap-strip"]');
+    await centerTap(page);
     await page.waitForTimeout(500);
     await expect(page.locator('[data-testid="reader-topbar"]')).toHaveAttribute("data-visible", "true");
 
@@ -93,15 +101,15 @@ test.describe("Reader - Topbar Tap Operations", () => {
       await openDemoBook(page, DEMO_BOOKS[key].cardId);
 
       await page.waitForTimeout(3500);
-      await page.click('[data-testid="reader-tap-strip"]');
+      await centerTap(page);
       await page.waitForTimeout(500);
       await expect(page.locator('[data-testid="reader-topbar"]')).toHaveAttribute("data-visible", "true");
 
-      await page.click('[data-testid="reader-tap-strip"]');
+      await centerTap(page);
       await page.waitForTimeout(500);
       await expect(page.locator('[data-testid="reader-topbar"]')).toHaveAttribute("data-visible", "false");
 
-      await page.click('[data-testid="reader-tap-strip"]');
+      await centerTap(page);
       await page.waitForTimeout(500);
       await expect(page.locator('[data-testid="reader-topbar"]')).toHaveAttribute("data-visible", "true");
 
