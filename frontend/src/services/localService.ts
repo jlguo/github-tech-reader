@@ -176,6 +176,9 @@ export class LocalDataService implements IDataService {
 
   async addRepo(fullName: string): Promise<AddRepoResult> {
     const info = await this.#github.fetchRepoInfo(fullName);
+    if (this.#db.repoExistsByGithubId(info.github_id)) {
+      throw new Error("Repo already in shelf");
+    }
     const id = crypto.randomUUID();
     await this.#db.insertRepo(makeRepoRow(info, id));
     await this.#db.persist();
@@ -198,74 +201,69 @@ export class LocalDataService implements IDataService {
   // ── Book generation ─────────────────────────────────────────────
 
   async generateBook(repoId: string): Promise<void> {
-    const llm = this.#llm();
-    if (!llm) throw new Error("No LLM API key. Add one in Settings.");
-
     const repo = await this.#db.getRepo(repoId);
     if (!repo) throw new Error("Repo not found");
 
-    // Read README from OPFS
-    const readmeContent = await this.#contentStore.readFile(`repos/${repoId}/readme.md`);
-    if (!readmeContent) throw new Error("README not found. Fetch it first.");
-
-    const updateStatus = async (
-      status: string,
-      meta?: { phase?: string; totalChapters?: number; completedChapters?: number; outline?: ChapterOutline[] },
-    ) => {
-      await this.#db.upsertBookGen(repoId, {
-        status,
-        current_phase: meta?.phase ?? null,
-        total_chapters: meta?.totalChapters ?? 0,
-        completed_chapters: meta?.completedChapters ?? 0,
-        outline: meta?.outline ? JSON.stringify(meta.outline) : undefined,
-        updated_at: new Date().toISOString(),
-      });
-      await this.#db.persist();
-    };
-
-    // Determine the gen ID (reuse existing or create new one)
     let genId: string;
     const existingGen = await this.#db.getBookGen(repoId);
     if (existingGen) {
       genId = existingGen.id;
-      // Clean up old OPFS content for regeneration
       await this.#contentStore.removeDir(`books/${genId}`).catch(() => {});
     } else {
       genId = crypto.randomUUID();
     }
 
+    const updateStatus = async (
+      status: string,
+      meta?: { phase?: string; totalChapters?: number; completedChapters?: number; outline?: ChapterOutline[]; error_log?: string },
+    ) => {
+      await this.#db.upsertBookGen(repoId, {
+        id: genId,
+        status,
+        current_phase: meta?.phase ?? null,
+        total_chapters: meta?.totalChapters ?? 0,
+        completed_chapters: meta?.completedChapters ?? 0,
+        outline: meta?.outline ? JSON.stringify(meta.outline) : undefined,
+        error_log: meta?.error_log,
+        updated_at: new Date().toISOString(),
+      });
+      await this.#db.persist();
+    };
+
     try {
+      const llm = this.#llm();
+      if (!llm) throw new Error("No LLM API key. Add one in Settings.");
+
+      await updateStatus("fetching", { phase: "fetching" });
+
+      const readmeContent = await this.#contentStore.readFile(`repos/${repoId}/readme.md`);
+      if (!readmeContent) throw new Error("README not found. Fetch it first.");
+
       const cover = await generateBookCover(
         llm, this.#github, repo.full_name, repo.description ?? "",
         readmeContent, updateStatus,
       );
 
-      // Save cover to OPFS
       await this.#contentStore.writeFile(`books/${genId}/cover.html`, cover.coverHtml);
 
-      // Create/update book gen record
-      await this.#db.upsertBookGen(repoId, {
-        id: genId,
-        status: "writing", current_phase: "writing",
-        total_chapters: cover.outline.length, completed_chapters: 0,
-        outline: JSON.stringify(cover.outline),
-        updated_at: new Date().toISOString(),
+      await updateStatus("writing", {
+        phase: "writing",
+        totalChapters: cover.outline.length,
+        completedChapters: 0,
+        outline: cover.outline,
       });
-      await this.#db.persist();
 
       const content = await generateBookContent(
         llm, repo.full_name, cover.outline, cover.snapshot, updateStatus,
       );
 
       for (const ch of content.chapters) {
-        // Save each chapter to OPFS
         const chapNum = String(ch.number).padStart(2, "0");
         await this.#contentStore.writeFile(
           `books/${genId}/chapters/${chapNum}.html`,
           ch.content,
         );
 
-        // Keep DB insertion for metadata
         await this.#db.insertContentSection({
           id: crypto.randomUUID(), repo_id: repoId,
           section_type: "book_chapter", title: ch.title,
@@ -278,19 +276,13 @@ export class LocalDataService implements IDataService {
       const finalHtml = prependCover(content.html, cover.coverHtml);
       await this.#contentStore.writeFile(`books/${genId}/book.html`, finalHtml);
 
-      await this.#db.upsertBookGen(repoId, {
-        status: "done", current_phase: "done",
-        completed_chapters: content.chapters.length,
-        updated_at: new Date().toISOString(),
+      await updateStatus("done", {
+        phase: "done",
+        totalChapters: content.chapters.length,
+        completedChapters: content.chapters.length,
       });
-      await this.#db.persist();
     } catch (e) {
-      await this.#db.upsertBookGen(repoId, {
-        status: "failed",
-        error_log: String(e),
-        updated_at: new Date().toISOString(),
-      });
-      await this.#db.persist();
+      await updateStatus("failed", { error_log: String(e) });
       throw e;
     }
   }
