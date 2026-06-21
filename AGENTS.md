@@ -261,6 +261,11 @@ cd frontend && npx playwright test --headed  # visible browser
 - **Key tests**: layout, view mode toggle, search, sort, book detail modal, import dialog validation, reading progress smoke test
 - **Smoke test tip**: use `waitUntil: "domcontentloaded"` — `waitUntil: "load"` blocks on OpenGraph cover images (8.5s each)
 
+#### Smoke Test Practices
+
+1. All test cases simulate human UI interactions. Do not use API mocking (`page.route`) or `page.goto` to bypass the UI — interact through the page like a real user.
+2. Do not increase or add `waitForTimeout` without justification. When a test hangs or times out, add debug logs (`console.log`) to identify the exact stuck step before touching any timeout.
+
 ### API Routes
 
 | Method | Path | Purpose |

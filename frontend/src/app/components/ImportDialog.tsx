@@ -157,6 +157,7 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
       <div className="absolute inset-0" style={{ background: "rgba(44,26,14,0.6)", backdropFilter: "blur(4px)" }} />
       <div
         className="relative w-full max-w-md rounded-2xl overflow-hidden"
+        data-testid="import-dialog-content"
         style={{ background: "var(--card)" }}
         onClick={e => e.stopPropagation()}
       >
@@ -168,7 +169,7 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
               导入书籍
             </h2>
           </div>
-          <button onClick={() => { reset(); onClose(); }} className="p-1.5 rounded-full hover:bg-[var(--muted)] transition-colors">
+          <button data-testid="import-dialog-close" onClick={() => { reset(); onClose(); }} className="p-1.5 rounded-full hover:bg-[var(--muted)] transition-colors">
             <X size={18} style={{ color: "var(--muted-foreground)" }} />
           </button>
         </div>
@@ -225,11 +226,11 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
               </button>
             </div>
           ) : step === "error" ? (
-            <div className="flex flex-col items-center py-6 gap-3">
+            <div data-testid="import-dialog-error" className="flex flex-col items-center py-6 gap-3">
               <div className="p-3 rounded-full" style={{ background: "rgba(220,80,80,0.15)" }}>
                 <AlertCircle size={32} style={{ color: "#dc5050" }} />
               </div>
-              <p className="text-sm text-center" style={{ color: "#dc5050", fontFamily: "Inter, sans-serif" }}>{error}</p>
+              <p data-testid="import-dialog-error-message" className="text-sm text-center" style={{ color: "#dc5050", fontFamily: "Inter, sans-serif" }}>{error}</p>
               <button
                 onClick={() => setStep("input")}
                 className="mt-2 px-6 py-2 rounded-full text-sm font-medium transition-colors"
@@ -247,6 +248,7 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
                   </label>
                   <div className="flex gap-2">
                     <input
+                      data-testid="import-dialog-input"
                       value={input}
                       onChange={e => setInput(e.target.value)}
                       onKeyDown={e => { if (e.key === "Enter" && canImport) handleImport(); }}
@@ -261,6 +263,11 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
                       autoFocus
                     />
                   </div>
+                  {input.trim() && !fullName && (
+                    <p data-testid="import-dialog-error-format" className="text-xs" style={{ color: "#dc5050", fontFamily: "Inter, sans-serif" }}>
+                      请输入有效的 GitHub 仓库格式，例如 owner/repo
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -315,6 +322,7 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
                     输入网页链接
                   </label>
                   <input
+                    data-testid="import-dialog-input"
                     value={input}
                     onChange={e => setInput(e.target.value)}
                     onKeyDown={e => { if (e.key === "Enter" && canImport) handleImport(); }}
@@ -335,6 +343,7 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
               )}
 
               <button
+                data-testid="import-dialog-submit"
                 onClick={handleImport}
                 disabled={!canImport}
                 className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"

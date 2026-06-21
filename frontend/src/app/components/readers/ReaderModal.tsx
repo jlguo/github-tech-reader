@@ -43,7 +43,7 @@ function ReaderContent({ book }: { book: Book }) {
     case "ppt": return <PptReader book={book} />;
     case "excel": return <ExcelReader book={book} />;
     case "html":
-      return book.sourceType === "url" ? <HtmlReader book={book} /> : <FileReader book={book} />;
+      return book.sourceType === "file" ? <FileReader book={book} /> : <HtmlReader book={book} />;
     default:
       return book.sourceType === "file" ? <FileReader book={book} /> : <HtmlReader book={book} />;
   }
