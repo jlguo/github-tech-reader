@@ -4,6 +4,7 @@ node_modules/
 
 # Build
 frontend/dist/
+bookshelf.apk
 
 # Python
 __pycache__/
@@ -16,12 +17,14 @@ uv.lock
 # Database
 backend/data/*.db
 backend/data/uploads/
+backend/data/content/
 
 # Dev artifacts
 .playwright-mcp/
 .sisyphus/
 bookshelf.apk.idsig
 emulator-screen.png
+docs/*.pdf
 
 # Environment
 .env

@@ -218,20 +218,48 @@ export const htmlContent = {
 `,
 };
 
+function mangaSvg(title: string, accent: string, panels: string[]): string {
+  const rowHeight = 100;
+  const gap = 20;
+  const rows = panels
+    .map((txt, i) => {
+      const y = 80 + i * (rowHeight + gap);
+      return `<rect x="40" y="${y}" width="320" height="${rowHeight}" fill="white" stroke="#222" stroke-width="3"/><text x="60" y="${y + 30}" font-family="serif" font-size="14" fill="#222">${txt}</text>`;
+    })
+    .join("");
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 600"><rect width="400" height="600" fill="#fafaf6"/><rect x="20" y="20" width="360" height="40" fill="${accent}"/><text x="200" y="48" text-anchor="middle" font-family="serif" font-size="22" font-weight="bold" fill="white">${title}</text>${rows}<text x="200" y="585" text-anchor="middle" font-family="serif" font-size="12" fill="#888">鬼灭之刃 Vol.1</text></svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
 export const mangaPages = [
   {
     id: 1,
-    image: "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=400&h=600&fit=crop&auto=format",
+    image: mangaSvg("第一章 残酷", "#a83232", [
+      "大正时代,炭治郎下山卖炭...",
+      "归来时,家人惨遭鬼袭...",
+      "唯有妹妹祢豆子幸存,却已变鬼",
+      "炭治郎立誓:为家人复仇!",
+    ]),
     alt: "漫画第1页",
   },
   {
     id: 2,
-    image: "https://images.unsplash.com/photo-1612178537253-bccd437b730e?w=400&h=600&fit=crop&auto=format",
+    image: mangaSvg("第二章 修行", "#3a5a40", [
+      "拜入鳞泷左近次门下",
+      "斩开巨石,通过最终选拔",
+      "获得日轮刀——黑色刀身",
+      "踏上鬼杀队的征途",
+    ]),
     alt: "漫画第2页",
   },
   {
     id: 3,
-    image: "https://images.unsplash.com/photo-1614583225154-5fcdda07019e?w=400&h=600&fit=crop&auto=format",
+    image: mangaSvg("第三章 邂逅", "#1f4068", [
+      "路遇鼓屋鬼,救出少年",
+      "结识同伴善逸与伊之助",
+      "三人小队初次出击",
+      "面对沼泽鬼,生死一战",
+    ]),
     alt: "漫画第3页",
   },
 ];

@@ -11,6 +11,10 @@ from app.core.database import get_db
 from app.models.repo import Repo, BookGeneration, ContentSection, ReadingProgress
 from app.models.imported_book import ImportedBook
 from app.api.schemas import BookListItem, BookContentResponse, SectionResponse, BookUpdateRequest
+from app.services.file_storage import (
+    load_book_html, load_cover_html, load_chapter,
+    load_import_content, delete_book_content, delete_import_content,
+)
 
 router = APIRouter()
 
@@ -118,12 +122,12 @@ async def get_book_content(book_id: str, db: AsyncSession = Depends(get_db)):
         return BookContentResponse(
             book_id=gen.id,
             title=gen.repo.name if gen.repo else "Unknown",
-            html_content=gen.html_output or "",
-            cover_html=gen.cover_html,
+            html_content=load_book_html(gen.id) or "",
+            cover_html=load_cover_html(gen.id),
             chapters=[
                 SectionResponse(
                     id=c.id, section_type=c.section_type,
-                    title=c.title, content=c.content,
+                    title=c.title, content=load_chapter(gen.id, c.chapter_number or 0) or "",
                     order_index=c.order_index,
                     metadata_=c.metadata_, created_at=c.created_at,
                 )
@@ -139,7 +143,7 @@ async def get_book_content(book_id: str, db: AsyncSession = Depends(get_db)):
         return BookContentResponse(
             book_id=imported.id,
             title=imported.title,
-            html_content=imported.content_text or "",
+            html_content=load_import_content(imported.id) or "",
             cover_html=None,
             chapters=[],
         )
@@ -172,14 +176,14 @@ async def get_book_by_repo(repo_id: str, db: AsyncSession = Depends(get_db)):
     return BookContentResponse(
         book_id=gen.id,
         title=gen.repo.name if gen.repo else "Unknown",
-        html_content=gen.html_output or "",
-        cover_html=gen.cover_html,
+        html_content=load_book_html(gen.id) or "",
+        cover_html=load_cover_html(gen.id),
         chapters=[
             SectionResponse(
                 id=c.id,
                 section_type=c.section_type,
                 title=c.title,
-                content=c.content,
+                content=load_chapter(gen.id, c.chapter_number or 0) or "",
                 order_index=c.order_index,
                 metadata_=c.metadata_,
                 created_at=c.created_at,
@@ -260,6 +264,7 @@ async def delete_book(repo_id: str, db: AsyncSession = Depends(get_db)):
     gen = gen_result.scalar()
 
     if gen:
+        delete_book_content(gen.id)
         await db.execute(
             delete(ContentSection).where(ContentSection.repo_id == repo_id)
         )
@@ -268,6 +273,8 @@ async def delete_book(repo_id: str, db: AsyncSession = Depends(get_db)):
     repo_result = await db.execute(select(Repo).where(Repo.id == repo_id))
     repo = repo_result.scalar()
     if repo:
+        from app.services.file_storage import delete_repo_content
+        delete_repo_content(repo.id)
         await db.delete(repo)
         await db.commit()
         return {"ok": True}
@@ -279,10 +286,10 @@ async def delete_book(repo_id: str, db: AsyncSession = Depends(get_db)):
     if imported:
         if imported.file_path and os.path.isfile(imported.file_path):
             os.remove(imported.file_path)
+        delete_import_content(imported.id)
         await db.delete(imported)
         await db.commit()
         return {"ok": True}
-
 
 
 @router.patch("/books/{repo_id}")

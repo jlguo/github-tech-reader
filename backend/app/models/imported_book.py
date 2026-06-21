@@ -17,7 +17,6 @@ class ImportedBook(Base):
     file_type: Mapped[str] = mapped_column(String(16), nullable=False)  # epub, pdf, txt, doc, ppt, xlsx, html
     file_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     original_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
-    content_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     size_bytes: Mapped[int] = mapped_column(Integer, default=0)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     category: Mapped[str] = mapped_column(String(64), default="imported")

@@ -12,6 +12,10 @@ from app.models.repo import Repo, ContentSection, BookGeneration
 from app.api.schemas import BookGenerationStatusResponse
 from app.agents.crew import generate_book_cover, generate_book_content
 from app.events import publish, subscribe, unsubscribe
+from app.services.file_storage import (
+    load_readme, save_cover_html, save_book_html, save_chapter, save_outline,
+    delete_book_content,
+)
 
 router = APIRouter()
 
@@ -61,7 +65,8 @@ async def start_book_generation(
     if not repo:
         raise HTTPException(status_code=404, detail="Repo not found")
 
-    if not repo.readme_content:
+    readme_content = load_readme(repo.id)
+    if not readme_content:
         raise HTTPException(status_code=400, detail="Fetch README first")
 
     existing = await db.execute(
@@ -77,8 +82,6 @@ async def start_book_generation(
         gen.total_chapters = 0
         gen.completed_chapters = 0
         gen.error_log = None
-        gen.html_output = None
-        gen.cover_html = None
         gen.updated_at = datetime.utcnow()
     else:
         gen = BookGeneration(repo_id=repo_id, status="pending")
@@ -90,7 +93,7 @@ async def start_book_generation(
         repo_id=repo_id,
         repo_name=repo.full_name,
         repo_description=repo.description or "",
-        readme_content=repo.readme_content,
+        readme_content=readme_content,
     )
 
     return {"status": "started", "repo_id": repo_id}
@@ -122,10 +125,12 @@ async def _run_book_pipeline(
                 gen.status = "writing"
                 gen.current_phase = "writing"
                 gen.total_chapters = len(outline)
-                gen.cover_html = cover_html
                 gen.outline = {"chapters": outline}
                 gen.updated_at = datetime.utcnow()
                 await session.commit()
+
+            save_cover_html(gen.id, cover_html)
+            save_outline(gen.id, {"chapters": outline})
 
         await publish(repo_id, {
             "status": "writing",
@@ -149,7 +154,6 @@ async def _run_book_pipeline(
             if gen:
                 gen.status = "done"
                 gen.completed_chapters = len(chapters)
-                gen.html_output = html
                 gen.current_phase = "done"
                 gen.updated_at = datetime.utcnow()
 
@@ -165,7 +169,6 @@ async def _run_book_pipeline(
                     repo_id=repo_id,
                     section_type="book_chapter",
                     title=ch["title"],
-                    content=ch["content"],
                     order_index=ch["number"],
                     chapter_number=ch["number"],
                     word_count=ch.get("word_count", 0),
@@ -174,6 +177,10 @@ async def _run_book_pipeline(
                 session.add(section)
 
             await session.commit()
+
+            for ch in chapters:
+                save_chapter(gen.id, ch["number"], ch["content"])
+            save_book_html(gen.id, html)
 
         await publish(repo_id, {
             "status": "done",

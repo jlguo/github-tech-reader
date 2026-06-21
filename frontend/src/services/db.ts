@@ -1,6 +1,90 @@
 import initSqlJs, { Database as SqlJsDatabase, SqlValue } from 'sql.js';
 
 // ---------------------------------------------------------------------------
+// ContentStore — OPFS-backed content file storage
+// ---------------------------------------------------------------------------
+
+export class ContentStore {
+  private root: FileSystemDirectoryHandle | null = null;
+
+  async getRoot(): Promise<FileSystemDirectoryHandle> {
+    if (!this.root) {
+      this.root = await navigator.storage.getDirectory();
+    }
+    return this.root;
+  }
+
+  private async ensureDir(path: string): Promise<FileSystemDirectoryHandle> {
+    const root = await this.getRoot();
+    const parts = path.split('/').filter(Boolean);
+    let current = root;
+    for (const part of parts) {
+      current = await current.getDirectoryHandle(part, { create: true });
+    }
+    return current;
+  }
+
+  async writeFile(path: string, content: string | ArrayBuffer): Promise<void> {
+    const dir = await this.ensureDir(path.split('/').slice(0, -1).join('/'));
+    const filename = path.split('/').pop()!;
+    const handle = await dir.getFileHandle(filename, { create: true });
+    const writable = await handle.createWritable();
+    try {
+      if (typeof content === 'string') {
+        await writable.write(content);
+      } else {
+        await writable.write(content);
+      }
+      await writable.close();
+    } catch (e) {
+      await writable.abort();
+      throw e;
+    }
+  }
+
+  async readFile(path: string): Promise<string | null> {
+    try {
+      const root = await this.getRoot();
+      const parts = path.split('/').filter(Boolean);
+      let current: FileSystemDirectoryHandle | FileSystemFileHandle = root;
+      for (let i = 0; i < parts.length - 1; i++) {
+        current = await (current as FileSystemDirectoryHandle).getDirectoryHandle(parts[i]);
+      }
+      const filename = parts[parts.length - 1];
+      const fileHandle = await (current as FileSystemDirectoryHandle).getFileHandle(filename);
+      const file = await fileHandle.getFile();
+      return await file.text();
+    } catch {
+      return null;
+    }
+  }
+
+  async hasFile(path: string): Promise<boolean> {
+    try {
+      const root = await this.getRoot();
+      const parts = path.split('/').filter(Boolean);
+      let current: FileSystemDirectoryHandle | FileSystemFileHandle = root;
+      for (let i = 0; i < parts.length - 1; i++) {
+        current = await (current as FileSystemDirectoryHandle).getDirectoryHandle(parts[i]);
+      }
+      await (current as FileSystemDirectoryHandle).getFileHandle(parts[parts.length - 1]);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async removeDir(path: string): Promise<void> {
+    try {
+      const root = await this.getRoot();
+      await root.removeEntry(path, { recursive: true });
+    } catch {
+      // Directory doesn't exist, that's fine
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -24,7 +108,6 @@ export interface RepoRow {
   tags: string;
   is_favorite: number;
   added_at: string;
-  readme_content: string | null;
   readme_fetched_at: string | null;
 }
 
@@ -37,8 +120,6 @@ export interface BookGenRow {
   current_phase: string | null;
   outline: string | null;
   error_log: string | null;
-  html_output: string | null;
-  cover_html: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -51,7 +132,6 @@ export interface ImportedBookRow {
   file_type: string;
   file_path: string | null;
   original_url: string | null;
-  content_text: string | null;
   size_bytes: number;
   description: string | null;
   category: string;
@@ -65,7 +145,6 @@ export interface ContentSectionRow {
   repo_id: string;
   section_type: string;
   title: string;
-  content: string;
   order_index: number;
   chapter_number: number | null;
   word_count: number | null;
@@ -141,7 +220,6 @@ CREATE TABLE IF NOT EXISTS repos (
     tags TEXT DEFAULT '[]',
     is_favorite INTEGER DEFAULT 0,
     added_at TEXT,
-    readme_content TEXT,
     readme_fetched_at TEXT
 );
 
@@ -160,7 +238,6 @@ CREATE TABLE IF NOT EXISTS content_sections (
     repo_id TEXT NOT NULL,
     section_type TEXT NOT NULL,
     title TEXT NOT NULL,
-    content TEXT NOT NULL,
     order_index INTEGER DEFAULT 0,
     chapter_number INTEGER,
     word_count INTEGER,
@@ -178,8 +255,6 @@ CREATE TABLE IF NOT EXISTS book_generations (
     current_phase TEXT,
     outline TEXT,
     error_log TEXT,
-    html_output TEXT,
-    cover_html TEXT,
     created_at TEXT,
     updated_at TEXT
 );
@@ -192,7 +267,6 @@ CREATE TABLE IF NOT EXISTS imported_books (
     file_type TEXT NOT NULL,
     file_path TEXT,
     original_url TEXT,
-    content_text TEXT,
     size_bytes INTEGER DEFAULT 0,
     description TEXT,
     category TEXT DEFAULT 'imported',
@@ -207,12 +281,14 @@ CREATE TABLE IF NOT EXISTS imported_books (
 // ---------------------------------------------------------------------------
 
 export class BookDatabase {
+  readonly contentStore: ContentStore;
   private db: SqlJsDatabase;
   private persistFn: () => Promise<void>;
 
-  private constructor(db: SqlJsDatabase, persistFn: () => Promise<void>) {
+  private constructor(db: SqlJsDatabase, persistFn: () => Promise<void>, contentStore?: ContentStore) {
     this.db = db;
     this.persistFn = persistFn;
+    this.contentStore = contentStore ?? new ContentStore();
   }
 
   /** Create (or restore) the database, running schema init. */
@@ -257,19 +333,19 @@ export class BookDatabase {
         (id, github_id, full_name, owner, name, description, html_url,
          stars, forks, language, topics, license, default_branch,
          created_at_github, updated_at_github, category, tags,
-         is_favorite, added_at, readme_content, readme_fetched_at)
+         is_favorite, added_at, readme_fetched_at)
       VALUES
         (?, ?, ?, ?, ?, ?, ?,
          ?, ?, ?, ?, ?, ?,
          ?, ?, ?, ?,
-         ?, ?, ?, ?)
+         ?, ?, ?)
     `;
     this.db.run(sql, [
       repo.id, repo.github_id, repo.full_name, repo.owner, repo.name,
       repo.description, repo.html_url, repo.stars, repo.forks, repo.language,
       repo.topics, repo.license, repo.default_branch,
       repo.created_at_github, repo.updated_at_github, repo.category, repo.tags,
-      repo.is_favorite, repo.added_at, repo.readme_content, repo.readme_fetched_at,
+      repo.is_favorite, repo.added_at, repo.readme_fetched_at,
     ]);
     await this.persist();
   }
@@ -297,6 +373,8 @@ export class BookDatabase {
 
   async deleteRepo(id: string): Promise<void> {
     this.db.run('DELETE FROM repos WHERE id = ?', [id]);
+    await this.contentStore.removeDir(`repos/${id}`);
+    await this.contentStore.removeDir(`books/by-repo/${id}`);
     await this.persist();
   }
 
@@ -331,9 +409,9 @@ export class BookDatabase {
       this.db.run(
         `INSERT INTO book_generations
            (id, repo_id, status, total_chapters, completed_chapters,
-            current_phase, outline, error_log, html_output, cover_html,
+            current_phase, outline, error_log,
             created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           id,
           repoId,
@@ -343,8 +421,6 @@ export class BookDatabase {
           data.current_phase ?? null,
           data.outline ?? null,
           data.error_log ?? null,
-          data.html_output ?? null,
-          data.cover_html ?? null,
           data.created_at ?? now,
           data.updated_at ?? now,
         ],
@@ -472,12 +548,12 @@ export class BookDatabase {
     this.db.run(
       `INSERT INTO imported_books
          (id, title, author, source_type, file_type, file_path, original_url,
-          content_text, size_bytes, description, category, tags,
+          size_bytes, description, category, tags,
           is_favorite, added_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         book.id, book.title, book.author, book.source_type, book.file_type,
-        book.file_path, book.original_url, book.content_text, book.size_bytes,
+        book.file_path, book.original_url, book.size_bytes,
         book.description, book.category, book.tags, book.is_favorite, book.added_at,
       ],
     );
@@ -511,20 +587,16 @@ export class BookDatabase {
 
   async deleteImportedBook(id: string): Promise<void> {
     this.db.run('DELETE FROM imported_books WHERE id = ?', [id]);
+    await this.contentStore.removeDir(`imports/${id}`);
     await this.persist();
   }
 
   async getImportedBookContent(
     id: string,
   ): Promise<{ html_content: string } | null> {
-    const stmt = this.db.prepare(
-      'SELECT content_text FROM imported_books WHERE id = ?',
-    );
-    stmt.bind([id]);
-    const row = stmt.step() ? stmt.getAsObject() : null;
-    stmt.free();
-    if (row && (row as Record<string, unknown>).content_text) {
-      return { html_content: (row as Record<string, unknown>).content_text as string };
+    const content = await this.contentStore.readFile(`imports/${id}/content.html`);
+    if (content) {
+      return { html_content: content };
     }
     return null;
   }
@@ -536,22 +608,11 @@ export class BookDatabase {
   async getBookByRepo(
     repoId: string,
   ): Promise<{ html_content: string } | null> {
-    const stmt = this.db.prepare(
-      `SELECT content, title FROM content_sections
-       WHERE repo_id = ? AND section_type = 'book'
-       ORDER BY order_index ASC`,
-    );
-    stmt.bind([repoId]);
-
-    const parts: string[] = [];
-    while (stmt.step()) {
-      const row = stmt.getAsObject() as { content: string; title: string };
-      parts.push(row.content);
+    const content = await this.contentStore.readFile(`books/by-repo/${repoId}/content.html`);
+    if (content) {
+      return { html_content: content };
     }
-    stmt.free();
-
-    if (parts.length === 0) return null;
-    return { html_content: parts.join('\n') };
+    return null;
   }
 
   // -----------------------------------------------------------------------
@@ -561,12 +622,12 @@ export class BookDatabase {
   async insertContentSection(section: ContentSectionRow): Promise<void> {
     this.db.run(
       `INSERT INTO content_sections
-         (id, repo_id, section_type, title, content, order_index,
+         (id, repo_id, section_type, title, order_index,
           chapter_number, word_count, status, metadata, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         section.id, section.repo_id, section.section_type, section.title,
-        section.content, section.order_index, section.chapter_number,
+        section.order_index, section.chapter_number,
         section.word_count, section.status, section.metadata, section.created_at,
       ],
     );
@@ -645,6 +706,9 @@ export class BookDatabase {
     this.db.run('DELETE FROM content_sections WHERE repo_id = ?', [repoId]);
     this.db.run('DELETE FROM reading_progress WHERE repo_id = ?', [repoId]);
     this.db.run('DELETE FROM imported_books WHERE id = ?', [repoId]);
+    await this.contentStore.removeDir(`repos/${repoId}`);
+    await this.contentStore.removeDir(`books/by-repo/${repoId}`);
+    await this.contentStore.removeDir(`imports/${repoId}`);
     await this.persist();
   }
 

@@ -13,8 +13,9 @@ from app.api.schemas import (
     ProgressResponse,
     SectionResponse,
 )
-from app.models.repo import Repo, ReadingProgress, ContentSection
+from app.models.repo import Repo, ReadingProgress, ContentSection, BookGeneration
 from app.services.github import fetch_repo_info, fetch_readme
+from app.services.file_storage import save_readme, load_readme, has_readme, delete_repo_content, delete_book_content
 
 router = APIRouter()
 
@@ -37,7 +38,7 @@ def _to_response(repo: Repo) -> RepoResponse:
         tags=repo.tags or [],
         is_favorite=repo.is_favorite,
         added_at=repo.added_at,
-        has_readme=repo.readme_content is not None,
+        has_readme=has_readme(repo.id),
     )
 
 
@@ -56,7 +57,7 @@ def _section_to_response(s: ContentSection) -> SectionResponse:
         id=s.id,
         section_type=s.section_type,
         title=s.title,
-        content=s.content,
+        content="",
         order_index=s.order_index,
         metadata_=s.metadata_,
         created_at=s.created_at,
@@ -147,8 +148,8 @@ async def get_repo(repo_id: str, db: AsyncSession = Depends(get_db)):
         tags=repo.tags or [],
         is_favorite=repo.is_favorite,
         added_at=repo.added_at,
-        has_readme=repo.readme_content is not None,
-        readme_content=repo.readme_content,
+        has_readme=has_readme(repo.id),
+        readme_content=load_readme(repo.id),
         reading_progress=[_progress_to_response(p) for p in repo.reading_progress],
         content_sections=[_section_to_response(s) for s in repo.content_sections],
     )
@@ -180,6 +181,13 @@ async def remove_repo(repo_id: str, db: AsyncSession = Depends(get_db)):
     if not repo:
         raise HTTPException(status_code=404, detail="Repo not found")
 
+    gen_result = await db.execute(
+        select(BookGeneration).where(BookGeneration.repo_id == repo_id)
+    )
+    for gen in gen_result.scalars():
+        delete_book_content(gen.id)
+
+    delete_repo_content(repo.id)
     await db.delete(repo)
     await db.commit()
     return {"ok": True}
@@ -197,7 +205,7 @@ async def fetch_repo_readme(repo_id: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="README not found on GitHub")
 
     from datetime import datetime
-    repo.readme_content = content
+    save_readme(repo.id, content)
     repo.readme_fetched_at = datetime.utcnow()
     await db.commit()
 

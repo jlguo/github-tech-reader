@@ -31,7 +31,6 @@ class Repo(Base):
     is_favorite: Mapped[bool] = mapped_column(Boolean, default=False)
     added_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    readme_content: Mapped[str | None] = mapped_column(Text, nullable=True)
     readme_fetched_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     reading_progress = relationship("ReadingProgress", back_populates="repo", cascade="all, delete-orphan")
@@ -58,7 +57,6 @@ class ContentSection(Base):
     repo_id: Mapped[str] = mapped_column(String(36), ForeignKey("repos.id"), nullable=False, index=True)
     section_type: Mapped[str] = mapped_column(String(64), nullable=False)
     title: Mapped[str] = mapped_column(String(256), nullable=False)
-    content: Mapped[str] = mapped_column(Text, nullable=False)
     order_index: Mapped[int] = mapped_column(Integer, default=0)
     chapter_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     word_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -82,8 +80,6 @@ class BookGeneration(Base):
     current_phase: Mapped[str | None] = mapped_column(String(64), nullable=True)
     outline: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     error_log: Mapped[str | None] = mapped_column(Text, nullable=True)
-    html_output: Mapped[str | None] = mapped_column(Text, nullable=True)
-    cover_html: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

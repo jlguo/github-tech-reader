@@ -11,6 +11,7 @@ from sqlalchemy import select
 
 from app.core.database import get_db, async_session
 from app.models.imported_book import ImportedBook
+from app.services.file_storage import save_import_content, load_import_content, delete_import_content
 
 router = APIRouter()
 
@@ -123,11 +124,12 @@ async def import_url(
             source_type="url",
             file_type=file_type,
             original_url=url,
-            content_text=html,
             size_bytes=len(html.encode()),
         )
         session.add(book)
         await session.commit()
+
+        save_import_content(book.id, html)
 
         return {
             "id": book.id,
@@ -161,6 +163,9 @@ async def get_book_content(book_id: str, db: AsyncSession = Depends(get_db)):
         select(ImportedBook).where(ImportedBook.id == book_id)
     )
     book = result.scalar()
-    if not book or not book.content_text:
+    if not book:
         raise HTTPException(status_code=404, detail="Content not found")
-    return {"id": book.id, "title": book.title, "content": book.content_text, "file_type": book.file_type}
+    content = load_import_content(book.id)
+    if not content:
+        raise HTTPException(status_code=404, detail="Content not found")
+    return {"id": book.id, "title": book.title, "content": content, "file_type": book.file_type}
