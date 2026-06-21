@@ -38,8 +38,17 @@ export class GitHubApi {
     this.baseUrl = "https://api.github.com";
   }
 
+  #repoPath(fullName: string): string {
+    const [owner, repo] = fullName.split("/");
+    return `${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+  }
+
   private headers(extra: Record<string, string> = {}): Record<string, string> {
-    const h: Record<string, string> = { ...extra };
+    const h: Record<string, string> = {
+      "Accept": "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+      ...extra,
+    };
     if (this.token) {
       h["Authorization"] = "Bearer " + this.token;
     }
@@ -63,7 +72,7 @@ export class GitHubApi {
 
   /** GET /repos/{fullName} — returns repo metadata. */
   async fetchRepoInfo(fullName: string): Promise<RepoInfo> {
-    const url = `${this.baseUrl}/repos/${encodeURIComponent(fullName)}`;
+    const url = `${this.baseUrl}/repos/${this.#repoPath(fullName)}`;
     const resp = await fetch(url, { headers: this.headers() });
     const data = await this.handleResponse(resp);
     if (!data) {
@@ -89,7 +98,7 @@ export class GitHubApi {
 
   /** GET /repos/{fullName}/readme — returns raw readme text or null. */
   async fetchReadme(fullName: string): Promise<string | null> {
-    const url = `${this.baseUrl}/repos/${encodeURIComponent(fullName)}/readme`;
+    const url = `${this.baseUrl}/repos/${this.#repoPath(fullName)}/readme`;
     const resp = await fetch(url, {
       headers: this.headers({ Accept: "application/vnd.github.raw+json" }),
     });
@@ -119,7 +128,7 @@ export class GitHubApi {
     maxFiles: number = 100,
   ): Promise<Record<string, string>> {
     // 1. Get the recursive tree
-    const treeUrl = `${this.baseUrl}/repos/${encodeURIComponent(fullName)}/git/trees/HEAD?recursive=1`;
+    const treeUrl = `${this.baseUrl}/repos/${this.#repoPath(fullName)}/git/trees/HEAD?recursive=1`;
     const treeResp = await fetch(treeUrl, { headers: this.headers() });
     const treeData = await this.handleResponse(treeResp);
     if (!treeData) {
@@ -143,7 +152,7 @@ export class GitHubApi {
     await Promise.all(
       selected.map(async (blob) => {
         try {
-          const contentUrl = `${this.baseUrl}/repos/${encodeURIComponent(fullName)}/contents/${encodeURIComponent(blob.path)}`;
+          const contentUrl = `${this.baseUrl}/repos/${this.#repoPath(fullName)}/contents/${encodeURIComponent(blob.path)}`;
           const resp = await fetch(contentUrl, {
             headers: this.headers({ Accept: "application/vnd.github.raw+json" }),
           });
@@ -167,7 +176,7 @@ export class GitHubApi {
     fullName: string,
     count: number = 10,
   ): Promise<Issue[]> {
-    const url = `${this.baseUrl}/repos/${encodeURIComponent(fullName)}/issues?state=all&per_page=${count}&sort=comments&direction=desc`;
+    const url = `${this.baseUrl}/repos/${this.#repoPath(fullName)}/issues?state=all&per_page=${count}&sort=comments&direction=desc`;
     const resp = await fetch(url, { headers: this.headers() });
     const data = await this.handleResponse(resp);
     if (!data) {
