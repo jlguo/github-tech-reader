@@ -358,6 +358,14 @@ export class BookDatabase {
     return row as unknown as RepoRow | null;
   }
 
+  repoExistsByGithubId(githubId: number): boolean {
+    const stmt = this.db.prepare('SELECT 1 FROM repos WHERE github_id = ?');
+    stmt.bind([githubId]);
+    const exists = !!stmt.step();
+    stmt.free();
+    return exists;
+  }
+
   async updateRepo(id: string, data: Partial<RepoRow>): Promise<void> {
     const setClauses: string[] = [];
     const values: SqlValue[] = [];
@@ -460,14 +468,14 @@ export class BookDatabase {
     const sql = `
       SELECT
         r.id                                    AS repo_id,
-        COALESCE(bg.id, '')                     AS book_id,
+        COALESCE(bg.id, r.id)                   AS book_id,
         r.full_name                             AS title,
         r.owner                                 AS author,
         r.description,
         r.language,
         r.html_url,
         COALESCE(bg.status, 'no_book')          AS status,
-        'generated'                             AS source_type,
+        'github'                                AS source_type,
         ''                                      AS file_type,
         COALESCE(bg.total_chapters, 0)          AS chapter_count,
         bg.completed_chapters,
@@ -478,7 +486,9 @@ export class BookDatabase {
         rp.metadata                             AS progress_metadata
       FROM repos r
       LEFT JOIN book_generations bg ON bg.repo_id = r.id
-      LEFT JOIN reading_progress rp ON rp.repo_id = r.id
+      LEFT JOIN reading_progress rp ON rp.id = (
+        SELECT id FROM reading_progress WHERE repo_id = r.id ORDER BY updated_at DESC LIMIT 1
+      )
       ${where}
       UNION ALL
       SELECT
@@ -500,7 +510,9 @@ export class BookDatabase {
         COALESCE(rp2.position, 0)               AS progress,
         rp2.metadata                            AS progress_metadata
       FROM imported_books ib
-      LEFT JOIN reading_progress rp2 ON rp2.repo_id = ib.id
+      LEFT JOIN reading_progress rp2 ON rp2.id = (
+        SELECT id FROM reading_progress WHERE repo_id = ib.id ORDER BY updated_at DESC LIMIT 1
+      )
       ORDER BY created_at DESC
     `;
 
