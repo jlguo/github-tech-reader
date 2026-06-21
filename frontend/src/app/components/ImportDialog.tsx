@@ -11,7 +11,8 @@ interface ImportResult {
   author: string;
   source_type: string;
   file_type?: string;
-  readme_length?: number;
+  readme_fetched?: boolean;
+  gen_started?: boolean;
 }
 
 function parseRepo(input: string): string | null {
@@ -79,17 +80,19 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
     try {
       const repo = await service.addRepo(fullName);
 
-      let readmeLen = 0;
+      let readmeFetched = false;
       try {
         await service.fetchReadme(repo.id);
-        readmeLen = 1;
-      } catch { readmeLen = 0; }
+        readmeFetched = true;
+      } catch { readmeFetched = false; }
 
-      if (readmeLen > 0) {
-        service.generateBook(repo.id).catch(() => {});
+      if (readmeFetched) {
+        service.generateBook(repo.id).catch((err) => {
+          console.error("Book generation failed:", err.message);
+        });
       }
 
-      setResult({ id: repo.id, title: repo.name, author: repo.owner, source_type: "github", readme_length: readmeLen });
+      setResult({ id: repo.id, title: repo.name, author: repo.owner, source_type: "github", readme_fetched: readmeFetched, gen_started: readmeFetched });
       setStep("success");
       onImported({ id: repo.id, title: repo.name, author: repo.owner, sourceType: "github", fileType: "html" });
     } catch (e: any) {
@@ -212,7 +215,7 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
               </p>
               <p className="text-xs" style={{ color: "var(--muted-foreground)", fontFamily: "Inter, sans-serif" }}>
                 {result.source_type === "github"
-                  ? `README ${result.readme_length ? result.readme_length + " 字符" : "未获取"} • AI 生成已启动`
+                  ? `README ${result.readme_fetched ? "已获取" : "未获取"}${result.gen_started ? " • AI 生成已启动" : ""}`
                   : result.source_type === "file"
                   ? `${result.file_type?.toUpperCase()} • ${result.author}`
                   : `网页 • ${result.file_type?.toUpperCase()}`}

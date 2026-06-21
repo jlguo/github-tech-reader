@@ -54,7 +54,7 @@ export default function App() {
               ? `https://opengraph.githubassets.com/1/${b.author}/${b.title}`
               : `https://placehold.co/200x280/${toColor(b.title).replace(/[^a-f0-9]/gi, "").slice(0, 6)}/fff?text=${encodeURIComponent(b.title.slice(0, 4))}`;
             const size = isGithub
-              ? (b.status === "done" ? `${b.chapter_count} 章` : b.status === "no_book" ? "未生成" : "创作中...")
+              ? (b.status === "done" ? `${b.chapter_count} 章` : b.status === "failed" ? "生成失败" : b.status === "no_book" ? "未生成" : "创作中...")
               : (b.file_type || "html").toUpperCase();
 
             let meta: Record<string, unknown> = {};
