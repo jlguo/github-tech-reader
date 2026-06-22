@@ -1,3 +1,4 @@
+import os
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -176,19 +177,32 @@ async def update_repo(repo_id: str, body: RepoUpdateRequest, db: AsyncSession = 
 
 @router.delete("/{repo_id}")
 async def remove_repo(repo_id: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Repo).where(Repo.id == repo_id))
-    repo = result.scalar()
-    if not repo:
-        raise HTTPException(status_code=404, detail="Repo not found")
+    from app.models.imported_book import ImportedBook
 
-    gen_result = await db.execute(
-        select(BookGeneration).where(BookGeneration.repo_id == repo_id)
-    )
-    for gen in gen_result.scalars():
-        delete_book_content(gen.id)
+    repo_result = await db.execute(select(Repo).where(Repo.id == repo_id))
+    repo = repo_result.scalar()
 
-    delete_repo_content(repo.id)
-    await db.delete(repo)
+    imported_result = await db.execute(select(ImportedBook).where(ImportedBook.id == repo_id))
+    imported = imported_result.scalar()
+
+    if not repo and not imported:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    if repo:
+        gen_result = await db.execute(
+            select(BookGeneration).where(BookGeneration.repo_id == repo_id)
+        )
+        for gen in gen_result.scalars():
+            delete_book_content(gen.id)
+        delete_repo_content(repo.id)
+        await db.delete(repo)
+
+    if imported:
+        if imported.file_path and os.path.isfile(imported.file_path):
+            os.remove(imported.file_path)
+        delete_import_content(imported.id)
+        await db.delete(imported)
+
     await db.commit()
     return {"ok": True}
 
