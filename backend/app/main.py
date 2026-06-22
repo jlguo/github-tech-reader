@@ -51,7 +51,13 @@ async def serve_spa(full_path: str):
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Not Found")
 
-    file_path = os.path.join(_static_dir, full_path)
+    static_real = os.path.realpath(_static_dir)
+    file_path = os.path.realpath(os.path.join(_static_dir, full_path))
+
+    if not (file_path == static_real or file_path.startswith(static_real + os.sep)):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Not Found")
+
     if os.path.isfile(file_path):
         return FileResponse(file_path)
     return FileResponse(os.path.join(_static_dir, "index.html"))
