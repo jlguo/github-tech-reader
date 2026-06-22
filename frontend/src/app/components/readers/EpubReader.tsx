@@ -103,6 +103,16 @@ export function EpubReader({ book }: EpubReaderProps) {
           save({ percent: pct, completed: pct >= 100, metadata: {} });
         });
 
+        rendition.on("click", (e: MouseEvent) => {
+          const container = containerRef.current;
+          if (!container) return;
+          const rect = container.getBoundingClientRect();
+          const relX = (e.screenX - window.screenX - rect.left) / rect.width;
+          const relY = (e.screenY - window.screenY - rect.top) / rect.height;
+          if (relX < 0.3 || relX > 0.7 || relY < 0.3 || relY > 0.7) return;
+          window.postMessage({ type: "reader-center-tap" }, window.location.origin);
+        });
+
         await rendition.display();
 
         if (cancelled) {
