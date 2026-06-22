@@ -4,10 +4,10 @@ const DEMO_BOOKS = {
   epub: { title: "百年孤独", cardId: "book-card-grid-1" },
   pdf: { title: "设计心理学", cardId: "book-card-grid-2" },
   manga: { title: "鬼灭之刃", cardId: "book-card-grid-8" },
-  ppt: { title: "2024Q1产品发布PPT", cardId: "book-card-grid-13" },
+  ppt: { title: "2024Q1产品发布PPT", cardId: "book-card-grid-12" },
   word: { title: "Q4产品规划报告", cardId: "book-card-grid-6" },
   excel: { title: "年度财务分析报告", cardId: "book-card-grid-9" },
-  html: { title: "CSS权威指南", cardId: "book-card-grid-12" },
+  html: { title: "CSS权威指南", cardId: "book-card-grid-13" },
 };
 
 async function openDemoBook(page: Page, cardId: string) {
