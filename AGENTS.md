@@ -41,9 +41,10 @@ frontend/          # React SPA (Vite)
   src/
     app/           # App component, pages
     components/    # shadcn/ui, BookCard, Sidebar, readers
-    components/readers/  # EpubReader, PdfReader, HtmlReader, FileReader
-    hooks/         # useBookStatus (SSE + poll fallback)
+    components/readers/  # ReaderModal (dispatcher) + Epub/Pdf/Html/File/Doc/Ppt/Excel/Txt/Manga readers
+    hooks/         # useBookStatus (SSE + poll fallback), useReadingProgress
     services/      # Data layer abstraction + on-device PWA runtime
+    utils/         # sanitize.ts (DOMPurify HTML sanitizer)
     styles/        # fonts, tailwind, theme CSS
     assets/        # static assets (figma:asset/ resolves here)
     config/        # api.ts (API_BASE_URL, POLL_INTERVAL_MS)
@@ -52,28 +53,33 @@ frontend/          # React SPA (Vite)
     icon-192.png   # PWA icons (placeholder)
     icon-512.png
 
-backend/           # FastAPI (Python) — UNTOUCHED
+backend/           # FastAPI (Python)
   app/
-    main.py        # FastAPI entrypoint, CORS, lifespan
-    core/          # config.py (settings), database.py (SQLAlchemy async engine)
+    main.py        # FastAPI entrypoint, CORS, lifespan, SPA static serving (path-traversal guarded)
+    core/          # config.py (settings, reader.db), database.py (async engine, PRAGMA foreign_keys=ON)
     models/        # SQLAlchemy ORM models (Repo, BookGeneration, ImportedBook, ContentSection)
     api/           # REST endpoints (repos, reading, agents, books, imports)
-    services/      # GitHub API client (httpx)
+    services/      # GitHub API client (httpx), file_storage (uploads + content persistence)
     agents/        # CrewAI agent team for book chapter generation
     events.py      # In-process pub/sub for SSE status streaming
-  data/            # SQLite database + uploads/ (auto-created)
+  data/            # SQLite database (reader.db) + uploads/ (auto-created)
 ```
+
+> **Note**: the backend was once "untouched" but is no longer — recent security commits
+> hardened it (SSRF blocking, upload caps, extension whitelist, path-traversal guard,
+> SQLite foreign-key enforcement + cascade deletes, imported-book file cleanup). See
+> the **Backend Security Hardening** section below.
 
 ### `frontend/src/services/` — Data Layer
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `api.ts` | 138 | `IDataService` interface + factory (`getDataService()`, `switchToLocal()`) |
-| `remoteService.ts` | 191 | `RemoteDataService` — 1:1 fetch wrapper for Python backend |
-| `localService.ts` | 312 | `LocalDataService` — full on-device implementation (sql.js + OPFS + book generation) |
-| `db.ts` | 660 | `BookDatabase` — SQLite via sql.js, 5 tables, full CRUD, book list JOIN |
+| `api.ts` | 143 | `IDataService` interface + factory (`getDataService()`, `switchToLocal()`) |
+| `remoteService.ts` | 197 | `RemoteDataService` — 1:1 fetch wrapper for Python backend |
+| `localService.ts` | 424 | `LocalDataService` — full on-device implementation (sql.js + OPFS + book generation) |
+| `db.ts` | 840 | `BookDatabase` — SQLite via sql.js, 5 tables, full CRUD, book list JOIN |
 | `bookGenerator.ts` | 334 | Port of CrewAI pipeline (`crew.py`) to TypeScript: planning → cover → writing → review → publish |
-| `githubApi.ts` | 187 | `GitHubApi` — GitHub REST API via browser fetch (readme, issues, repo info) |
+| `githubApi.ts` | 196 | `GitHubApi` — GitHub REST API via browser fetch (readme, issues, repo info) |
 | `llmClient.ts` | 60 | `LlmClient` — OpenAI-compatible chat completions via browser fetch |
 
 ### Dual-Mode Architecture
@@ -87,7 +93,7 @@ The app supports two data access modes, switched via `VITE_DATA_SOURCE` env var:
 
 - **Strategy pattern**: `IDataService` interface — `RemoteDataService` and `LocalDataService` both implement it
 - **Consumer code** calls `getDataService()` (returns `Promise<IDataService>`), never raw `fetch()`
-- **Python backend is untouched** — `backend/` has zero changes regardless of mode
+- **Mode-agnostic backend** — `backend/` behaves identically regardless of which frontend mode is selected (local mode simply never calls it)
 - **Timing**: `getDataService()` pre-resolves `RemoteDataService` for remote mode (no async import delay)
 
 ### PWA Support
@@ -240,6 +246,49 @@ pnpm dev                          # Standard mode (remote backend needed)
 - **File uploads**: stored in `backend/data/uploads/`, served via `GET /api/imports/{id}/file` with `inline` Content-Disposition for iframe embedding
 - **URL imports**: fetched via `httpx`, `<title>` extracted, stored as `content_text` in `ImportedBook`
 
+### Backend Security Hardening
+
+The backend was hardened by a series of security commits (it is no longer "untouched"):
+
+- **`fix(db)` 33e4f60** — `database.py` sets `PRAGMA foreign_keys=ON` per connection; `BookGeneration` cascades on repo delete
+- **`fix(imports)` 7aeefd2** — `imports.py`: SSRF guard (rejects non-http(s) schemes, `localhost`/`0.0.0.0`/`::1`, and any `is_private`/`is_loopback`/`is_link_local`/`is_reserved`/`is_multicast`/`is_unspecified` IP), `MAX_UPLOAD_SIZE = 50 MB` streamed in 1 MB chunks, extension whitelist enforced against `FILE_TYPE_MAP`
+- **`fix(spa)` 82cf09f** — `main.py` SPA static serving guards against path traversal
+- **`fix(repos)` 0c6e02a** — imported-book deletion removes the on-disk upload file
+- **`fix(config)` 2f4019b** — debug defaults to `False`
+
+**File-serve headers** (`GET /imports/{id}/file`, set in `imports.py`):
+
+```
+X-Content-Type-Options: nosniff
+Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; img-src data: https: http:; sandbox
+Content-Disposition: inline
+```
+
+The `sandbox` directive (no `allow-scripts`/`allow-same-origin`) means the served file runs in an opaque-origin, script-disabled iframe — uploaded HTML cannot execute scripts or reach the parent window.
+
+**`FILE_TYPE_MAP`** (extension → `file_type` stored in DB):
+
+| Extensions | `file_type` |
+|------------|-------------|
+| `.epub` | `epub` |
+| `.pdf` | `pdf` |
+| `.txt`, `.md` | `txt` |
+| `.doc`, `.docx` | `doc` |
+| `.ppt`, `.pptx` | `ppt` |
+| `.xls` | `xls` |
+| `.xlsx` | `xlsx` |
+| `.html`, `.htm` | `html` |
+
+> The DB `file_type` strings (`doc`/`xls`/`xlsx`/`ppt`) differ from the frontend `BookType`
+> enum (`word`/`excel`/`ppt`). `App.tsx` maps them via `FILE_TYPE_TO_BOOK_TYPE` / `toBookType()`;
+> a raw cast crashes `typeConfig[book.type]`. Keep the mapping in sync when adding types.
+
+**Content persistence**: only URL imports save extracted HTML via `save_import_content()`. Binary uploads (epub/pdf/docx/…) store just the raw file on disk; `load_import_content()` returns `None` for them.
+
+### HTML Sanitization
+
+`frontend/src/utils/sanitize.ts` wraps DOMPurify (`sanitizeHtml()`) to strip `<script>`, event-handler attributes, `javascript:` URLs, and dangerous tags before rendering untrusted HTML into a same-origin iframe. Consumers: `HtmlReader.tsx`, `DocReader.tsx`, `FileReader.tsx`.
+
 ### Reading Progress
 
 - **`useReadingProgress(bookId)`** hook — debounced (500ms) save with unmount flush via `useEffect` cleanup
@@ -258,7 +307,7 @@ cd frontend && npx playwright test --headed  # visible browser
 
 - **Config**: `playwright.config.ts` — testDir `tests/e2e`, 30s timeout, 1 retry, system Chrome via `executablePath`
 - **Web server**: reuses existing Vite on port 5173 (`reuseExistingServer: true`)
-- **Key tests**: layout, view mode toggle, search, sort, book detail modal, import dialog validation, reading progress smoke test
+- **Spec files**: `bookshelf.spec.ts` (layout, view toggle, search, sort, detail modal, import validation, progress smoke), `reader-interactions.spec.ts` (tap/swipe/scroll per reader), `reader-topbar-toggle.spec.ts` (center-tap topbar toggle across all reader types, real uploaded fixtures), `readers-local.spec.ts`, `readers-remote.spec.ts`
 - **Smoke test tip**: use `waitUntil: "domcontentloaded"` — `waitUntil: "load"` blocks on OpenGraph cover images (8.5s each)
 
 #### Smoke Test Practices
@@ -335,7 +384,7 @@ Real imported books (via `ImportDialog`) get `isDemo: undefined` — no badge re
 The `docs/` directory contains a **Figma-generated prototype** with hardcoded mock book data (`src/app/components/bookData.ts`). The v2 product implements real data layers on top of this design:
 
 - **Real data**: Backend APIs power the shelf with real GitHub repos, uploaded files, and URL imports
-- **Mock readers**: Epub/Pdf/Doc/Ppt/Excel readers still use mock data; real content goes through HtmlReader (generated books) or FileReader (uploaded files, iframe embed)
+- **Mock readers**: Epub/Pdf/Doc/Ppt/Excel readers still render mock/demo data; real generated books go through `HtmlReader` (same-origin srcDoc + sanitize). Uploaded files go through `FileReader` — HTML is fetched, DOMPurify-sanitized, and rendered via same-origin `srcDoc` (so the center-tap topbar script runs); binary files (pdf/epub/…) embed the sandboxed backend file URL directly.
 - **Design fidelity**: The warm cream/brown theme, typography, and layout from the prototype are preserved
 
 ## Conventions
@@ -345,11 +394,10 @@ The `docs/` directory contains a **Figma-generated prototype** with hardcoded mo
 - shadcn/ui components as the UI foundation; avoid adding new UI libraries
 - MUI is in the prototype's dependencies but should be removed — shadcn/ui covers the same surface
 - Chinese content; use `localeCompare("zh")` for sorting Chinese strings
-- Reader components follow the pattern in `ReaderModal.tsx`: one component per document type, dispatched by type
+- Reader components follow the pattern in `ReaderModal.tsx`: one component per document type, dispatched by `book.type` (and `sourceType` for HTML). Untrusted HTML is DOMPurify-sanitized and rendered via same-origin `srcDoc` so the center-tap topbar script can run; the parent listens for the `reader-center-tap` `postMessage`
 - Backend: async SQLAlchemy with `aiosqlite` driver; use `selectinload` for eager-loading relationships
 - Environment: copy `backend/.env.example` to `backend/.env` and configure `GITHUB_TOKEN` and `OPENAI_API_KEY`
 - **SSE**: `useBookStatus` hook for real-time status; SSE primary, 5s polling fallback; open only for selected book (detail modal), not shelf-wide
 - **Imported books**: use `ImportedBook` model for file uploads and URL imports; `GET /api/books` unions them with repo-generated books via `source_type` field
 - **genStatus type**: `"pending" | "fetching" | "planning" | "cover" | "writing" | "reviewing" | "publishing" | "done" | "failed" | "no_book"` — all 10 statuses recognized in UI
-- **Progress field**: `book.progress` is reading progress (0–100), NOT generation progress. Never set it based on `status === "done"`
 - **Progress field**: `book.progress` is reading progress (0–100), NOT generation progress. Never set it based on `status === "done"`
