@@ -35,6 +35,7 @@ class Repo(Base):
 
     reading_progress = relationship("ReadingProgress", back_populates="repo", cascade="all, delete-orphan")
     content_sections = relationship("ContentSection", back_populates="repo", cascade="all, delete-orphan")
+    book_generation = relationship("BookGeneration", back_populates="repo", cascade="all, delete-orphan", uselist=False)
 
 
 class ReadingProgress(Base):
@@ -83,4 +84,4 @@ class BookGeneration(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    repo = relationship("Repo")
+    repo = relationship("Repo", back_populates="book_generation")
