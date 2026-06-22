@@ -4,6 +4,7 @@ import { docContent } from "./readerData";
 import { Book } from "../bookData";
 import { getDataService } from "../../../services/api";
 import { useReadingProgress } from "../../hooks/useReadingProgress";
+import { sanitizeHtml } from "../../../utils/sanitize";
 
 const SCROLL_DEBOUNCE_MS = 2000;
 
@@ -67,6 +68,8 @@ const tocItemStyle = (level: number, active: boolean): React.CSSProperties => ({
   cursor: "pointer", transition: "all 0.15s",
   whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
 });
+
+const TAP_DETECT_SCRIPT = `(function(){var s=null;document.addEventListener('pointerdown',function(e){s={x:e.clientX,y:e.clientY,t:Date.now()}});document.addEventListener('pointerup',function(e){if(!s)return;var dx=e.clientX-s.x,dy=e.clientY-s.y,d=Math.sqrt(dx*dx+dy*dy),dt=Date.now()-s.t;s=null;if(dt>=300||d>=10)return;var w=window.innerWidth,h=window.innerHeight;if(e.clientX/w<0.3||e.clientX/w>0.7||e.clientY/h<0.3||e.clientY/h>0.7)return;parent.postMessage({type:'reader-center-tap'},'*')});})();`;
 
 export function DocReader({ book }: DocReaderProps) {
   const [expandedSections, setExpandedSections] = useState<Record<number, boolean>>({ 0: true, 1: true, 2: true, 3: true });
@@ -264,9 +267,9 @@ export function DocReader({ book }: DocReaderProps) {
     );
   }
 
-  const displayHtml = realHtml || "";
+  const displayHtml = realHtml ? sanitizeHtml(realHtml) : "";
   const anchoredHtml = injectAnchorIds(displayHtml);
-  const scopedHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${CONTENT_CSS}</style></head><body>${anchoredHtml}</body></html>`;
+  const scopedHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${CONTENT_CSS}</style><script>${TAP_DETECT_SCRIPT}</script></head><body>${anchoredHtml}</body></html>`;
 
   return (
     <div className="flex h-full" style={{ background: "#f5f5f5" }}>

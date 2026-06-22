@@ -99,6 +99,7 @@ export function ReaderModal({ book, onClose }: ReaderModalProps) {
 
   useEffect(() => {
     const handler = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin && e.origin !== "null") return;
       if (e.data?.type === "reader-center-tap") {
         topbarVisible ? hideTopbar() : showTopbar();
       }
