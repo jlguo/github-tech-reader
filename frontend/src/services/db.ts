@@ -187,6 +187,16 @@ export interface BookListItem {
 // Helpers
 // ---------------------------------------------------------------------------
 
+const REPO_UPDATE_COLS = new Set([
+  "description", "language", "category", "tags", "is_favorite", "readme_fetched_at",
+]);
+const BOOK_GEN_UPDATE_COLS = new Set([
+  "status", "total_chapters", "completed_chapters", "current_phase", "outline", "error_log", "updated_at",
+]);
+const IMPORTED_BOOK_UPDATE_COLS = new Set([
+  "title", "author", "description", "category", "tags", "is_favorite",
+]);
+
 function uuid(): string {
   return crypto.randomUUID();
 }
@@ -370,6 +380,7 @@ export class BookDatabase {
     const setClauses: string[] = [];
     const values: SqlValue[] = [];
     for (const [key, value] of Object.entries(data)) {
+      if (!REPO_UPDATE_COLS.has(key)) continue;
       setClauses.push(`${key} = ?`);
       values.push(value ?? null);
     }
@@ -401,6 +412,7 @@ export class BookDatabase {
       const values: SqlValue[] = [];
       for (const [key, value] of Object.entries(data)) {
         if (key === 'id' || key === 'repo_id') continue;
+        if (!BOOK_GEN_UPDATE_COLS.has(key)) continue;
         setClauses.push(`${key} = ?`);
         values.push(value ?? null);
       }
@@ -585,6 +597,7 @@ export class BookDatabase {
     const values: SqlValue[] = [];
     for (const [key, value] of Object.entries(data)) {
       if (key === 'id') continue;
+      if (!IMPORTED_BOOK_UPDATE_COLS.has(key)) continue;
       setClauses.push(`${key} = ?`);
       values.push(value ?? null);
     }
@@ -725,23 +738,28 @@ export class BookDatabase {
   }
 
   async updateBook(repoId: string, data: Record<string, unknown>): Promise<void> {
-    const setClauses: string[] = [];
-    const values: SqlValue[] = [];
+    const repoSetClauses: string[] = [];
+    const importedSetClauses: string[] = [];
+    const repoValues: SqlValue[] = [];
+    const importedValues: SqlValue[] = [];
     for (const [key, value] of Object.entries(data)) {
-      setClauses.push(`${key} = ?`);
-      values.push((value ?? null) as SqlValue);
+      if (REPO_UPDATE_COLS.has(key)) {
+        repoSetClauses.push(`${key} = ?`);
+        repoValues.push((value ?? null) as SqlValue);
+      }
+      if (IMPORTED_BOOK_UPDATE_COLS.has(key)) {
+        importedSetClauses.push(`${key} = ?`);
+        importedValues.push((value ?? null) as SqlValue);
+      }
     }
-    if (setClauses.length === 0) return;
-    values.push(repoId);
-    this.db.run(
-      `UPDATE repos SET ${setClauses.join(', ')} WHERE id = ?`,
-      values,
-    );
-    this.db.run(
-      `UPDATE imported_books SET ${setClauses.join(', ')} WHERE id = ?`,
-      values,
-    );
-
+    if (repoSetClauses.length > 0) {
+      repoValues.push(repoId);
+      this.db.run(`UPDATE repos SET ${repoSetClauses.join(', ')} WHERE id = ?`, repoValues);
+    }
+    if (importedSetClauses.length > 0) {
+      importedValues.push(repoId);
+      this.db.run(`UPDATE imported_books SET ${importedSetClauses.join(', ')} WHERE id = ?`, importedValues);
+    }
     await this.persist();
   }
 }
