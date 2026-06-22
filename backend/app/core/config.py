@@ -4,7 +4,7 @@ from pathlib import Path
 
 class Settings(BaseSettings):
     app_name: str = "GitHub Tech Reader"
-    debug: bool = True
+    debug: bool = False
 
     # Data directory — set via env for containers, auto-detected otherwise
     data_dir: str = ""
