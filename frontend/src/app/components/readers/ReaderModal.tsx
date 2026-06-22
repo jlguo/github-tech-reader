@@ -134,7 +134,7 @@ export function ReaderModal({ book, onClose }: ReaderModalProps) {
   };
 
   if (!book) return null;
-  const typeInfo = typeConfig[book.type];
+  const typeInfo = typeConfig[book.type] ?? { label: "FILE", color: "#5a5a5a", bg: "#f0f0f0" };
 
   const isDarkChrome = book.type === "pdf" || book.type === "ppt" || book.category === "manga";
 
