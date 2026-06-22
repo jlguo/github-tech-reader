@@ -39,3 +39,10 @@ backend/.env
 # OS
 .DS_Store
 Thumbs.db
+
+# Large e2e reader fixtures (sourced manually — see frontend/tests/e2e/fixtures/test-files/README.md)
+frontend/tests/e2e/fixtures/test-files/dive-into-docker.epub
+frontend/tests/e2e/fixtures/test-files/RESTful-Web-APIs.pdf
+frontend/tests/e2e/fixtures/test-files/Docker-podman.docx
+frontend/tests/e2e/fixtures/test-files/AWS-digital-Transform.pptx
+frontend/tests/e2e/fixtures/test-files/classic-books.xlsx
