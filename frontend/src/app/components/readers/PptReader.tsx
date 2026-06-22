@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, RotateCw } from "lucide-react";
 import { pptSlides } from "./readerData";
 import { Book } from "../bookData";
 import { getDataService } from "../../../services/api";
@@ -9,6 +9,77 @@ import JSZip from "jszip";
 interface PptReaderProps {
   book: Book;
 }
+
+interface ParsedSlide {
+  title: string;
+  body: string;
+  tables: string[][][];
+}
+
+function isLegacyPpt(buf: ArrayBuffer): boolean {
+  const sig = new Uint8Array(buf.slice(0, 4));
+  return sig[0] === 0xd0 && sig[1] === 0xcf && sig[2] === 0x11 && sig[3] === 0xe0;
+}
+
+function paragraphText(p: Element): string {
+  return Array.from(p.getElementsByTagName("a:t"))
+    .map(t => t.textContent ?? "")
+    .join("");
+}
+
+function isTitlePlaceholder(shape: Element): boolean {
+  const ph = shape.getElementsByTagName("p:ph")[0];
+  const type = ph?.getAttribute("type") ?? "";
+  return type === "title" || type === "ctrTitle";
+}
+
+function parseSlideXml(xml: string): ParsedSlide {
+  const doc = new DOMParser().parseFromString(xml, "application/xml");
+
+  let title = "";
+  const titleShape = Array.from(doc.getElementsByTagName("p:sp")).find(isTitlePlaceholder);
+  if (titleShape) {
+    title = Array.from(titleShape.getElementsByTagName("a:p"))
+      .map(paragraphText)
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+  }
+
+  const bodyLines: string[] = [];
+  for (const shape of Array.from(doc.getElementsByTagName("p:sp"))) {
+    if (shape === titleShape) continue;
+    for (const p of Array.from(shape.getElementsByTagName("a:p"))) {
+      const text = paragraphText(p).trim();
+      if (text) bodyLines.push(text);
+    }
+  }
+
+  if (!title && bodyLines.length > 0) {
+    title = bodyLines.shift() as string;
+  }
+
+  const tables: string[][][] = [];
+  for (const tbl of Array.from(doc.getElementsByTagName("a:tbl"))) {
+    const rows: string[][] = [];
+    for (const tr of Array.from(tbl.getElementsByTagName("a:tr"))) {
+      const cells: string[] = [];
+      for (const tc of Array.from(tr.getElementsByTagName("a:tc"))) {
+        const cellText = Array.from(tc.getElementsByTagName("a:p"))
+          .map(paragraphText)
+          .filter(Boolean)
+          .join(" ")
+          .trim();
+        cells.push(cellText);
+      }
+      if (cells.length) rows.push(cells);
+    }
+    if (rows.length) tables.push(rows);
+  }
+
+  return { title, body: bodyLines.join("\n"), tables };
+}
+
 
 function SlideContent({ slide }: { slide: (typeof pptSlides)[0] }) {
   if (slide.type === "cover") {
@@ -168,34 +239,59 @@ function SlideContent({ slide }: { slide: (typeof pptSlides)[0] }) {
   );
 }
 
-function TextSlide({ title, body }: { title: string; body: string }) {
+function TextSlide({ slide }: { slide: ParsedSlide }) {
+  const hasContent = slide.title || slide.body || slide.tables.length > 0;
   return (
     <div
-      className="w-full h-full flex flex-col items-center justify-center p-12"
+      className="w-full h-full flex flex-col items-center justify-center p-8 lg:p-12 overflow-y-auto"
       style={{ background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)" }}
     >
-      {title && (
+      {slide.title && (
         <h1
           className="text-center mb-6 px-8"
           style={{ fontFamily: "Playfair Display, serif", color: "white", fontSize: "clamp(1.2rem, 3vw, 2rem)", fontWeight: 700, lineHeight: 1.3 }}
         >
-          {title}
+          {slide.title}
         </h1>
       )}
-      {body ? (
+      {slide.body && (
         <div
           className="text-center max-w-2xl px-8 leading-relaxed"
           style={{ fontFamily: "Inter, sans-serif", color: "rgba(255,255,255,0.8)", fontSize: "clamp(0.85rem, 1.8vw, 1.1rem)", lineHeight: 1.7 }}
         >
-          {body.split("\n").map((line, i) => (
-            <p key={i} className={line.trim() === "" ? "h-4" : ""}>
+          {slide.body.split("\n").map((line, i) => (
+            <p key={i} className={line.trim() === "" ? "h-4" : "mb-1"}>
               {line}
             </p>
           ))}
         </div>
-      ) : (
+      )}
+      {slide.tables.map((rows, ti) => (
+        <table
+          key={ti}
+          className="mt-6 border-collapse"
+          style={{ fontFamily: "Inter, sans-serif", color: "rgba(255,255,255,0.85)", fontSize: "clamp(0.7rem, 1.4vw, 0.85rem)" }}
+        >
+          <tbody>
+            {rows.map((cells, ri) => (
+              <tr key={ri}>
+                {cells.map((cell, ci) => (
+                  <td
+                    key={ci}
+                    className="px-3 py-1.5"
+                    style={{ border: "1px solid rgba(255,255,255,0.18)", fontWeight: ri === 0 ? 600 : 400 }}
+                  >
+                    {cell}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ))}
+      {!hasContent && (
         <p style={{ fontFamily: "Inter, sans-serif", color: "rgba(255,255,255,0.4)", fontSize: "1rem" }}>
-          空白页
+          此页无文本内容
         </p>
       )}
     </div>
@@ -204,11 +300,14 @@ function TextSlide({ title, body }: { title: string; body: string }) {
 
 export function PptReader({ book }: PptReaderProps) {
   const [current, setCurrent] = useState(0);
-  const [slides, setSlides] = useState<string[] | null>(null);
+  const [slides, setSlides] = useState<ParsedSlide[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [legacy, setLegacy] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const { save } = useReadingProgress(book.id);
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
+  const restoredRef = useRef(false);
 
   const isDemo = book.isDemo === true;
   const slideCount = isDemo ? pptSlides.length : (slides?.length ?? 0);
@@ -229,18 +328,30 @@ export function PptReader({ book }: PptReaderProps) {
     }
 
     let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setLegacy(false);
+    setSlides(null);
     (async () => {
       try {
         const svc = await getDataService();
         const blobUrl = await svc.getImportedFileBlobUrl(book.id);
         if (cancelled) return;
         if (!blobUrl) {
-          setError("Failed to load PPT");
+          setError("无法加载演示文稿");
+          setLoading(false);
           return;
         }
         const resp = await fetch(blobUrl);
         const buf = await resp.arrayBuffer();
         if (cancelled) return;
+
+        if (isLegacyPpt(buf)) {
+          setLegacy(true);
+          setError("暂不支持旧版 .ppt 格式，请转换为 .pptx 后重新上传。");
+          setLoading(false);
+          return;
+        }
 
         const zip = await JSZip.loadAsync(buf);
         const slideFiles = Object.keys(zip.files)
@@ -252,15 +363,15 @@ export function PptReader({ book }: PptReaderProps) {
           });
 
         if (slideFiles.length === 0) {
-          setError("No slides found in PPTX");
+          setError("演示文稿中未找到幻灯片");
+          setLoading(false);
           return;
         }
 
         const extracted = await Promise.all(
           slideFiles.map(async (name) => {
             const xml = await zip.files[name].async("text");
-            const texts = [...xml.matchAll(/<a:t>(.*?)<\/a:t>/g)].map(m => m[1]);
-            return texts.join("\n");
+            return parseSlideXml(xml);
           })
         );
 
@@ -269,14 +380,23 @@ export function PptReader({ book }: PptReaderProps) {
         setLoading(false);
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load PPT");
+          setError(err instanceof Error ? err.message : "演示文稿加载失败");
           setLoading(false);
         }
       }
     })();
 
     return () => { cancelled = true; };
-  }, [book.id, isDemo]);
+  }, [book.id, isDemo, reloadKey]);
+
+  useEffect(() => {
+    if (isDemo || restoredRef.current || slideCount === 0) return;
+    restoredRef.current = true;
+    if (book.progress > 0 && book.progress < 100) {
+      const idx = Math.min(slideCount - 1, Math.round((book.progress / 100) * slideCount) - 1);
+      if (idx > 0) setCurrent(idx);
+    }
+  }, [isDemo, slideCount, book.progress]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -290,9 +410,10 @@ export function PptReader({ book }: PptReaderProps) {
 
   if (!isDemo && loading) {
     return (
-      <div className="w-full h-full flex items-center justify-center" style={{ background: "#1a1a1a" }}>
-        <span style={{ fontFamily: "Inter, sans-serif", color: "rgba(255,255,255,0.6)", fontSize: "1rem" }}>
-          加载中...
+      <div className="w-full h-full flex flex-col items-center justify-center gap-3" style={{ background: "#1a1a1a" }}>
+        <RotateCw size={22} className="animate-spin" style={{ color: "#c17f3a" }} />
+        <span style={{ fontFamily: "Inter, sans-serif", color: "rgba(255,255,255,0.6)", fontSize: "0.9rem" }}>
+          正在解析演示文稿…
         </span>
       </div>
     );
@@ -300,10 +421,20 @@ export function PptReader({ book }: PptReaderProps) {
 
   if (!isDemo && error) {
     return (
-      <div className="w-full h-full flex items-center justify-center p-4" style={{ background: "#1a1a1a" }}>
-        <span style={{ fontFamily: "Inter, sans-serif", color: "#ef4444", fontSize: "1rem" }}>
+      <div className="w-full h-full flex flex-col items-center justify-center gap-4 p-6 text-center" style={{ background: "#1a1a1a" }}>
+        <span style={{ fontFamily: "Inter, sans-serif", color: "#ef4444", fontSize: "0.95rem", lineHeight: 1.6, maxWidth: "28rem" }}>
           {error}
         </span>
+        {!legacy && (
+          <button
+            onClick={() => setReloadKey(k => k + 1)}
+            className="flex items-center gap-2 px-4 py-2 rounded-md transition-colors"
+            style={{ background: "#c17f3a", color: "white", fontFamily: "Inter, sans-serif", fontSize: "0.85rem" }}
+          >
+            <RotateCw size={15} />
+            重试
+          </button>
+        )}
       </div>
     );
   }
@@ -322,11 +453,7 @@ export function PptReader({ book }: PptReaderProps) {
     if (isDemo) {
       return <SlideContent slide={pptSlides[current]} />;
     }
-    const text = slides![current];
-    const lines = text.split("\n").filter(l => l.trim());
-    const title = lines[0] || "";
-    const body = lines.slice(1).join("\n");
-    return <TextSlide title={title} body={body} />;
+    return <TextSlide slide={slides![current]} />;
   };
 
   return (
@@ -388,20 +515,28 @@ export function PptReader({ book }: PptReaderProps) {
             <ChevronLeft size={15} /> 上一张
           </button>
 
-          <div className="flex items-center gap-1.5">
-            {Array.from({ length: slideCount }, (_, i) => (
-              <button
-                key={i}
-                data-testid={`ppt-reader-dot-${i}`}
-                onClick={() => setCurrent(i)}
-                className="rounded-full transition-all"
-                style={{
-                  width: i === current ? "20px" : "6px",
-                  height: "6px",
-                  background: i === current ? "#c17f3a" : "rgba(255,255,255,0.25)",
-                }}
-              />
-            ))}
+          <div className="flex items-center gap-3">
+            {slideCount <= 15 ? (
+              <div className="flex items-center gap-1.5">
+                {Array.from({ length: slideCount }, (_, i) => (
+                  <button
+                    key={i}
+                    data-testid={`ppt-reader-dot-${i}`}
+                    onClick={() => setCurrent(i)}
+                    className="rounded-full transition-all"
+                    style={{
+                      width: i === current ? "20px" : "6px",
+                      height: "6px",
+                      background: i === current ? "#c17f3a" : "rgba(255,255,255,0.25)",
+                    }}
+                  />
+                ))}
+              </div>
+            ) : (
+              <span style={{ fontFamily: "Inter, sans-serif", color: "#aaa", fontSize: "0.8rem", fontVariantNumeric: "tabular-nums" }}>
+                {current + 1} / {slideCount}
+              </span>
+            )}
           </div>
 
           <button
