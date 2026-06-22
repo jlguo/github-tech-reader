@@ -5,6 +5,17 @@ import { POLL_INTERVAL_MS } from "../config/api";
 import { getDataService, type IDataService, type RemoteBook } from "../services/api";
 
 const getTypeInfo = (type: BookType) => typeConfig[type] ?? { label: "FILE", color: "#5a5a5a", bg: "#f0f0f0" };
+
+const FILE_TYPE_TO_BOOK_TYPE: Record<string, BookType> = {
+  doc: "word", docx: "word", word: "word",
+  xls: "excel", xlsx: "excel", excel: "excel",
+  pptx: "ppt", ppt: "ppt",
+  htm: "html", html: "html",
+  epub: "epub", pdf: "pdf", txt: "txt",
+};
+
+const toBookType = (fileType: string | null | undefined): BookType =>
+  FILE_TYPE_TO_BOOK_TYPE[(fileType || "html").toLowerCase()] ?? "html";
 import { BookCard } from "./components/BookCard";
 import { BookCover } from "./components/BookCover";
 import { Sidebar } from "./components/Sidebar";
@@ -48,7 +59,7 @@ export default function App() {
           const generated: Book[] = books.map(b => {
             const isGithub = b.source_type === "github";
             const bookId = isGithub ? b.repo_id : b.book_id;
-            const bookType = (b.file_type || "html") as BookType;
+            const bookType = toBookType(b.file_type);
             const category = isGithub ? "generated" as BookCategory : "documents" as BookCategory;
             const cover = isGithub
               ? `https://opengraph.githubassets.com/1/${b.author}/${b.title}`
@@ -113,7 +124,7 @@ export default function App() {
 
   const handleBookImported = (info: { id: string; title: string; author: string; sourceType: string; fileType: string; totalPages?: number }) => {
     const isGithub = info.sourceType === "github";
-    const bookType = (info.fileType || "html") as BookType;
+    const bookType = toBookType(info.fileType);
     const category = isGithub ? "generated" as BookCategory : "documents" as BookCategory;
     const cover = isGithub
       ? `https://opengraph.githubassets.com/1/${info.author}/${info.title}`
