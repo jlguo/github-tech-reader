@@ -74,8 +74,10 @@ export default function App() {
             const coverUrl = coverImageUrl(b.cover_url);
             const cover = coverUrl || (b.cover_html
               ? ""
-              : isRepoBook
+              : b.source_type === "github"
               ? `https://opengraph.githubassets.com/1/${b.author}/${b.title}`
+              : b.source_type === "youtube"
+              ? ""
               : `https://placehold.co/200x280/${toColor(b.title).replace(/[^a-f0-9]/gi, "").slice(0, 6)}/fff?text=${encodeURIComponent(b.title.slice(0, 4))}`);
             const size = isRepoBook
               ? (b.status === "done" ? `${b.chapter_count} 章` : b.status === "failed" ? "生成失败" : b.status === "no_book" ? "未生成" : "创作中...")

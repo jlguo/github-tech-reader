@@ -1,0 +1,873 @@
+{
+  "version": "2.13",
+  "children": [
+    {
+      "type": "frame",
+      "id": "xbPwV",
+      "x": 0,
+      "y": 0,
+      "name": "Cover / GitHub",
+      "clip": true,
+      "width": 400,
+      "height": 600,
+      "fill": "$surface-primary",
+      "layout": "vertical",
+      "padding": [
+        52,
+        40,
+        44,
+        40
+      ],
+      "justifyContent": "space_between",
+      "children": [
+        {
+          "type": "frame",
+          "id": "Q5rHWi",
+          "name": "Top",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 18,
+          "children": [
+            {
+              "type": "frame",
+              "id": "ytxxx",
+              "name": "Eyebrow Row",
+              "width": "fill_container",
+              "gap": 10,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "Z07kT",
+                  "name": "Source Icon",
+                  "width": 18,
+                  "height": 18,
+                  "icon": "github",
+                  "library": "lucide",
+                  "fill": "$accent-primary"
+                },
+                {
+                  "type": "text",
+                  "id": "ZY3Eb",
+                  "name": "Eyebrow",
+                  "fill": "$accent-primary",
+                  "content": "GITHUB · REPOSITORY",
+                  "fontFamily": "$font-caption",
+                  "fontSize": 12,
+                  "fontWeight": "600",
+                  "letterSpacing": 2
+                }
+              ]
+            },
+            {
+              "type": "rectangle",
+              "id": "WcTFU",
+              "name": "Accent Rule",
+              "fill": "$accent-primary",
+              "width": 56,
+              "height": 3
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "owMp1",
+          "name": "Title Block",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 16,
+          "children": [
+            {
+              "type": "text",
+              "id": "T7ScL",
+              "name": "Title",
+              "fill": "$foreground-primary",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Project Title",
+              "lineHeight": 1.05,
+              "fontFamily": "$font-heading",
+              "fontSize": 52,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "oIAkb",
+              "name": "Tagline",
+              "fill": "$foreground-secondary",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "A concise tagline that captures the essence of this repository.",
+              "lineHeight": 1.4,
+              "fontFamily": "$font-body",
+              "fontSize": 19,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "TyGV3",
+          "name": "Footer",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 14,
+          "children": [
+            {
+              "type": "rectangle",
+              "id": "RdI2X",
+              "name": "Footer Rule",
+              "fill": "$border-subtle",
+              "width": "fill_container",
+              "height": 1
+            },
+            {
+              "type": "frame",
+              "id": "Ptuuf",
+              "name": "Meta Row",
+              "width": "fill_container",
+              "gap": 18,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "zE1lW",
+                  "name": "Lang",
+                  "gap": 7,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "mtZ1a",
+                      "name": "Lang Dot",
+                      "fill": "$accent-primary",
+                      "width": 10,
+                      "height": 10
+                    },
+                    {
+                      "type": "text",
+                      "id": "OI7HM",
+                      "name": "Language",
+                      "fill": "$foreground-secondary",
+                      "content": "TypeScript",
+                      "fontFamily": "$font-caption",
+                      "fontSize": 13,
+                      "fontWeight": "500"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "zyAqJ",
+                  "name": "Stars",
+                  "gap": 6,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "o1peCy",
+                      "name": "Star Icon",
+                      "width": 14,
+                      "height": 14,
+                      "icon": "star",
+                      "library": "lucide",
+                      "fill": "$foreground-secondary"
+                    },
+                    {
+                      "type": "text",
+                      "id": "YeDYJ",
+                      "name": "Star Count",
+                      "fill": "$foreground-secondary",
+                      "content": "1.2k",
+                      "fontFamily": "$font-caption",
+                      "fontSize": 13,
+                      "fontWeight": "500"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "eXRRr",
+              "name": "Author",
+              "fill": "$foreground-primary",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "by author",
+              "fontFamily": "$font-heading",
+              "fontSize": 18,
+              "fontWeight": "normal",
+              "fontStyle": "italic"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "LEw1q",
+      "x": 480,
+      "y": 0,
+      "name": "Cover / YouTube",
+      "clip": true,
+      "width": 400,
+      "height": 600,
+      "fill": "$surface-deep",
+      "layout": "vertical",
+      "justifyContent": "space_between",
+      "children": [
+        {
+          "type": "frame",
+          "id": "rzIhL",
+          "name": "Thumb Zone",
+          "clip": true,
+          "width": "fill_container",
+          "height": 248,
+          "fill": "$surface-inverse",
+          "layout": "none",
+          "children": [
+            {
+              "type": "rectangle",
+              "id": "wyRdI",
+              "layoutPosition": "absolute",
+              "x": 0,
+              "y": 0,
+              "name": "Thumb Image",
+              "fill": {
+                "type": "gradient",
+                "gradientType": "linear",
+                "enabled": true,
+                "rotation": 270,
+                "size": {
+                  "height": 1
+                },
+                "colors": [
+                  {
+                    "color": "#5c3d1e",
+                    "position": 0
+                  },
+                  {
+                    "color": "#2c1a0e",
+                    "position": 1
+                  }
+                ]
+              },
+              "width": 400,
+              "height": 248
+            },
+            {
+              "type": "ellipse",
+              "id": "w1Acy",
+              "layoutPosition": "absolute",
+              "x": 160,
+              "y": 88,
+              "name": "Play Ring",
+              "fill": "#f5f0e8ee",
+              "width": 80,
+              "height": 80
+            },
+            {
+              "type": "path",
+              "id": "U7XRDG",
+              "layoutPosition": "absolute",
+              "x": 188,
+              "y": 112,
+              "name": "Play Triangle",
+              "geometry": "M0 0l28 16-28 16z",
+              "viewBox": [
+                0,
+                0,
+                28,
+                32
+              ],
+              "fill": "$surface-deep",
+              "width": 28,
+              "height": 32
+            },
+            {
+              "type": "frame",
+              "id": "T5xPR",
+              "layoutPosition": "absolute",
+              "x": 316,
+              "y": 212,
+              "name": "Duration",
+              "fill": "#000000cc",
+              "cornerRadius": 3,
+              "padding": [
+                4,
+                8
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "p7kab",
+                  "name": "Dur Text",
+                  "fill": "#ffffff",
+                  "content": "12:48",
+                  "fontFamily": "$font-caption",
+                  "fontSize": 12,
+                  "fontWeight": "600"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "bSY1I",
+          "name": "Body",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 16,
+          "padding": [
+            32,
+            40,
+            40,
+            40
+          ],
+          "justifyContent": "space_between",
+          "children": [
+            {
+              "type": "frame",
+              "id": "li6MP",
+              "name": "Head",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "gY8eP",
+                  "name": "Eyebrow Row",
+                  "gap": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "b477bf",
+                      "name": "Source Icon",
+                      "width": 20,
+                      "height": 20,
+                      "icon": "youtube",
+                      "library": "lucide",
+                      "fill": "$accent-primary"
+                    },
+                    {
+                      "type": "text",
+                      "id": "A1PLS",
+                      "name": "Eyebrow",
+                      "fill": "$accent-primary",
+                      "content": "YOUTUBE · VIDEO",
+                      "fontFamily": "$font-caption",
+                      "fontSize": 12,
+                      "fontWeight": "600",
+                      "letterSpacing": 2
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "GnwfI",
+                  "name": "Title",
+                  "fill": "$foreground-inverse",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Video Title Goes Here",
+                  "lineHeight": 1.1,
+                  "fontFamily": "$font-heading",
+                  "fontSize": 38,
+                  "fontWeight": "700"
+                },
+                {
+                  "type": "text",
+                  "id": "dO1DN",
+                  "name": "Tagline",
+                  "fill": "#c9bda8",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "A short summary distilled from the video's description.",
+                  "lineHeight": 1.4,
+                  "fontFamily": "$font-body",
+                  "fontSize": 17,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "oDFMn",
+              "name": "Footer",
+              "width": "fill_container",
+              "gap": 10,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "qSURR",
+                  "name": "Channel Icon",
+                  "width": 18,
+                  "height": 18,
+                  "icon": "circle-user-round",
+                  "library": "lucide",
+                  "fill": "#c9bda8"
+                },
+                {
+                  "type": "text",
+                  "id": "WDbFf",
+                  "name": "Channel",
+                  "fill": "$foreground-inverse",
+                  "content": "Channel Name",
+                  "fontFamily": "$font-heading",
+                  "fontSize": 17,
+                  "fontWeight": "normal",
+                  "fontStyle": "italic"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "RF8SA",
+      "x": 960,
+      "y": 0,
+      "name": "Cover / URL",
+      "clip": true,
+      "width": 400,
+      "height": 600,
+      "fill": "$surface-primary",
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "cKp2N",
+          "name": "Domain Band",
+          "width": "fill_container",
+          "fill": "$surface-inverse",
+          "gap": 10,
+          "padding": [
+            20,
+            40
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "icon",
+              "id": "VtGGU",
+              "name": "Source Icon",
+              "width": 17,
+              "height": 17,
+              "icon": "globe",
+              "library": "lucide",
+              "fill": "$foreground-inverse"
+            },
+            {
+              "type": "text",
+              "id": "D0h0ba",
+              "name": "Domain",
+              "fill": "$foreground-inverse",
+              "content": "example.com",
+              "fontFamily": "$font-caption",
+              "fontSize": 13,
+              "fontWeight": "500",
+              "letterSpacing": 1
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "uOFIW",
+          "name": "Main",
+          "width": "fill_container",
+          "height": "fill_container",
+          "layout": "vertical",
+          "padding": [
+            44,
+            40
+          ],
+          "justifyContent": "space_between",
+          "children": [
+            {
+              "type": "frame",
+              "id": "G5m8vH",
+              "name": "Top",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 18,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "ZaJpa",
+                  "name": "Eyebrow",
+                  "fill": "$accent-primary",
+                  "content": "WEB · ARTICLE",
+                  "fontFamily": "$font-caption",
+                  "fontSize": 12,
+                  "fontWeight": "600",
+                  "letterSpacing": 2
+                },
+                {
+                  "type": "text",
+                  "id": "m6Jj1",
+                  "name": "Title",
+                  "fill": "$foreground-primary",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "The Article Headline",
+                  "lineHeight": 1.08,
+                  "fontFamily": "$font-heading",
+                  "fontSize": 44,
+                  "fontWeight": "700"
+                },
+                {
+                  "type": "text",
+                  "id": "Bde2y",
+                  "name": "Tagline",
+                  "fill": "$foreground-secondary",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "A summary drawn from the page so readers know what awaits inside.",
+                  "lineHeight": 1.45,
+                  "fontFamily": "$font-body",
+                  "fontSize": 18,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "wA5oE",
+              "name": "Deco Lines",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 9,
+              "children": [
+                {
+                  "type": "rectangle",
+                  "cornerRadius": 2,
+                  "id": "iYtlY",
+                  "name": "Line 240",
+                  "fill": "$border-subtle",
+                  "width": 240,
+                  "height": 5
+                },
+                {
+                  "type": "rectangle",
+                  "cornerRadius": 2,
+                  "id": "ZWwWp",
+                  "name": "Line 200",
+                  "fill": "$border-subtle",
+                  "width": 200,
+                  "height": 5
+                },
+                {
+                  "type": "rectangle",
+                  "cornerRadius": 2,
+                  "id": "k4iYR",
+                  "name": "Line 260",
+                  "fill": "$border-subtle",
+                  "width": 260,
+                  "height": 5
+                },
+                {
+                  "type": "rectangle",
+                  "cornerRadius": 2,
+                  "id": "YiQ6L",
+                  "name": "Line 180",
+                  "fill": "$border-subtle",
+                  "width": 180,
+                  "height": 5
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "C6nqB",
+              "name": "Footer",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "rectangle",
+                  "id": "ltozO",
+                  "name": "Footer Rule",
+                  "fill": "$border-subtle",
+                  "width": "fill_container",
+                  "height": 1
+                },
+                {
+                  "type": "text",
+                  "id": "bx6BJ",
+                  "name": "Author",
+                  "fill": "$foreground-primary",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "by source",
+                  "fontFamily": "$font-heading",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                  "fontStyle": "italic"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "xMW6D",
+      "x": 1440,
+      "y": 0,
+      "name": "Cover / File",
+      "clip": true,
+      "width": 400,
+      "height": 600,
+      "fill": {
+        "type": "gradient",
+        "gradientType": "linear",
+        "enabled": true,
+        "rotation": 300,
+        "size": {
+          "height": 1
+        },
+        "colors": [
+          {
+            "color": "#f5f0e8",
+            "position": 0
+          },
+          {
+            "color": "#e8dcc8",
+            "position": 1
+          }
+        ]
+      },
+      "layout": "vertical",
+      "padding": [
+        52,
+        40,
+        44,
+        40
+      ],
+      "justifyContent": "space_between",
+      "children": [
+        {
+          "type": "frame",
+          "id": "E9rywz",
+          "name": "Top",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 18,
+          "children": [
+            {
+              "type": "frame",
+              "id": "o14eH",
+              "name": "Eyebrow Row",
+              "gap": 10,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "SnQZH",
+                  "name": "Source Icon",
+                  "width": 18,
+                  "height": 18,
+                  "icon": "file-text",
+                  "library": "lucide",
+                  "fill": "$accent-primary"
+                },
+                {
+                  "type": "text",
+                  "id": "gRTnF",
+                  "name": "Eyebrow",
+                  "fill": "$accent-primary",
+                  "content": "DOCUMENT · FILE",
+                  "fontFamily": "$font-caption",
+                  "fontSize": 12,
+                  "fontWeight": "600",
+                  "letterSpacing": 2
+                }
+              ]
+            },
+            {
+              "type": "rectangle",
+              "id": "cnlq6",
+              "name": "Accent Rule",
+              "fill": "$accent-primary",
+              "width": 56,
+              "height": 3
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "K3PNkd",
+          "name": "Center",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 28,
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "T6Fg5",
+              "name": "Type Badge",
+              "width": 104,
+              "height": 128,
+              "fill": "$surface-inverse",
+              "cornerRadius": 6,
+              "effect": {
+                "type": "shadow",
+                "shadowType": "outer",
+                "color": "#2c1a0e44",
+                "offset": {
+                  "x": 0,
+                  "y": 8
+                },
+                "blur": 24
+              },
+              "layout": "vertical",
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "Su7gX",
+                  "name": "Ext Label",
+                  "fill": "$foreground-inverse",
+                  "content": "PDF",
+                  "fontFamily": "$font-caption",
+                  "fontSize": 30,
+                  "fontWeight": "700",
+                  "letterSpacing": 1
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "Nc37D",
+              "name": "Title Wrap",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "UiBWC",
+                  "name": "Title",
+                  "fill": "$foreground-primary",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Document Name",
+                  "lineHeight": 1.12,
+                  "textAlign": "center",
+                  "fontFamily": "$font-heading",
+                  "fontSize": 34,
+                  "fontWeight": "700"
+                },
+                {
+                  "type": "text",
+                  "id": "WjJEb",
+                  "name": "Tagline",
+                  "fill": "$foreground-secondary",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Uploaded document",
+                  "lineHeight": 1.4,
+                  "textAlign": "center",
+                  "fontFamily": "$font-body",
+                  "fontSize": 16,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "hdci4",
+          "name": "Footer",
+          "width": "fill_container",
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "BrDcY",
+              "name": "Author",
+              "fill": "$foreground-primary",
+              "content": "by author",
+              "fontFamily": "$font-heading",
+              "fontSize": 16,
+              "fontWeight": "normal",
+              "fontStyle": "italic"
+            },
+            {
+              "type": "text",
+              "id": "F69Rp",
+              "name": "Size",
+              "fill": "$foreground-secondary",
+              "content": "2.3 MB",
+              "fontFamily": "$font-caption",
+              "fontSize": 12,
+              "fontWeight": "500",
+              "letterSpacing": 1
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variables": {
+    "accent-primary": {
+      "type": "color",
+      "value": "#c17f3a"
+    },
+    "border-subtle": {
+      "type": "color",
+      "value": "#dcd3c2"
+    },
+    "font-body": {
+      "type": "string",
+      "value": "Source Serif 4"
+    },
+    "font-caption": {
+      "type": "string",
+      "value": "Inter"
+    },
+    "font-heading": {
+      "type": "string",
+      "value": "Playfair Display"
+    },
+    "foreground-inverse": {
+      "type": "color",
+      "value": "#f5f0e8"
+    },
+    "foreground-primary": {
+      "type": "color",
+      "value": "#2c1a0e"
+    },
+    "foreground-secondary": {
+      "type": "color",
+      "value": "#6b5840"
+    },
+    "surface-deep": {
+      "type": "color",
+      "value": "#2c1a0e"
+    },
+    "surface-inverse": {
+      "type": "color",
+      "value": "#5c3d1e"
+    },
+    "surface-primary": {
+      "type": "color",
+      "value": "#f5f0e8"
+    }
+  }
+}
