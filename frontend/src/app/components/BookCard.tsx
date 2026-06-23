@@ -65,15 +65,17 @@ export function BookCard({ book, viewMode, onToggleFavorite, onOpen }: BookCardP
               </button>
             </div>
           </div>
-          {book.progress > 0 && book.type !== "pdf" && (
+          {book.progress > 0 && (
             <div className="mt-2" data-testid={`book-progress-${book.id}`}>
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs" style={{ color: "var(--muted-foreground)", fontFamily: "Inter, sans-serif" }}>
                   {book.progress === 100 ? "已读完" : `已读 ${book.progress}%`}
                 </span>
-                <span className="text-xs" style={{ color: "var(--muted-foreground)", fontFamily: "Inter, sans-serif" }}>
-                  {book.currentPage}/{book.totalPages} 页
-                </span>
+                {book.totalPages > 0 && (
+                  <span className="text-xs" style={{ color: "var(--muted-foreground)", fontFamily: "Inter, sans-serif" }}>
+                    {book.currentPage}/{book.totalPages} 页
+                  </span>
+                )}
               </div>
               <div className="h-1 rounded-full overflow-hidden" style={{ background: "var(--muted)" }}>
                 <div
@@ -125,7 +127,7 @@ export function BookCard({ book, viewMode, onToggleFavorite, onOpen }: BookCardP
           {book.author}
         </p>
 
-        {book.progress > 0 && book.type !== "pdf" && (
+        {book.progress > 0 && (
           <div className="mt-auto" data-testid={`book-progress-${book.id}`}>
             <div className="h-1 rounded-full overflow-hidden mb-1" style={{ background: "var(--muted)" }}>
               <div

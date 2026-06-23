@@ -156,11 +156,11 @@ export function BookDetailModal({ book, onClose, onToggleFavorite, onRead, onDel
         </div>
 
         {/* Progress */}
-        {book.progress > 0 && book.type !== "pdf" && (
+        {book.progress > 0 && (
           <div className="px-6 pb-4" data-testid="book-detail-progress">
             <div className="flex justify-between text-xs mb-2" style={{ color: "var(--muted-foreground)", fontFamily: "Inter, sans-serif" }}>
               <span>{book.progress === 100 ? "已读完" : `已读 ${book.progress}%`}</span>
-              <span>{book.currentPage} / {book.totalPages} 页</span>
+              {book.totalPages > 0 && <span>{book.currentPage} / {book.totalPages} 页</span>}
             </div>
             <div className="h-2 rounded-full overflow-hidden" style={{ background: "var(--muted)" }}>
               <div

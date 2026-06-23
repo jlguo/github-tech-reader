@@ -1,8 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Book } from "../bookData";
 import { getDataService } from "../../../services/api";
-import { PDFViewer } from "@embedpdf/react-pdf-viewer";
+import {
+  PDFViewer,
+  type PluginRegistry,
+  type ScrollPlugin,
+  type PageChangeEvent,
+} from "@embedpdf/react-pdf-viewer";
 import pdfiumWasmUrl from "@embedpdf/pdfium/pdfium.wasm?url";
+import { useReadingProgress } from "../../hooks/useReadingProgress";
 
 interface PdfReaderProps {
   book: Book;
@@ -11,6 +17,8 @@ interface PdfReaderProps {
 export function PdfReader({ book }: PdfReaderProps) {
   const [error, setError] = useState<string | null>(null);
   const [buffer, setBuffer] = useState<ArrayBuffer | null>(null);
+  const { save } = useReadingProgress(book.id);
+  const unsubscribeRef = useRef<(() => void) | null>(null);
 
   const absWasmUrl = useMemo(
     () => new URL(pdfiumWasmUrl, window.location.href).toString(),
@@ -38,6 +46,35 @@ export function PdfReader({ book }: PdfReaderProps) {
     })();
     return () => { cancelled = true; };
   }, [book.id]);
+
+  useEffect(() => () => { unsubscribeRef.current?.(); }, []);
+
+  const handleReady = useCallback(
+    async (registry: PluginRegistry) => {
+      try {
+        await registry.pluginsReady();
+        const scroll = registry.getPlugin<ScrollPlugin>("scroll");
+        if (!scroll) return;
+        const capability = scroll.provides();
+        if (!capability) return;
+        unsubscribeRef.current?.();
+        unsubscribeRef.current = capability.onPageChange((evt: PageChangeEvent) => {
+          const total = evt.totalPages;
+          if (!total || total <= 0) return;
+          const page = evt.pageNumber;
+          const pct = Math.round((page / total) * 100);
+          save({
+            percent: Math.max(Math.min(pct, 100), 1),
+            completed: page >= total,
+            metadata: { page, totalPages: total },
+          });
+        });
+      } catch {
+        // Scroll plugin unavailable — progress tracking is best-effort.
+      }
+    },
+    [save],
+  );
 
   if (error) {
     return (
@@ -67,6 +104,7 @@ export function PdfReader({ book }: PdfReaderProps) {
         stamp: { manifests: [], defaultLibrary: false },
       }}
       style={{ width: "100%", height: "100%" }}
+      onReady={handleReady}
     />
   );
 }

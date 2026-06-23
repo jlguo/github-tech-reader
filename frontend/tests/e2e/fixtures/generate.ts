@@ -29,6 +29,41 @@ function writeZip(filepath: string, entries: { name: string; data: Buffer | stri
   archive.finalize();
 }
 
+function buildMultiPagePdf(nPages: number): string {
+  const objs: string[] = [];
+  objs.push("<< /Type /Catalog /Pages 2 0 R >>");
+  const kidsRef = Array.from({ length: nPages }, (_, i) => `${4 + i * 2} 0 R`).join(" ");
+  objs.push(`<< /Type /Pages /Kids [${kidsRef}] /Count ${nPages} >>`);
+  objs.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  for (let i = 0; i < nPages; i++) {
+    const contentObj = 4 + i * 2 + 1;
+    objs.push(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] ` +
+        `/Resources << /Font << /F1 3 0 R >> >> /Contents ${contentObj} 0 R >>`,
+    );
+    const stream = `BT /F1 48 Tf 200 400 Td (Page ${i + 1}) Tj ET`;
+    objs.push(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+  }
+
+  const header = "%PDF-1.4\n";
+  let body = "";
+  const offsets: number[] = [];
+  let pos = header.length;
+  objs.forEach((content, idx) => {
+    const objStr = `${idx + 1} 0 obj\n${content}\nendobj\n`;
+    offsets.push(pos);
+    body += objStr;
+    pos += objStr.length;
+  });
+
+  const xrefPos = header.length + body.length;
+  const n = objs.length + 1;
+  let xref = `xref\n0 ${n}\n0000000000 65535 f \n`;
+  for (const off of offsets) xref += `${off.toString().padStart(10, "0")} 00000 n \n`;
+  const trailer = `trailer\n<< /Size ${n} /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF\n`;
+  return header + body + xref + trailer;
+}
+
 export function generateTestFiles() {
   ensureDir(FIXTURE_DIR);
 
@@ -61,6 +96,8 @@ startxref
 190
 %%EOF`;
   fs.writeFileSync(path.join(FIXTURE_DIR, "test.pdf"), minimalPdf);
+
+  fs.writeFileSync(path.join(FIXTURE_DIR, "multipage.pdf"), buildMultiPagePdf(10));
 
   const docxXml = `<?xml version="1.0" encoding="UTF-8"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
