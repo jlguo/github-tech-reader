@@ -298,22 +298,28 @@ The `sandbox` directive (no `allow-scripts`/`allow-same-origin`) means the serve
 - **Backend**: `/api/books` returns `progress` (latest `reading_progress.position` by `updated_at`) and `progress_metadata`
 - **Multiple progress rows**: reading_progress table appends rows (no unique constraint); `/api/books` picks max by `updated_at`
 
-### E2E Tests
+### E2E Tests — **ALWAYS verify with Playwright**
+
+> **HARD RULE**: After ANY frontend change that affects UI behavior, data flow, or API integration, **run `npx playwright` tests to verify**. Never ship without Playwright confirmation. This is the project's primary verification mechanism.
 
 ```sh
-cd frontend && npx playwright test          # all specs
-cd frontend && npx playwright test --headed  # visible browser
+cd frontend && npx playwright test              # all specs (CI mode)
+cd frontend && npx playwright test --headed     # visible browser (debugging)
+npx playwright test <spec> --reporter=line      # single spec, compact output
+npx playwright test --headed <spec>             # single spec, visible browser
 ```
 
 - **Config**: `playwright.config.ts` — testDir `tests/e2e`, 30s timeout, 1 retry, system Chrome via `executablePath`
 - **Web server**: reuses existing Vite on port 5173 (`reuseExistingServer: true`)
-- **Spec files**: `bookshelf.spec.ts` (layout, view toggle, search, sort, detail modal, import validation, progress smoke), `reader-interactions.spec.ts` (tap/swipe/scroll per reader), `reader-topbar-toggle.spec.ts` (center-tap topbar toggle across all reader types, real uploaded fixtures), `readers-local.spec.ts`, `readers-remote.spec.ts`
+- **Spec files**: `bookshelf.spec.ts` (layout, view toggle, search, sort, detail modal, import validation, progress smoke), `reader-interactions.spec.ts` (tap/swipe/scroll per reader), `reader-topbar-toggle.spec.ts` (center-tap topbar toggle across all reader types, real uploaded fixtures), `readers-local.spec.ts`, `readers-remote.spec.ts`, `youtube-import.spec.ts` (dialog UI, API integration, already_done flow)
 - **Smoke test tip**: use `waitUntil: "domcontentloaded"` — `waitUntil: "load"` blocks on OpenGraph cover images (8.5s each)
 
 #### Smoke Test Practices
 
 1. All test cases simulate human UI interactions. Do not use API mocking (`page.route`) or `page.goto` to bypass the UI — interact through the page like a real user.
 2. Do not increase or add `waitForTimeout` without justification. When a test hangs or times out, add debug logs (`console.log`) to identify the exact stuck step before touching any timeout.
+3. When adding new features, add corresponding Playwright tests covering happy path, edge cases, and error states. Prefer real API calls with `page.route()` mocks over fake data.
+4. For visual verification of specific elements, use `console.log` + `innerText()` — do NOT rely on screenshots alone; model image support varies.
 
 ### API Routes
 

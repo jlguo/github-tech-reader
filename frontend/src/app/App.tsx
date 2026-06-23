@@ -57,14 +57,16 @@ export default function App() {
           .then((books: RemoteBook[]) => {
             if (cancelled) return;
           const generated: Book[] = books.map(b => {
-            const isGithub = b.source_type === "github";
-            const bookId = isGithub ? b.repo_id : b.book_id;
+            const isRepoBook = b.source_type === "github" || b.source_type === "youtube";
+            const bookId = b.repo_id || b.book_id;
             const bookType = toBookType(b.file_type);
-            const category = isGithub ? "generated" as BookCategory : "documents" as BookCategory;
-            const cover = isGithub
+            const category = isRepoBook ? "generated" as BookCategory : "documents" as BookCategory;
+            const cover = b.cover_html
+              ? ""
+              : isRepoBook
               ? `https://opengraph.githubassets.com/1/${b.author}/${b.title}`
               : `https://placehold.co/200x280/${toColor(b.title).replace(/[^a-f0-9]/gi, "").slice(0, 6)}/fff?text=${encodeURIComponent(b.title.slice(0, 4))}`;
-            const size = isGithub
+            const size = isRepoBook
               ? (b.status === "done" ? `${b.chapter_count} 章` : b.status === "failed" ? "生成失败" : b.status === "no_book" ? "未生成" : "创作中...")
               : (b.file_type || "html").toUpperCase();
 
@@ -90,7 +92,8 @@ export default function App() {
               tags: b.language ? [b.language] : [],
               isFavorite: false,
               genStatus: b.status as "pending" | "fetching" | "planning" | "cover" | "writing" | "reviewing" | "publishing" | "done" | "failed" | "no_book" | undefined,
-              sourceType: b.source_type as "github" | "file" | "url",
+              sourceType: b.source_type as "github" | "file" | "url" | "youtube",
+              coverHtml: b.cover_html ?? undefined,
             };
           });
           setBookList(prev => {
@@ -123,10 +126,10 @@ export default function App() {
   }, []);
 
   const handleBookImported = (info: { id: string; title: string; author: string; sourceType: string; fileType: string; totalPages?: number }) => {
-    const isGithub = info.sourceType === "github";
+    const isRepoBook = info.sourceType === "github" || info.sourceType === "youtube";
     const bookType = toBookType(info.fileType);
-    const category = isGithub ? "generated" as BookCategory : "documents" as BookCategory;
-    const cover = isGithub
+    const category = isRepoBook ? "generated" as BookCategory : "documents" as BookCategory;
+    const cover = isRepoBook
       ? `https://opengraph.githubassets.com/1/${info.author}/${info.title}`
       : `https://placehold.co/200x280/${toColor(info.title).replace(/[^a-f0-9]/gi, "").slice(0, 6)}/fff?text=${encodeURIComponent(info.title.slice(0, 4))}`;
 
@@ -142,18 +145,18 @@ export default function App() {
       totalPages: info.totalPages ?? 0,
       currentPage: 0,
       addedDate: new Date().toISOString().split("T")[0],
-      size: isGithub ? "0 章" : (info.fileType || "html").toUpperCase(),
+      size: isRepoBook ? "0 章" : (info.fileType || "html").toUpperCase(),
       description: "",
       tags: [],
       isFavorite: false,
-      genStatus: isGithub ? "pending" : "no_book",
-      sourceType: info.sourceType as "github" | "file" | "url",
+      genStatus: isRepoBook ? "pending" : "no_book",
+      sourceType: info.sourceType as "github" | "file" | "url" | "youtube",
     };
     setBookList(prev => {
       if (prev.find(b => b.id === info.id)) return prev;
       return [newBook, ...prev];
     });
-    if (isGithub) setActiveCategory("generated");
+    if (isRepoBook) setActiveCategory("generated");
   };
 
   const toggleFavorite = (id: string) => {
@@ -178,12 +181,17 @@ export default function App() {
 
   const handleGenerateBook = async (bookId: string) => {
     if (!service) return;
+    const book = bookList.find(b => b.id === bookId);
     setBookList(prev => prev.map(b => b.id === bookId ? { ...b, genStatus: "writing", size: "创作中...", progress: 0 } : b));
     setSelectedBook(prev => prev && prev.id === bookId ? { ...prev, genStatus: "writing", size: "创作中...", progress: 0 } : prev);
 
     try {
-      await service.fetchReadme(bookId);
-      await service.generateBook(bookId);
+      if (book?.sourceType === "youtube") {
+        await service.generateYoutubeBook({ repo_id: bookId });
+      } else {
+        await service.fetchReadme(bookId);
+        await service.generateBook(bookId);
+      }
     } catch (e: any) {
       const errorMsg = e.message || "生成失败";
       setBookList(prev => prev.map(b => b.id === bookId ? {

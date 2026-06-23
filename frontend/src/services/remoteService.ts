@@ -115,11 +115,11 @@ export class RemoteDataService implements IDataService {
 
   // ── YouTube book generation ─────────────────────────────────────
 
-  async generateYoutubeBook(url: string): Promise<{ repo_id: string; video_id: string }> {
+  async generateYoutubeBook(params: { url?: string; repo_id?: string }): Promise<{ repo_id: string; video_id: string; video_title: string; status: string }> {
     const r = await fetch(`${this.#base}/youtube/generate-book`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify(params),
     });
     if (!r.ok) {
       const err = await r.json().catch(() => ({}));
@@ -137,6 +137,12 @@ export class RemoteDataService implements IDataService {
 
   getYoutubeBookStatusUrl(repoId: string): string {
     return `${this.#base}/youtube/book-status/${repoId}`;
+  }
+
+  async getYoutubeBookStatus(repoId: string): Promise<BookGenStatus | null> {
+    const r = await fetch(`${this.#base}/youtube/book-status/${repoId}`);
+    if (!r.ok) return null;
+    return r.json();
   }
 
   // ── Imports ────────────────────────────────────────────────────

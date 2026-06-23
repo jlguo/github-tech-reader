@@ -31,7 +31,7 @@ export function BookDetailModal({ book, onClose, onToggleFavorite, onRead, onDel
   const [editDesc, setEditDesc] = useState("");
   const typeInfo = typeConfig[book.type] ?? { label: "FILE", color: "#5a5a5a", bg: "#f0f0f0" };
 
-  const liveStatus = useBookStatus(!book.isDemo ? book.id : null);
+  const liveStatus = useBookStatus(!book.isDemo ? book.id : null, book.sourceType);
   const effectiveStatus = liveStatus?.status ?? book.genStatus;
   const effectivePhase = liveStatus?.current_phase ?? undefined;
   const producing = checkIsProducing(effectiveStatus);

@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Integer, Boolean, DateTime, Text, JSON
+from sqlalchemy import String, Integer, Float, Boolean, DateTime, Text, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.sqlite import JSON as SQLiteJSON
 
@@ -22,4 +22,6 @@ class ImportedBook(Base):
     category: Mapped[str] = mapped_column(String(64), default="imported")
     tags: Mapped[list[str]] = mapped_column(JSON, default=list)
     is_favorite: Mapped[bool] = mapped_column(Boolean, default=False)
+    progress_position: Mapped[float] = mapped_column(Float, default=0.0)
+    progress_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     added_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

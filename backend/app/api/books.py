@@ -1,11 +1,10 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
-from datetime import datetime
 
 from app.core.database import get_db
 from app.models.repo import Repo, BookGeneration, ContentSection, ReadingProgress
@@ -31,6 +30,8 @@ async def list_books(
         else ["pending", "fetching", "planning", "cover", "writing", "reviewing", "publishing", "done", "ready"]
     )
 
+    like = f"%{search}%" if search else ""
+
     query = (
         select(Repo, BookGeneration)
         .outerjoin(BookGeneration, BookGeneration.repo_id == Repo.id)
@@ -38,7 +39,6 @@ async def list_books(
     )
 
     if search:
-        like = f"%{search}%"
         query = query.where(
             (Repo.name.ilike(like)) | (Repo.owner.ilike(like)) | (Repo.description.ilike(like))
         )
@@ -50,9 +50,9 @@ async def list_books(
     books = []
     for repo, gen in rows:
         is_book = gen is not None and gen.status in statuses
-        rp = None
+        latest_progress = None
         if repo.reading_progress:
-            rp = max(repo.reading_progress, key=lambda p: p.updated_at)
+            latest_progress = max(repo.reading_progress, key=lambda p: p.updated_at)
         books.append(BookListItem(
             repo_id=repo.id,
             book_id=gen.id if gen else "",
@@ -62,12 +62,12 @@ async def list_books(
             language=repo.language,
             html_url=repo.html_url,
             status=gen.status if is_book else "no_book",
-            source_type="github",
+            source_type=repo.source_type,
             file_type="html",
             chapter_count=gen.total_chapters if gen else 0,
             completed_chapters=gen.completed_chapters if gen else 0,
             current_phase=gen.current_phase if gen else None,
-            progress=rp.position if rp else None,
+            progress=latest_progress.position if latest_progress else None,
             progress_metadata=None,
             created_at=gen.created_at if gen else repo.added_at,
             updated_at=gen.updated_at if gen else repo.added_at,
@@ -80,22 +80,23 @@ async def list_books(
         )
     imported_query = imported_query.order_by(ImportedBook.added_at.desc())
     imported_result = await db.execute(imported_query)
-    for ib in imported_result.scalars():
+    for imported_book in imported_result.scalars():
         books.append(BookListItem(
-            repo_id="",
-            book_id=ib.id,
-            title=ib.title,
-            author=ib.author,
-            description=ib.description,
+            repo_id=imported_book.id,
+            book_id=imported_book.id,
+            title=imported_book.title,
+            author=imported_book.author,
+            description=imported_book.description,
             language=None,
-            html_url=ib.original_url or "",
+            html_url=imported_book.original_url or "",
             status="ready",
-            source_type=ib.source_type,
-            file_type=ib.file_type,
+            source_type=imported_book.source_type,
+            file_type=imported_book.file_type,
             chapter_count=0,
             completed_chapters=0,
-            created_at=ib.added_at,
-            updated_at=ib.added_at,
+            progress=imported_book.progress_position if imported_book.progress_position else None,
+            created_at=imported_book.added_at,
+            updated_at=imported_book.progress_updated_at or imported_book.added_at,
         ))
 
     return books
@@ -126,12 +127,12 @@ async def get_book_content(book_id: str, db: AsyncSession = Depends(get_db)):
             cover_html=load_cover_html(gen.id),
             chapters=[
                 SectionResponse(
-                    id=c.id, section_type=c.section_type,
-                    title=c.title, content=load_chapter(gen.id, c.chapter_number or 0) or "",
-                    order_index=c.order_index,
-                    metadata_=c.metadata_, created_at=c.created_at,
+                    id=ch.id, section_type=ch.section_type,
+                    title=ch.title, content=load_chapter(gen.id, ch.chapter_number or 0) or "",
+                    order_index=ch.order_index,
+                    metadata_=ch.metadata_, created_at=ch.created_at,
                 )
-                for c in chapters
+                for ch in chapters
             ],
         )
 
@@ -180,80 +181,17 @@ async def get_book_by_repo(repo_id: str, db: AsyncSession = Depends(get_db)):
         cover_html=load_cover_html(gen.id),
         chapters=[
             SectionResponse(
-                id=c.id,
-                section_type=c.section_type,
-                title=c.title,
-                content=load_chapter(gen.id, c.chapter_number or 0) or "",
-                order_index=c.order_index,
-                metadata_=c.metadata_,
-                created_at=c.created_at,
+                id=ch.id,
+                section_type=ch.section_type,
+                title=ch.title,
+                content=load_chapter(gen.id, ch.chapter_number or 0) or "",
+                order_index=ch.order_index,
+                metadata_=ch.metadata_,
+                created_at=ch.created_at,
             )
-            for c in chapters
+            for ch in chapters
         ],
     )
-
-
-@router.patch("/books/{repo_id}")
-async def update_book(
-    repo_id: str,
-    body: BookUpdateRequest,
-    db: AsyncSession = Depends(get_db),
-):
-    # Frontend sends repo_id — look up BookGeneration by repo_id
-    result = await db.execute(
-        select(BookGeneration)
-        .options(selectinload(BookGeneration.repo))
-        .where(BookGeneration.repo_id == repo_id)
-    )
-    gen = result.scalar()
-
-    if gen:
-        if body.status is not None:
-            if body.status == "pending":
-                raise HTTPException(status_code=400, detail="Cannot set status to 'pending'")
-            gen.status = body.status
-            gen.updated_at = datetime.utcnow()
-
-        if gen.repo:
-            if body.description is not None:
-                gen.repo.description = body.description
-            if body.category is not None:
-                gen.repo.category = body.category
-            if body.tags is not None:
-                gen.repo.tags = body.tags
-            if body.is_favorite is not None:
-                gen.repo.is_favorite = body.is_favorite
-
-        await db.commit()
-        return {
-            "ok": True,
-            "book_id": gen.id,
-            "status": gen.status,
-            "description": gen.repo.description if gen.repo else None,
-        }
-
-    # No BookGeneration — update Repo directly
-    repo_result = await db.execute(select(Repo).where(Repo.id == repo_id))
-    repo = repo_result.scalar()
-    if not repo:
-        raise HTTPException(status_code=404, detail="Book not found")
-
-    if body.description is not None:
-        repo.description = body.description
-    if body.category is not None:
-        repo.category = body.category
-    if body.tags is not None:
-        repo.tags = body.tags
-    if body.is_favorite is not None:
-        repo.is_favorite = body.is_favorite
-
-    await db.commit()
-    return {
-        "ok": True,
-        "book_id": repo_id,
-        "status": "no_book",
-        "description": repo.description,
-    }
 
 
 @router.delete("/books/{repo_id}")
@@ -262,16 +200,26 @@ async def delete_book(repo_id: str, db: AsyncSession = Depends(get_db)):
         select(BookGeneration).where(BookGeneration.repo_id == repo_id)
     )
     gen = gen_result.scalar()
+    if not gen:
+        gen_result = await db.execute(
+            select(BookGeneration).where(BookGeneration.id == repo_id)
+        )
+        gen = gen_result.scalar()
 
     if gen:
         delete_book_content(gen.id)
         await db.execute(
-            delete(ContentSection).where(ContentSection.repo_id == repo_id)
+            delete(ContentSection).where(ContentSection.repo_id == gen.repo_id)
         )
         await db.delete(gen)
+        await db.commit()
 
-    repo_result = await db.execute(select(Repo).where(Repo.id == repo_id))
+    actual_repo_id = gen.repo_id if gen else repo_id
+    repo_result = await db.execute(select(Repo).where(Repo.id == actual_repo_id))
     repo = repo_result.scalar()
+    if not repo and gen:
+        repo_result = await db.execute(select(Repo).where(Repo.id == repo_id))
+        repo = repo_result.scalar()
     if repo:
         from app.services.file_storage import delete_repo_content
         delete_repo_content(repo.id)
@@ -310,7 +258,7 @@ async def update_book(
             if body.status == "pending":
                 raise HTTPException(status_code=400, detail="Cannot set status to 'pending'")
             gen.status = body.status
-            gen.updated_at = datetime.utcnow()
+            gen.updated_at = datetime.now(timezone.utc)
 
         if gen.repo:
             if body.description is not None:
@@ -332,22 +280,43 @@ async def update_book(
 
     repo_result = await db.execute(select(Repo).where(Repo.id == repo_id))
     repo = repo_result.scalar()
-    if not repo:
-        raise HTTPException(status_code=404, detail="Book not found")
+    if repo:
+        if body.description is not None:
+            repo.description = body.description
+        if body.category is not None:
+            repo.category = body.category
+        if body.tags is not None:
+            repo.tags = body.tags
+        if body.is_favorite is not None:
+            repo.is_favorite = body.is_favorite
 
-    if body.description is not None:
-        repo.description = body.description
-    if body.category is not None:
-        repo.category = body.category
-    if body.tags is not None:
-        repo.tags = body.tags
-    if body.is_favorite is not None:
-        repo.is_favorite = body.is_favorite
+        await db.commit()
+        return {
+            "ok": True,
+            "book_id": repo_id,
+            "status": "no_book",
+            "description": repo.description,
+        }
 
-    await db.commit()
-    return {
-        "ok": True,
-        "book_id": repo_id,
-        "status": "no_book",
-        "description": repo.description,
-    }
+    # Check ImportedBook for file/url imports
+    imported_result = await db.execute(select(ImportedBook).where(ImportedBook.id == repo_id))
+    imported = imported_result.scalar()
+    if imported:
+        if body.description is not None:
+            imported.description = body.description
+        if body.category is not None:
+            imported.category = body.category
+        if body.tags is not None:
+            imported.tags = body.tags
+        if body.is_favorite is not None:
+            imported.is_favorite = body.is_favorite
+
+        await db.commit()
+        return {
+            "ok": True,
+            "book_id": imported.id,
+            "status": "ready",
+            "description": imported.description,
+        }
+
+    raise HTTPException(status_code=404, detail="Book not found")

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.core.database import get_db, async_session
 from app.models.repo import Repo, ContentSection, BookGeneration
@@ -42,7 +42,7 @@ async def _status_updater(repo_id: str):
                     gen.completed_chapters = completed_chapters
                 if outline is not None:
                     gen.outline = {"chapters": outline}
-                gen.updated_at = datetime.utcnow()
+                gen.updated_at = datetime.now(timezone.utc)
                 await session.commit()
 
         await publish(repo_id, {
@@ -72,17 +72,18 @@ async def start_book_generation(
     existing = await db.execute(
         select(BookGeneration).where(BookGeneration.repo_id == repo_id)
     )
-    gen = existing.scalar()
-    if gen and gen.status in ("pending", "fetching", "planning", "cover", "writing", "reviewing", "publishing"):
+    existing_gen = existing.scalar()
+    if existing_gen and existing_gen.status in ("pending", "fetching", "planning", "cover", "writing", "reviewing", "publishing"):
         raise HTTPException(status_code=409, detail="Book generation already in progress")
 
-    if gen:
+    if existing_gen:
+        gen = existing_gen
         gen.status = "pending"
         gen.current_phase = None
         gen.total_chapters = 0
         gen.completed_chapters = 0
         gen.error_log = None
-        gen.updated_at = datetime.utcnow()
+        gen.updated_at = datetime.now(timezone.utc)
     else:
         gen = BookGeneration(repo_id=repo_id, status="pending")
         db.add(gen)
@@ -126,7 +127,7 @@ async def _run_book_pipeline(
                 gen.current_phase = "writing"
                 gen.total_chapters = len(outline)
                 gen.outline = {"chapters": outline}
-                gen.updated_at = datetime.utcnow()
+                gen.updated_at = datetime.now(timezone.utc)
                 await session.commit()
 
             save_cover_html(gen.id, cover_html)
@@ -155,7 +156,7 @@ async def _run_book_pipeline(
                 gen.status = "done"
                 gen.completed_chapters = len(chapters)
                 gen.current_phase = "done"
-                gen.updated_at = datetime.utcnow()
+                gen.updated_at = datetime.now(timezone.utc)
 
             await session.execute(
                 delete(ContentSection).where(
@@ -198,7 +199,7 @@ async def _run_book_pipeline(
             if gen:
                 gen.status = "failed"
                 gen.error_log = str(e)
-                gen.updated_at = datetime.utcnow()
+                gen.updated_at = datetime.now(timezone.utc)
                 await session.commit()
 
         await publish(repo_id, {
@@ -223,14 +224,14 @@ async def get_book_status(repo_id: str, db: AsyncSession = Depends(get_db)):
             total_chapters=0,
             completed_chapters=0,
             error_log=None,
-            updated_at=datetime.utcnow(),
+            updated_at=datetime.now(timezone.utc),
         )
     return gen
 
 
 @router.get("/book-status/{repo_id}/stream")
 async def stream_book_status(repo_id: str, request: Request):
-    q = await subscribe(repo_id)
+    subscription_queue = await subscribe(repo_id)
 
     async def event_generator():
         try:
@@ -251,12 +252,12 @@ async def stream_book_status(repo_id: str, request: Request):
                 if await request.is_disconnected():
                     break
                 try:
-                    message = await asyncio.wait_for(q.get(), timeout=25)
+                    message = await asyncio.wait_for(subscription_queue.get(), timeout=25)
                     yield f"data: {message}\n\n"
                 except asyncio.TimeoutError:
                     yield ": keepalive\n\n"
         finally:
-            unsubscribe(repo_id, q)
+            unsubscribe(repo_id, subscription_queue)
 
     return StreamingResponse(
         event_generator(),

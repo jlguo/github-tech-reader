@@ -6,11 +6,13 @@ export type BookStatus = BookGenStatus;
 
 const POLL_FALLBACK_MS = 5_000;
 
-export function useBookStatus(repoId: string | null): BookStatus | null {
+export function useBookStatus(repoId: string | null, sourceType?: string): BookStatus | null {
   const [status, setStatus] = useState<BookStatus | null>(null);
   const esRef = useRef<EventSource | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const usingFallback = useRef(false);
+
+  const isYoutube = sourceType === "youtube";
 
   useEffect(() => {
     if (!repoId) return;
@@ -34,7 +36,9 @@ export function useBookStatus(repoId: string | null): BookStatus | null {
         if (pollRef.current) return;
         const poll = async () => {
           try {
-            const data = await svc.getBookStatus(repoId);
+            const data = isYoutube
+              ? await svc.getYoutubeBookStatus(repoId)
+              : await svc.getBookStatus(repoId);
             if (data && !cancelled) {
               setStatus({
                 status: data.status,
@@ -49,7 +53,10 @@ export function useBookStatus(repoId: string | null): BookStatus | null {
         pollRef.current = setInterval(poll, POLL_FALLBACK_MS);
       };
 
-      const es = new EventSource(svc.getBookStatusStreamUrl(repoId));
+      const streamUrl = isYoutube
+        ? svc.getYoutubeBookStatusStreamUrl(repoId)
+        : svc.getBookStatusStreamUrl(repoId);
+      const es = new EventSource(streamUrl);
       esRef.current = es;
 
       es.onmessage = (event) => {
@@ -71,7 +78,7 @@ export function useBookStatus(repoId: string | null): BookStatus | null {
     });
 
     return cleanup;
-  }, [repoId]);
+  }, [repoId, isYoutube]);
 
   return status;
 }

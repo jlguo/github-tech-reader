@@ -47,9 +47,9 @@ def load_readme(repo_id: str) -> str | None:
 
 
 def delete_repo_content(repo_id: str) -> None:
-    d = repos_dir(repo_id)
-    if d.exists():
-        shutil.rmtree(d)
+    repo_dir_path = repos_dir(repo_id)
+    if repo_dir_path.exists():
+        shutil.rmtree(repo_dir_path)
 
 
 def books_dir(book_gen_id: str) -> Path:
@@ -113,9 +113,9 @@ def load_chapter(book_gen_id: str, chapter_number: int) -> str | None:
 
 
 def delete_book_content(book_gen_id: str) -> None:
-    d = books_dir(book_gen_id)
-    if d.exists():
-        shutil.rmtree(d)
+    book_dir_path = books_dir(book_gen_id)
+    if book_dir_path.exists():
+        shutil.rmtree(book_dir_path)
 
 
 def imports_dir(imported_id: str) -> Path:
@@ -136,9 +136,9 @@ def load_import_content(imported_id: str) -> str | None:
 
 
 def delete_import_content(imported_id: str) -> None:
-    d = imports_dir(imported_id)
-    if d.exists():
-        shutil.rmtree(d)
+    import_dir_path = imports_dir(imported_id)
+    if import_dir_path.exists():
+        shutil.rmtree(import_dir_path)
 
 
 def has_readme(repo_id: str) -> bool:

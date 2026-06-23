@@ -127,6 +127,7 @@ export class LocalDataService implements IDataService {
       file_type: item.file_type || "html",
       progress: Math.round(item.progress),
       progress_metadata: item.progress_metadata,
+      cover_html: item.cover_html,
     }));
   }
 
@@ -246,6 +247,13 @@ export class LocalDataService implements IDataService {
 
       await this.#contentStore.writeFile(`books/${genId}/cover.html`, cover.coverHtml);
 
+      // Store coverHtml in DB for bookshelf thumbnail rendering
+      await this.#db.upsertBookGen(repoId, {
+        id: genId,
+        cover_html: cover.coverHtml,
+        updated_at: new Date().toISOString(),
+      });
+
       await updateStatus("writing", {
         phase: "writing",
         totalChapters: cover.outline.length,
@@ -296,6 +304,14 @@ export class LocalDataService implements IDataService {
       total_chapters: gen.total_chapters,
       completed_chapters: gen.completed_chapters,
     };
+  }
+
+  async getYoutubeBookStatus(repoId: string): Promise<BookGenStatus | null> {
+    return this.getBookStatus(repoId);
+  }
+
+  async generateYoutubeBook(_params: { url?: string; repo_id?: string }): Promise<{ repo_id: string; video_id: string; video_title: string; status: string }> {
+    throw new Error("YouTube book generation not supported in local mode. Please switch to remote mode.");
   }
 
   // ── Imports ──────────────────────────────────────────────────────
@@ -401,6 +417,14 @@ export class LocalDataService implements IDataService {
 
   getBookStatusUrl(repoId: string): string {
     return `${this.#baseUrl}/agents/book-status/${repoId}`;
+  }
+
+  getYoutubeBookStatusStreamUrl(repoId: string): string {
+    return `${this.#baseUrl}/youtube/book-status/${repoId}/stream`;
+  }
+
+  getYoutubeBookStatusUrl(repoId: string): string {
+    return `${this.#baseUrl}/youtube/book-status/${repoId}`;
   }
 
   // ── Reading progress ────────────────────────────────────────────

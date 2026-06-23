@@ -95,7 +95,7 @@ test.describe("YouTube Import - Dialog UI", () => {
 });
 
 test.describe("YouTube Import - API Integration", () => {
-  test("shows success state when API returns started", async ({ page }) => {
+  test("shows success state when API returns started with video_title", async ({ page }) => {
     await page.route("**/api/youtube/generate-book", async (route) => {
       const body = route.request().postDataJSON();
       expect(body.url).toContain("youtube.com/watch?v=dQw4w9WgXcQ");
@@ -106,6 +106,7 @@ test.describe("YouTube Import - API Integration", () => {
           status: "started",
           repo_id: "test-repo-123",
           video_id: "dQw4w9WgXcQ",
+          video_title: "Rick Astley - Never Gonna Give You Up",
         }),
       });
     });
@@ -118,6 +119,9 @@ test.describe("YouTube Import - API Integration", () => {
 
     await expect(page.locator("text=字幕已提取")).toBeVisible({ timeout: 10000 });
     await expect(page.locator("text=AI 书籍生成已启动")).toBeVisible();
+    // Title should show the real video title, not the video ID
+    await expect(page.locator("text=Rick Astley - Never Gonna Give You Up").first()).toBeVisible();
+    await expect(page.locator("text=YouTube:dQw4w9WgXcQ")).not.toBeVisible();
 
     const doneBtn = page.locator('button:has-text("完成")');
     await expect(doneBtn).toBeVisible();
@@ -283,5 +287,55 @@ test.describe("YouTube Import - Edge Cases", () => {
     await expect(page.locator('[data-testid="import-dialog-input"]')).toBeVisible();
     await submitImport(page);
     await expect(page.locator("text=字幕已提取")).toBeVisible({ timeout: 10000 });
+  });
+
+  test("shows already_done message when book already exists", async ({ page }) => {
+    await page.route("**/api/youtube/generate-book", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          status: "already_done",
+          repo_id: "test-repo-456",
+          video_id: "dQw4w9WgXcQ",
+          video_title: "Rick Astley - Never Gonna Give You Up",
+        }),
+      });
+    });
+
+    await page.goto("/");
+    await openImportDialog(page);
+    await switchToYouTubeTab(page);
+    await fillYouTubeUrl(page, "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    await submitImport(page);
+
+    await expect(page.locator("text=书籍已存在")).toBeVisible({ timeout: 10000 });
+    await expect(page.locator("text=可直接阅读")).toBeVisible();
+    await expect(page.locator("text=AI 书籍生成已启动")).not.toBeVisible();
+  });
+
+  test("uses video_id as title when oEmbed lookup fails", async ({ page }) => {
+    await page.route("**/api/youtube/generate-book", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          status: "started",
+          repo_id: "test-repo-789",
+          video_id: "dQw4w9WgXcQ",
+          video_title: "dQw4w9WgXcQ",
+        }),
+      });
+    });
+
+    await page.goto("/");
+    await openImportDialog(page);
+    await switchToYouTubeTab(page);
+    await fillYouTubeUrl(page, "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    await submitImport(page);
+
+    await expect(page.locator("text=字幕已提取")).toBeVisible({ timeout: 10000 });
+    await expect(page.locator("text=AI 书籍生成已启动")).toBeVisible();
+    await expect(page.locator('p:has-text("dQw4w9WgXcQ")').first()).toBeVisible();
   });
 });

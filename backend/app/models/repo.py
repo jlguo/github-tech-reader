@@ -27,6 +27,7 @@ class Repo(Base):
     updated_at_github: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     category: Mapped[str] = mapped_column(String(64), default="uncategorized")
+    source_type: Mapped[str] = mapped_column(String(16), default="github")  # "github" | "youtube"
     tags: Mapped[list[str]] = mapped_column(JSON, default=list)
     is_favorite: Mapped[bool] = mapped_column(Boolean, default=False)
     added_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

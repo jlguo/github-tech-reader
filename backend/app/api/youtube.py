@@ -1,16 +1,17 @@
 import uuid
 import asyncio
 import json
-from datetime import datetime
+import hashlib
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 
 from app.core.database import get_db, async_session
-from app.models.repo import Repo, BookGeneration
+from app.models.repo import Repo, BookGeneration, ContentSection
 from app.api.schemas import BookGenerationStatusResponse
 from app.agents.crew import generate_book_plan, generate_book_content
 from app.events import publish, subscribe, unsubscribe
@@ -19,6 +20,7 @@ from app.services.youtube import (
     extract_transcript,
     format_transcript_snapshot,
     determine_chapter_count_from_transcript,
+    fetch_video_title,
 )
 from app.services.file_storage import save_cover_html, save_book_html, save_chapter, save_outline
 
@@ -26,7 +28,8 @@ router = APIRouter()
 
 
 class YouTubeBookRequest(BaseModel):
-    url: str
+    url: str = ""
+    repo_id: str = ""
 
 
 async def _status_updater(repo_id: str):
@@ -51,7 +54,7 @@ async def _status_updater(repo_id: str):
                     gen.completed_chapters = completed_chapters
                 if outline is not None:
                     gen.outline = {"chapters": outline}
-                gen.updated_at = datetime.utcnow()
+                gen.updated_at = datetime.now(timezone.utc)
                 await session.commit()
 
         await publish(repo_id, {
@@ -69,7 +72,19 @@ async def start_youtube_book_generation(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    video_id = extract_video_id(request.url)
+    url = request.url
+    if request.repo_id and not url:
+        repo_result = await db.execute(select(Repo).where(Repo.id == request.repo_id))
+        repo = repo_result.scalar()
+        if not repo or repo.category != "youtube":
+            raise HTTPException(status_code=404, detail="YouTube book not found")
+        url = repo.html_url
+
+    if not url:
+        raise HTTPException(status_code=400, detail="Either url or repo_id is required")
+
+    video_id = extract_video_id(url)
+    video_title = await fetch_video_title(video_id)
 
     # Check for existing generation
     existing = await db.execute(
@@ -77,33 +92,59 @@ async def start_youtube_book_generation(
         .join(Repo, BookGeneration.repo_id == Repo.id)
         .where(Repo.html_url == f"https://www.youtube.com/watch?v={video_id}")
     )
-    gen = existing.scalar()
-    if gen and gen.status in (
+    existing_gen = existing.scalar()
+    if existing_gen and existing_gen.status in (
         "pending", "fetching", "planning", "cover", "writing", "reviewing", "publishing"
     ):
         raise HTTPException(status_code=409, detail="Book generation already in progress")
 
-    if gen:
+    if existing_gen:
+        gen = existing_gen
         repo_result = await db.execute(select(Repo).where(Repo.id == gen.repo_id))
         repo = repo_result.scalar()
+
+        # Fix title for books created before the video_title fix
+        if repo.name == video_id and video_title != video_id:
+            repo.name = video_title
+            repo.full_name = f"youtube:{video_title}"
+
+        # URL import of an already-finished book: skip regeneration. An explicit
+        # regenerate-from-shelf request (repo_id set) still falls through and re-runs.
+        if existing_gen.status == "done" and not request.repo_id:
+            await db.commit()
+            return {
+                "status": "already_done",
+                "repo_id": repo.id,
+                "video_id": video_id,
+                "video_title": video_title,
+            }
+
+        # Allow regeneration — reset and re-run regardless of current status
         gen.status = "pending"
         gen.current_phase = None
         gen.total_chapters = 0
         gen.completed_chapters = 0
         gen.error_log = None
-        gen.updated_at = datetime.utcnow()
+        gen.updated_at = datetime.now(timezone.utc)
     else:
-        repo = Repo(
-            id=str(uuid.uuid4()),
-            github_id=hash(video_id) % (2**31),
-            full_name=f"youtube:{video_id}",
-            owner="YouTube",
-            name=video_id,
-            html_url=f"https://www.youtube.com/watch?v={video_id}",
-            category="youtube",
-            language="zh",
-        )
-        db.add(repo)
+        # Reuse existing repo if caller provided one, otherwise create new
+        repo = None
+        if request.repo_id:
+            existing_repo = await db.execute(select(Repo).where(Repo.id == request.repo_id))
+            repo = existing_repo.scalar()
+        if not repo:
+            repo = Repo(
+                id=str(uuid.uuid4()),
+                github_id=int.from_bytes(hashlib.sha256(video_id.encode()).digest()[:4], "big"),
+                full_name=f"youtube:{video_title}",
+                owner="YouTube",
+                name=video_title,
+                html_url=f"https://www.youtube.com/watch?v={video_id}",
+                category="youtube",
+                source_type="youtube",
+                language="zh",
+            )
+            db.add(repo)
         gen = BookGeneration(repo_id=repo.id, status="pending")
         db.add(gen)
 
@@ -114,10 +155,10 @@ async def start_youtube_book_generation(
         _run_youtube_pipeline,
         repo_id=repo.id,
         video_id=video_id,
-        video_url=request.url,
+        video_url=url,
     )
 
-    return {"status": "started", "repo_id": repo.id, "video_id": video_id}
+    return {"status": "started", "repo_id": repo.id, "video_id": video_id, "video_title": video_title}
 
 
 async def _run_youtube_pipeline(repo_id: str, video_id: str, video_url: str):
@@ -129,7 +170,7 @@ async def _run_youtube_pipeline(repo_id: str, video_id: str, video_url: str):
         transcript_data = await extract_transcript(video_id)
         transcript_text = transcript_data["transcript_text"]
 
-        video_title = f"YouTube Video: {video_id}"
+        video_title = await fetch_video_title(video_id)
         channel_name = "YouTube"
         content_description = (
             f"A YouTube video ({video_id}) transcript converted into a structured book. "
@@ -161,7 +202,7 @@ async def _run_youtube_pipeline(repo_id: str, video_id: str, video_url: str):
                 gen.current_phase = "writing"
                 gen.total_chapters = chapter_count
                 gen.outline = {"chapters": outline}
-                gen.updated_at = datetime.utcnow()
+                gen.updated_at = datetime.now(timezone.utc)
                 await session.commit()
                 save_outline(gen.id, {"chapters": outline})
 
@@ -183,7 +224,27 @@ async def _run_youtube_pipeline(repo_id: str, video_id: str, video_url: str):
             gen.status = "done"
             gen.completed_chapters = len(result["chapters"])
             gen.current_phase = "done"
-            gen.updated_at = datetime.utcnow()
+            gen.updated_at = datetime.now(timezone.utc)
+
+            await session.execute(
+                delete(ContentSection).where(
+                    ContentSection.repo_id == repo_id,
+                    ContentSection.section_type == "book_chapter",
+                )
+            )
+
+            for ch in result["chapters"]:
+                section = ContentSection(
+                    repo_id=repo_id,
+                    section_type="book_chapter",
+                    title=ch["title"],
+                    order_index=ch["number"],
+                    chapter_number=ch["number"],
+                    word_count=ch.get("word_count", 0),
+                    status="approved",
+                )
+                session.add(section)
+
             await session.commit()
 
             save_book_html(gen.id, result["html"])
@@ -206,7 +267,7 @@ async def _run_youtube_pipeline(repo_id: str, video_id: str, video_url: str):
             if gen:
                 gen.status = "failed"
                 gen.error_log = str(e)
-                gen.updated_at = datetime.utcnow()
+                gen.updated_at = datetime.now(timezone.utc)
                 await session.commit()
 
         await publish(repo_id, {"status": "failed", "error": str(e)})
@@ -237,7 +298,7 @@ async def get_youtube_book_status(
 
 @router.get("/book-status/{repo_id}/stream")
 async def stream_youtube_book_status(repo_id: str, request: Request):
-    q = await subscribe(repo_id)
+    subscription_queue = await subscribe(repo_id)
 
     async def event_generator():
         try:
@@ -258,12 +319,12 @@ async def stream_youtube_book_status(repo_id: str, request: Request):
                 if await request.is_disconnected():
                     break
                 try:
-                    message = await asyncio.wait_for(q.get(), timeout=25)
+                    message = await asyncio.wait_for(subscription_queue.get(), timeout=25)
                     yield f"data: {message}\n\n"
                 except asyncio.TimeoutError:
                     yield ": keepalive\n\n"
         finally:
-            unsubscribe(repo_id, q)
+            unsubscribe(repo_id, subscription_queue)
 
     return StreamingResponse(
         event_generator(),

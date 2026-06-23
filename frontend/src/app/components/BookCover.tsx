@@ -1,6 +1,16 @@
 import { useState } from "react";
 import { Book, typeConfig } from "./bookData";
 
+function thumbnailScale(s: { width: string; height: string }): string {
+  if (s.width === "w-16") return "0.16";
+  if (s.width === "w-24") return "0.24";
+  return "0.32";
+}
+
+function wrapCoverForThumbnail(html: string): string {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;width:400px;height:600px;overflow:hidden}body{display:flex;align-items:center;justify-content:center}</style></head><body>${html}</body></html>`;
+}
+
 interface BookCoverProps {
   book: Book;
   size?: "sm" | "md" | "lg";
@@ -19,6 +29,30 @@ export function BookCover({ book, size = "md" }: BookCoverProps) {
   const typeInfo = typeConfig[book.type] ?? fallbackType;
   const [imgError, setImgError] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
+
+  // Render generated cover HTML as a scaled mini-iframe when no image URL exists
+  if (!book.cover && book.coverHtml) {
+    return (
+      <div
+        className={`${s.width} ${s.height} relative flex-shrink-0 overflow-hidden shadow-md`}
+        style={{ borderRadius: "2px 6px 6px 2px" }}
+        data-testid={`book-cover-html-${book.id}`}
+      >
+        <iframe
+          srcDoc={wrapCoverForThumbnail(book.coverHtml)}
+          style={{
+            width: "400px",
+            height: "600px",
+            border: "none",
+            transform: `scale(${thumbnailScale(s)})`,
+            transformOrigin: "top left",
+            pointerEvents: "none",
+          }}
+          title={book.title}
+        />
+      </div>
+    );
+  }
 
   if (!book.cover || imgError) {
     return (

@@ -44,8 +44,8 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
-        data = self.data_dir or str(Path(__file__).parent.parent.parent / "data")
-        return f"sqlite+aiosqlite:///{data}/reader.db"
+        resolved_data_dir = self.data_dir or str(Path(__file__).parent.parent.parent / "data")
+        return f"sqlite+aiosqlite:///{resolved_data_dir}/reader.db"
 
     class Config:
         env_file = ".env"

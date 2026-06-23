@@ -218,9 +218,9 @@ async def fetch_repo_readme(repo_id: str, db: AsyncSession = Depends(get_db)):
     if content is None:
         raise HTTPException(status_code=404, detail="README not found on GitHub")
 
-    from datetime import datetime
+    from datetime import datetime, timezone
     save_readme(repo.id, content)
-    repo.readme_fetched_at = datetime.utcnow()
+    repo.readme_fetched_at = datetime.now(timezone.utc)
     await db.commit()
 
     return {"ok": True, "length": len(content)}

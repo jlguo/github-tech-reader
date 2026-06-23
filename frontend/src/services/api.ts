@@ -21,6 +21,7 @@ export interface RemoteBook {
   file_type: string | null;
   progress?: number;
   progress_metadata?: string;
+  cover_html?: string | null;
 }
 
 export interface BookContentResult {
@@ -81,9 +82,10 @@ export interface IDataService {
   getBookStatus(repoId: string): Promise<BookGenStatus | null>;
 
   // YouTube book generation
-  generateYoutubeBook(url: string): Promise<{ repo_id: string; video_id: string }>;
+  generateYoutubeBook(params: { url?: string; repo_id?: string }): Promise<{ repo_id: string; video_id: string; video_title: string; status: string }>;
   getYoutubeBookStatusStreamUrl(repoId: string): string;
   getYoutubeBookStatusUrl(repoId: string): string;
+  getYoutubeBookStatus(repoId: string): Promise<BookGenStatus | null>;
 
   // Imports
   uploadFile(file: File, title: string, author: string): Promise<ImportResult>;

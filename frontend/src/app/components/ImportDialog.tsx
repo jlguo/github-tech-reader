@@ -155,18 +155,19 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
     setError("");
 
     try {
-      const data = await service.generateYoutubeBook(url);
+      const data = await service.generateYoutubeBook({ url });
+      const alreadyDone = data.status === "already_done";
       setResult({
         id: data.repo_id,
-        title: `YouTube: ${data.video_id}`,
+        title: data.video_title ?? `YouTube: ${data.video_id}`,
         author: "YouTube",
         source_type: "youtube",
-        gen_started: true,
+        gen_started: !alreadyDone,
       });
       setStep("success");
       onImported({
         id: data.repo_id,
-        title: `YouTube: ${data.video_id}`,
+        title: data.video_title ?? `YouTube: ${data.video_id}`,
         author: "YouTube",
         sourceType: "youtube",
         fileType: "html",
@@ -252,7 +253,7 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
                 {result.source_type === "github"
                   ? `README ${result.readme_fetched ? "已获取" : "未获取"}${result.gen_started ? " • AI 生成已启动" : ""}`
                   : result.source_type === "youtube"
-                  ? "字幕已提取 • AI 书籍生成已启动"
+                  ? (result.gen_started ? "字幕已提取 • AI 书籍生成已启动" : "书籍已存在，可直接阅读")
                   : result.source_type === "file"
                   ? `${result.file_type?.toUpperCase()} • ${result.author}`
                   : `网页 • ${result.file_type?.toUpperCase()}`}

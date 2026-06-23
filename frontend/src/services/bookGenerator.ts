@@ -127,30 +127,76 @@ async function runCoverCrew(
   repoName: string,
   repoDescription: string,
   outline: ChapterOutline[],
+  repoOwner: string,
+  reviewFeedback?: string,
 ): Promise<string> {
   const chaptersList = outline.slice(0, 6)
     .map((ch) => `Chapter ${ch.number}: ${ch.title}`)
     .join("\n");
 
+  let reviewSection = "";
+  if (reviewFeedback) {
+    reviewSection = `Previous attempt had these issues:\n${reviewFeedback}\n\nFix them in this revision.\n\n`;
+  }
+
   const prompt = `Design a cover page for the book '${repoName}'.\n\n` +
     `Description: ${repoDescription}\n\n` +
     `Chapters:\n${chaptersList}\n\n` +
     `${LANG_INSTRUCTION}\n\n` +
+    reviewSection +
     `Create an HTML cover page that looks like a real book cover. Requirements:\n` +
     `- Full viewport height, centered content\n` +
     `- Elegant typography using 'Playfair Display' for title, 'Source Serif 4' for subtitle\n` +
     `- Title prominently displayed\n` +
     `- A tagline derived from the project description\n` +
-    `- Author attribution (the repo owner)\n` +
+    `- Author: ${repoOwner}\n` +
     `- Subtle decorative elements (lines, geometric shapes, or dots)\n` +
     `- Use this color palette: background #f5f0e8, text #2c1a0e, accent #c17f3a, dark #5c3d1e\n` +
     `- The cover should feel like a premium technical book\n` +
     `- Add a subtle background pattern or texture effect\n\n` +
-    `Return ONLY the HTML for the cover page (a complete <div> element), no other text.`;
+    `Wrap the cover HTML in \`<!--COVER_START-->\` and \`<!--COVER_END-->\` markers. Output:\n` +
+    `\`<!--COVER_START-->\n<div>...cover HTML...</div>\n<!--COVER_END-->\`\n` +
+    `Return ONLY the markers and the HTML, no other text.`;
 
   const result = await llm.chat([{ role: "user", content: prompt }]);
-  const divMatch = result.match(/<div[^>]*>[\s\S]*?<\/div>/i);
-  return divMatch ? divMatch[0] : result;
+  const markerMatch = result.match(/<!--COVER_START-->\s*([\s\S]*?)\s*<!--COVER_END-->/);
+  let coverHtml: string;
+  if (markerMatch) {
+    coverHtml = markerMatch[1];
+  } else {
+    const divMatch = result.match(/<div[^>]*>[\s\S]*?<\/div>/i);
+    coverHtml = divMatch ? divMatch[0] : result;
+  }
+  const requiredElements = ["100vh", "Playfair Display", "#f5f0e8", "#c17f3a", "#5c3d1e"];
+  const foundCount = requiredElements.filter((el) => coverHtml.includes(el)).length;
+  if (foundCount < 2) {
+    console.warn(`Cover validation failed: only ${foundCount}/5 required elements found`);
+    return "";
+  }
+  return coverHtml;
+}
+
+async function runCoverReview(
+  llm: LlmClient,
+  repoName: string,
+  coverHtml: string,
+): Promise<string> {
+  const prompt =
+    `Review this cover HTML for quality issues:\n\n${coverHtml}\n\n` +
+    `Check ALL of these requirements:\n` +
+    `1. Full viewport height (100vh or similar)\n` +
+    `2. Uses 'Playfair Display' font for title\n` +
+    `3. Uses color palette: #f5f0e8, #c17f3a, #5c3d1e\n` +
+    `4. Has visible title text\n` +
+    `5. Has decorative elements (lines, shapes, patterns)\n` +
+    `6. Feels like a premium technical book cover\n\n` +
+    `Return ONLY one word: PASS if all checks pass, or FAIL followed by a brief reason why.`;
+
+  const result = await llm.chat([{ role: "user", content: prompt }]);
+  if (result.toUpperCase().includes("PASS")) {
+    return ""; // Empty string = OK, no regeneration needed
+  }
+  return result; // Non-empty = review feedback for regeneration
 }
 
 async function runChapterResearchWriter(
@@ -192,13 +238,19 @@ async function runChaptersParallel(
   snapshot: string,
   maxParallel: number = 3,
 ): Promise<ChapterResult[]> {
-  const semaphore = new Array(maxParallel).fill(null) as Promise<void>[];
   let active = 0;
+  const waitQueue: (() => void)[] = [];
   const results: (ChapterResult | Error)[] = [];
 
+  const release = () => {
+    active--;
+    const next = waitQueue.shift();
+    if (next) next();
+  };
+
   const tasks = outline.map(async (chapter, index) => {
-    while (active >= maxParallel) {
-      await Promise.race(semaphore);
+    if (active >= maxParallel) {
+      await new Promise<void>(resolve => { waitQueue.push(resolve); });
     }
     active++;
     try {
@@ -207,7 +259,7 @@ async function runChaptersParallel(
     } catch (e) {
       results[index] = e instanceof Error ? e : new Error(String(e));
     } finally {
-      active--;
+      release();
     }
   });
 
@@ -300,15 +352,26 @@ export async function generateBookCover(
   const issues = await github.fetchTopIssues(repoName);
   const repoInfo = { repo_name: repoName, file_count: Object.keys(files).length };
   const chapterCount = determineChapterCount(repoInfo, files);
+  const repoOwner = repoName.split("/")[0];
   const snapshot = buildTextualSnapshot(readmeContent, files, issues);
 
   await updateStatus("planning", { totalChapters: chapterCount, phase: "planning" });
   const outline = await runPlanningCrew(llm, repoName, repoDescription, chapterCount, snapshot);
 
   await updateStatus("cover", { phase: "cover" });
-  const coverHtml = await runCoverCrew(llm, repoName, repoDescription, outline);
+  const coverHtml = await runCoverCrew(llm, repoName, repoDescription, outline, repoOwner);
 
-  return { outline, coverHtml, snapshot, chapterCount };
+  // Review cover quality; regenerate once if needed
+  let finalCoverHtml = coverHtml;
+  if (coverHtml) {
+    const reviewFeedback = await runCoverReview(llm, repoName, coverHtml);
+    if (reviewFeedback) {
+      console.warn(`Cover review found issues: ${reviewFeedback.slice(0, 100)}`);
+      finalCoverHtml = await runCoverCrew(llm, repoName, repoDescription, outline, repoOwner, reviewFeedback);
+    }
+  }
+
+  return { outline, coverHtml: finalCoverHtml, snapshot, chapterCount };
 }
 
 export async function generateBookContent(

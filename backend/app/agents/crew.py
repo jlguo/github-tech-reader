@@ -301,7 +301,7 @@ async def _run_editor_crew(chapters, repo_name) -> str:
     return result
 
 
-async def _run_cover_crew(repo_name: str, repo_description: str, outline: list[dict]) -> str:
+async def _run_cover_crew(repo_name: str, repo_description: str, outline: list[dict], repo_owner: str, review_feedback: str = "") -> str:
     _ensure_crewai()
     designer = _make_agent(
         role="Book Cover Designer",
@@ -314,29 +314,45 @@ async def _run_cover_crew(repo_name: str, repo_description: str, outline: list[d
     chapters_list = "\n".join(
         f"Chapter {ch['number']}: {ch['title']}" for ch in outline[:6]
     )
+    desc = (
+        f"Design a cover page for the book '{repo_name}'.\n\n"
+        f"Description: {repo_description}\n\n"
+        f"Chapters:\n{chapters_list}\n\n"
+        f"{_LANG_INSTRUCTION}\n\n"
+    )
+    if review_feedback:
+        desc += f"Previous attempt had these issues:\n{review_feedback}\n\nFix them in this revision.\n\n"
+    desc += (
+        "Create an HTML cover page that looks like a real book cover. Requirements:\n"
+        "- Full viewport height, centered content\n"
+        "- Elegant typography using 'Playfair Display' for title, 'Source Serif 4' for subtitle\n"
+        "- Title prominently displayed\n"
+        "- A tagline derived from the project description\n"
+        f"- Author: {repo_owner}\n"
+        "- Subtle decorative elements (lines, geometric shapes, or dots)\n"
+        "- Use this color palette: background #f5f0e8, text #2c1a0e, accent #c17f3a, dark #5c3d1e\n"
+        "- The cover should feel like a premium technical book\n"
+        "- Add a subtle background pattern or texture effect\n\n"
+        "Wrap the cover HTML in `<!--COVER_START-->` and `<!--COVER_END-->` markers. "
+        "Output: `<!--COVER_START-->\n<div>...cover HTML...</div>\n<!--COVER_END-->`"
+    )
     task = Task(
-        description=(
-            f"Design a cover page for the book '{repo_name}'.\n\n"
-            f"Description: {repo_description}\n\n"
-            f"Chapters:\n{chapters_list}\n\n"
-            f"{_LANG_INSTRUCTION}\n\n"
-            "Create an HTML cover page that looks like a real book cover. Requirements:\n"
-            "- Full viewport height, centered content\n"
-            "- Elegant typography using 'Playfair Display' for title, 'Source Serif 4' for subtitle\n"
-            "- Title prominently displayed\n"
-            "- A tagline derived from the project description\n"
-            "- Author attribution (the repo owner)\n"
-            "- Subtle decorative elements (lines, geometric shapes, or dots)\n"
-            "- Use this color palette: background #f5f0e8, text #2c1a0e, accent #c17f3a, dark #5c3d1e\n"
-            "- The cover should feel like a premium technical book\n"
-            "- Add a subtle background pattern or texture effect\n\n"
-            "Return ONLY the HTML for the cover page (a complete <div> element), no other text."
-        ),
+        description=desc,
         expected_output="A beautiful HTML cover page for the book.",
         agent=designer,
     )
     crew = Crew(agents=[designer], tasks=[task], process=Process.sequential, verbose=True)
     result = await _kickoff_with_retry(crew)
+    cover_match = re.search(r"<!--COVER_START-->\s*(.*?)\s*<!--COVER_END-->", result, re.DOTALL)
+    if cover_match:
+        extracted = cover_match.group(1).strip()
+        has_viewport = "100vh" in extracted or "viewport" in extracted.lower()
+        has_font = "Playfair Display" in extracted
+        has_color = any(c in extracted for c in ("#f5f0e8", "#c17f3a", "#5c3d1e"))
+        if has_viewport and has_font and has_color:
+            return extracted
+        print(f"[cover] Validation failed: viewport={has_viewport} font={has_font} color={has_color}")
+        return ""
     div_match = re.search(r"<div[^>]*>.*?</div>", result, re.DOTALL | re.IGNORECASE)
     if div_match:
         return div_match.group()
@@ -369,10 +385,42 @@ async def generate_book_plan(
     )
 
 
+async def _run_cover_review_crew(repo_name: str, cover_html: str) -> str:
+    """Review cover HTML quality. Returns empty string on PASS, review feedback on FAIL."""
+    _ensure_crewai()
+    reviewer = _make_agent(
+        role="Cover Reviewer",
+        goal=f"Review the book cover HTML for '{repo_name}' for quality and completeness. {_LANG_INSTRUCTION}",
+        backstory="You are a quality assurance specialist who reviews book covers "
+                  "for design issues, missing elements, and layout problems.",
+    )
+    task = Task(
+        description=(
+            f"Review this cover HTML for quality issues:\n\n{cover_html}\n\n"
+            "Check ALL of these requirements:\n"
+            "1. Full viewport height (100vh or similar)\n"
+            "2. Uses 'Playfair Display' font for title\n"
+            "3. Uses color palette: #f5f0e8, #c17f3a, #5c3d1e\n"
+            "4. Has visible title text\n"
+            "5. Has decorative elements (lines, shapes, patterns)\n"
+            "6. Feels like a premium technical book cover\n\n"
+            "Return ONLY one word: PASS if all checks pass, or FAIL followed by a brief reason why."
+        ),
+        expected_output="PASS or FAIL with reason.",
+        agent=reviewer,
+    )
+    crew = Crew(agents=[reviewer], tasks=[task], process=Process.sequential, verbose=True)
+    result = await _kickoff_with_retry(crew)
+    if "PASS" in result.upper():
+        return ""
+    return result
+
+
 async def generate_book_cover(repo_id, repo_name, repo_description, readme_content, status_updater) -> dict:
     _ensure_crewai()
 
     await status_updater("fetching")
+    owner = repo_name.split("/")[0] if "/" in repo_name else ""
     from app.services.github import fetch_key_files, fetch_top_issues
     files = await fetch_key_files(repo_name)
     issues = await fetch_top_issues(repo_name)
@@ -384,7 +432,13 @@ async def generate_book_cover(repo_id, repo_name, repo_description, readme_conte
     outline = await _run_planning_crew(repo_name, repo_description, chapter_count, snapshot)
 
     await status_updater("cover", phase="cover")
-    cover_html = await _run_cover_crew(repo_name, repo_description, outline)
+    cover_html = await _run_cover_crew(repo_name, repo_description, outline, owner)
+
+    if cover_html:
+        review_feedback = await _run_cover_review_crew(repo_name, cover_html)
+        if review_feedback:
+            print(f"[cover] Review found issues: {review_feedback[:100]}")
+            cover_html = await _run_cover_crew(repo_name, repo_description, outline, owner, review_feedback)
 
     return {"outline": outline, "cover_html": cover_html, "snapshot": snapshot,
             "chapter_count": chapter_count, "repo_name": repo_name}

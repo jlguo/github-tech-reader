@@ -20,7 +20,8 @@ export interface Book {
   isFavorite: boolean;
   isDemo?: boolean;
   genStatus?: "pending" | "fetching" | "planning" | "cover" | "writing" | "reviewing" | "publishing" | "done" | "failed" | "no_book";
-  sourceType?: "github" | "file" | "url";
+  sourceType?: "github" | "file" | "url" | "youtube";
+  coverHtml?: string;
 }
 
 export const books: Book[] = [

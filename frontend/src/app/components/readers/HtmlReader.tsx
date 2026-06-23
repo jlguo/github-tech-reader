@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
 import { List } from "lucide-react";
 import { Book } from "../bookData";
 import { htmlContent as mockContent } from "./readerData";
@@ -64,6 +64,12 @@ const CONTENT_CSS = `
 
 const TAP_DETECT_SCRIPT = `(function(){var s=null;document.addEventListener('pointerdown',function(e){s={x:e.clientX,y:e.clientY,t:Date.now()}});document.addEventListener('pointerup',function(e){if(!s)return;var dx=e.clientX-s.x,dy=e.clientY-s.y,d=Math.sqrt(dx*dx+dy*dy),dt=Date.now()-s.t;s=null;if(dt>=300||d>=10)return;var w=window.innerWidth,h=window.innerHeight;if(e.clientX/w<0.3||e.clientX/w>0.7||e.clientY/h<0.3||e.clientY/h>0.7)return;parent.postMessage({type:'reader-center-tap'},'*')});})();`;
 
+function wrapCoverHtml(html: string): string {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>html,body{margin:0;padding:0;height:100%;overflow:hidden}body{display:flex;align-items:center;justify-content:center}</style>
+</head><body>${html}</body></html>`;
+}
+
 export function HtmlReader({ book }: HtmlReaderProps) {
   const [realHtml, setRealHtml] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -74,6 +80,8 @@ export function HtmlReader({ book }: HtmlReaderProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [service, setService] = useState<IDataService | null>(null);
   const { save } = useReadingProgress(book.id);
+  const [showCover, setShowCover] = useState(false);
+  const coverHtmlRef = useRef<string>("");
 
   useEffect(() => {
     getDataService().then(setService);
@@ -97,8 +105,23 @@ export function HtmlReader({ book }: HtmlReaderProps) {
   }, [service, book.id, book.category, book.isDemo]);
 
   const displayHtml = realHtml ? sanitizeHtml(realHtml) : "";
-  const anchoredHtml = injectAnchorIds(displayHtml);
-  const tocItems = extractToc(displayHtml);
+
+  // Cover detection — extract and strip COVER_START/COVER_END markers
+  let content = displayHtml;
+  if (content) {
+    content = content.replace(/<!--COVER_START-->[\s\S]*?<!--COVER_END-->/, "");
+  }
+
+  useLayoutEffect(() => {
+    if (!displayHtml) return;
+    const coverMatch = displayHtml.match(/<!--COVER_START-->\s*([\s\S]*?)\s*<!--COVER_END-->/);
+    if (coverMatch) {
+      coverHtmlRef.current = coverMatch[1];
+      setShowCover(true);
+    }
+  }, [displayHtml]);
+  const anchoredHtml = injectAnchorIds(content);
+  const tocItems = extractToc(content);
 
   const scrollToSection = useCallback((id: string) => {
     setActiveId(id);
@@ -148,6 +171,16 @@ export function HtmlReader({ book }: HtmlReaderProps) {
     return () => { observer.disconnect(); clearTimeout(timer); };
   }, [save]);
 
+  // Scroll to first chapter heading after cover overlay is dismissed
+  useEffect(() => {
+    if (!showCover && coverHtmlRef.current && tocItems.length > 0) {
+      const timer = setTimeout(() => {
+        scrollToSection(tocItems[0].id);
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [showCover, tocItems, scrollToSection]);
+
   const scopedHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${CONTENT_CSS}</style><script>${TAP_DETECT_SCRIPT}</script></head><body>${anchoredHtml}</body></html>`;
 
   if (!loaded) {
@@ -159,7 +192,38 @@ export function HtmlReader({ book }: HtmlReaderProps) {
   }
 
   return (
-    <div className="flex h-full" style={{ background: "var(--background)" }}>
+    <>
+      {showCover && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 50,
+          background: "#f5f0e8",
+          display: "flex", flexDirection: "column"
+        }}>
+          <iframe
+            srcDoc={wrapCoverHtml(coverHtmlRef.current)}
+            style={{ flex: 1, border: "none", width: "100%" }}
+            title="Book Cover"
+          />
+          <div style={{
+            padding: "2rem", textAlign: "center",
+            background: "linear-gradient(to top, #f5f0e8 60%, transparent)"
+          }}>
+            <button
+              onClick={() => setShowCover(false)}
+              style={{
+                padding: "0.75rem 2.5rem", fontSize: "1.1rem",
+                fontFamily: "'Playfair Display', serif",
+                background: "#5c3d1e", color: "#f5f0e8",
+                border: "none", borderRadius: "8px", cursor: "pointer",
+                boxShadow: "0 4px 12px rgba(92,61,30,0.3)"
+              }}
+            >
+              开始阅读
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="flex h-full" style={{ background: "var(--background)" }}>
       {tocItems.length > 0 && (
         <>
           <aside
@@ -235,5 +299,6 @@ export function HtmlReader({ book }: HtmlReaderProps) {
         />
       </div>
     </div>
+    </>
   );
 }

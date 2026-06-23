@@ -157,6 +157,21 @@ def format_transcript_snapshot(
     return "\n".join(parts)
 
 
+async def fetch_video_title(video_id: str) -> str:
+    """Fetch video title from YouTube's oEmbed endpoint (no API key required)."""
+    import httpx
+
+    url = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            data = resp.json()
+            return data.get("title", video_id)
+    except Exception:
+        return video_id
+
+
 def determine_chapter_count_from_transcript(text: str, segment_count: int) -> int:
     """Determine appropriate chapter count based on transcript length.
 

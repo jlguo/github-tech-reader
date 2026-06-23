@@ -120,6 +120,7 @@ export interface BookGenRow {
   current_phase: string | null;
   outline: string | null;
   error_log: string | null;
+  cover_html: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -181,6 +182,7 @@ export interface BookListItem {
   updated_at?: string;
   progress: number;
   progress_metadata?: string;
+  cover_html?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -191,7 +193,7 @@ const REPO_UPDATE_COLS = new Set([
   "description", "language", "category", "tags", "is_favorite", "readme_fetched_at",
 ]);
 const BOOK_GEN_UPDATE_COLS = new Set([
-  "status", "total_chapters", "completed_chapters", "current_phase", "outline", "error_log", "updated_at",
+  "status", "total_chapters", "completed_chapters", "current_phase", "outline", "error_log", "cover_html", "updated_at",
 ]);
 const IMPORTED_BOOK_UPDATE_COLS = new Set([
   "title", "author", "description", "category", "tags", "is_favorite",
@@ -265,6 +267,7 @@ CREATE TABLE IF NOT EXISTS book_generations (
     current_phase TEXT,
     outline TEXT,
     error_log TEXT,
+    cover_html TEXT,
     created_at TEXT,
     updated_at TEXT
 );
@@ -319,6 +322,8 @@ export class BookDatabase {
 
     // Migration: add metadata column to reading_progress if missing
     try { db.run('ALTER TABLE reading_progress ADD COLUMN metadata TEXT DEFAULT \'{}\''); } catch { /* already exists */ }
+    // Migration: add cover_html column to book_generations if missing
+    try { db.run('ALTER TABLE book_generations ADD COLUMN cover_html TEXT'); } catch { /* already exists */ }
 
     const persistFn = makePersistFn(() => db);
     return new BookDatabase(db, persistFn);
@@ -429,9 +434,9 @@ export class BookDatabase {
       this.db.run(
         `INSERT INTO book_generations
            (id, repo_id, status, total_chapters, completed_chapters,
-            current_phase, outline, error_log,
+            current_phase, outline, error_log, cover_html,
             created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           id,
           repoId,
@@ -441,6 +446,7 @@ export class BookDatabase {
           data.current_phase ?? null,
           data.outline ?? null,
           data.error_log ?? null,
+          data.cover_html ?? null,
           data.created_at ?? now,
           data.updated_at ?? now,
         ],
@@ -492,6 +498,7 @@ export class BookDatabase {
         COALESCE(bg.total_chapters, 0)          AS chapter_count,
         bg.completed_chapters,
         bg.current_phase,
+        bg.cover_html                           AS cover_html,
         r.added_at                              AS created_at,
         COALESCE(bg.updated_at, r.added_at)     AS updated_at,
         COALESCE(rp.position, 0)                AS progress,
@@ -517,6 +524,7 @@ export class BookDatabase {
         0                                       AS chapter_count,
         NULL                                    AS completed_chapters,
         NULL                                    AS current_phase,
+        NULL                                    AS cover_html,
         ib.added_at                             AS created_at,
         ib.added_at                             AS updated_at,
         COALESCE(rp2.position, 0)               AS progress,
@@ -552,6 +560,7 @@ export class BookDatabase {
         updated_at: obj.updated_at as string | undefined,
         progress: (obj.progress as number) ?? 0,
         progress_metadata: obj.progress_metadata as string | undefined,
+        cover_html: (obj.cover_html as string) ?? null,
       });
     }
     stmt.free();

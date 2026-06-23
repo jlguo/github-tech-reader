@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -33,7 +35,22 @@ async def get_progress(repo_id: str, db: AsyncSession = Depends(get_db)):
 async def update_progress(body: ProgressUpdateRequest, db: AsyncSession = Depends(get_db)):
     repo = (await db.execute(select(Repo).where(Repo.id == body.repo_id))).scalar()
     if not repo:
-        raise HTTPException(status_code=404, detail="Repo not found")
+        # Check for ImportedBook (file/url imports)
+        from app.models.imported_book import ImportedBook
+        imported_result = await db.execute(select(ImportedBook).where(ImportedBook.id == body.repo_id))
+        imported = imported_result.scalar()
+        if imported:
+            imported.progress_position = body.position
+            imported.progress_updated_at = datetime.now(timezone.utc)
+            await db.commit()
+            return ProgressResponse(
+                id=imported.id,
+                section=body.section,
+                position=body.position,
+                completed=body.completed,
+                updated_at=imported.progress_updated_at,
+            )
+        raise HTTPException(status_code=404, detail="Book not found")
 
     stmt = select(ReadingProgress).where(
         ReadingProgress.repo_id == body.repo_id,
