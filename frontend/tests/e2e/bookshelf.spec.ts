@@ -156,6 +156,25 @@ test.describe("Bookshelf - Book Detail", () => {
       .poll(async () => fav.evaluate((el) => getComputedStyle(el).color))
       .not.toBe(before);
   });
+
+  test("saves edited description and it persists after reopen", async ({ page }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(3000);
+
+    await page.locator('[data-testid^="book-card-grid-"]').first().click();
+    await page.locator('[data-testid="book-detail-edit"]').click();
+
+    const marker = `EDITED_${Date.now()}`;
+    await page.locator('[data-testid="book-detail-edit-textarea"]').fill(marker);
+    await page.locator('[data-testid="book-detail-edit-save"]').click();
+
+    await expect(page.locator('[data-testid="book-detail-description"]')).toContainText(marker);
+
+    await page.locator('[data-testid="book-detail-close"]').click();
+    await page.waitForTimeout(6000);
+    await page.locator('[data-testid^="book-card-grid-"]').first().click();
+    await expect(page.locator('[data-testid="book-detail-description"]')).toContainText(marker);
+  });
 });
 
 test.describe("Bookshelf - Import Dialog", () => {

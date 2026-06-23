@@ -188,6 +188,8 @@ export default function App() {
 
   const handleUpdateBook = async (bookId: string, data: Record<string, any>) => {
     if (!service) return;
+    setBookList(prev => prev.map(b => b.id === bookId ? { ...b, ...data } : b));
+    setSelectedBook(prev => prev && prev.id === bookId ? { ...prev, ...data } : prev);
     try {
       await service.updateBook(bookId, data);
     } catch {}
