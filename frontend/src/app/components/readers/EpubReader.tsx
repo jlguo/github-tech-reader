@@ -73,6 +73,13 @@ export function EpubReader({ book }: EpubReaderProps) {
           setCurrentChapter(flatToc[0].label);
         }
 
+        // epub.js needs a locations index for loc.start.percentage; 3000 = coarse/cheap for large EPUBs.
+        await bookObj.locations.generate(3000);
+        if (cancelled) {
+          bookObj.destroy();
+          return;
+        }
+
         const rendition = bookObj.renderTo(containerRef.current!, {
           width: "100%",
           height: "100%",
@@ -113,7 +120,11 @@ export function EpubReader({ book }: EpubReaderProps) {
           window.postMessage({ type: "reader-center-tap" }, window.location.origin);
         });
 
-        await rendition.display();
+        const startCfi =
+          book.progress > 0 && book.progress < 100
+            ? bookObj.locations.cfiFromPercentage(book.progress / 100)
+            : undefined;
+        await rendition.display(startCfi);
 
         if (cancelled) {
           rendition.destroy();
