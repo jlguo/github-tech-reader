@@ -1,7 +1,7 @@
 from pathlib import Path
 from urllib.parse import urlparse
 
-from sqlalchemy import event, text
+from sqlalchemy import event, text, select, func
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 
@@ -33,6 +33,7 @@ async def get_db() -> AsyncSession:
 async def init_db():
     import app.models.repo
     import app.models.imported_book
+    from app.models.category import Category, SYSTEM_CATEGORIES
 
     parsed = urlparse(settings.database_url)
     db_path = Path(parsed.path.lstrip("/"))
@@ -52,3 +53,34 @@ async def init_db():
             row = result.one_or_none()
             if row and row[0] == 0:
                 await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} VARCHAR(512)"))
+
+    async with async_session() as session:
+        existing = (await session.execute(select(Category.key))).scalars().all()
+        existing_keys = set(existing)
+        for spec in SYSTEM_CATEGORIES:
+            if spec["key"] not in existing_keys:
+                session.add(Category(is_system=True, **spec))
+                existing_keys.add(spec["key"])
+        await session.commit()
+
+        await _reconcile_orphan_categories(session, existing_keys)
+
+
+async def _reconcile_orphan_categories(session, known_keys: set[str]):
+    from app.models.category import Category
+
+    used = set()
+    for table in ("repos", "imported_books"):
+        rows = await session.execute(
+            text(f"SELECT DISTINCT category FROM {table} WHERE category IS NOT NULL")
+        )
+        used.update(r[0] for r in rows if r[0])
+
+    next_order = (await session.execute(select(func.max(Category.sort_order)))).scalar() or 0
+    created = False
+    for key in used - known_keys:
+        next_order += 1
+        session.add(Category(key=key, label=key, is_system=False, sort_order=next_order))
+        created = True
+    if created:
+        await session.commit()

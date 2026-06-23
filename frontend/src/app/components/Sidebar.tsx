@@ -1,9 +1,13 @@
-import { BookOpen, BookMarked, Lightbulb, GraduationCap, FileText, Smile, Heart, Clock, Plus } from "lucide-react";
-import { BookCategory, categories } from "./bookData";
+import { BookOpen, BookMarked, Lightbulb, GraduationCap, FileText, Smile, Heart, Clock, Plus, Download, Folder, Youtube, Rocket, Code, Settings, Film, Music, Newspaper, Briefcase, Globe, Star } from "lucide-react";
+import { BookCategory } from "./bookData";
+import type { RemoteCategory } from "../../services/api";
 
 const iconMap: Record<string, React.ComponentType<{ size?: number; strokeWidth?: number }>> = {
   BookOpen, BookMarked, Lightbulb, GraduationCap, FileText, Smile,
+  Download, Folder, Youtube, Rocket, Code, Film, Music, Newspaper, Briefcase, Globe, Star,
 };
+
+const resolveIcon = (name: string) => iconMap[name] ?? Folder;
 
 interface SidebarProps {
   activeCategory: BookCategory;
@@ -12,9 +16,12 @@ interface SidebarProps {
   onSectionChange: (section: string) => void;
   onImport?: () => void;
   categoryCounts: Record<string, number>;
+  categories: RemoteCategory[];
+  onManageCategories?: () => void;
 }
 
-export function Sidebar({ activeCategory, onCategoryChange, activeSection, onSectionChange, onImport, categoryCounts }: SidebarProps) {
+export function Sidebar({ activeCategory, onCategoryChange, activeSection, onSectionChange, onImport, categoryCounts, categories, onManageCategories }: SidebarProps) {
+  const allCategories = [{ key: "all", label: "全部", icon: "BookOpen" }, ...categories];
   return (
     <aside
       data-testid="sidebar"
@@ -72,19 +79,30 @@ export function Sidebar({ activeCategory, onCategoryChange, activeSection, onSec
           </button>
         ))}
 
-        <div className="mt-4 mb-2 px-3 text-xs font-semibold uppercase tracking-widest" style={{ color: "rgba(245,240,232,0.35)", fontFamily: "Inter, sans-serif" }}>
-          分类
+        <div className="mt-4 mb-2 px-3 flex items-center justify-between">
+          <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: "rgba(245,240,232,0.35)", fontFamily: "Inter, sans-serif" }}>
+            分类
+          </span>
+          <button
+            data-testid="sidebar-manage-categories"
+            onClick={onManageCategories}
+            className="flex items-center justify-center w-5 h-5 rounded transition-colors"
+            style={{ color: "rgba(245,240,232,0.45)" }}
+            title="管理分类"
+          >
+            <Settings size={13} strokeWidth={2} />
+          </button>
         </div>
 
-        {categories.map(cat => {
-          const Icon = iconMap[cat.icon];
-          const isActive = activeSection === "shelf" && activeCategory === cat.id;
-          const count = categoryCounts[cat.id] ?? 0;
+        {allCategories.map(cat => {
+          const Icon = resolveIcon(cat.icon);
+          const isActive = activeSection === "shelf" && activeCategory === cat.key;
+          const count = categoryCounts[cat.key] ?? 0;
           return (
             <button
-              key={cat.id}
-              data-testid={`sidebar-category-${cat.id}`}
-              onClick={() => { onSectionChange("shelf"); onCategoryChange(cat.id as BookCategory); }}
+              key={cat.key}
+              data-testid={`sidebar-category-${cat.key}`}
+              onClick={() => { onSectionChange("shelf"); onCategoryChange(cat.key as BookCategory); }}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all text-left"
               style={{
                 background: isActive ? "rgba(193,127,58,0.25)" : "transparent",

@@ -1,8 +1,8 @@
 import { useState, useMemo, useEffect } from "react";
 import { Search, LayoutGrid, List, SlidersHorizontal, X, Clock, TrendingUp, BookOpen } from "lucide-react";
-import { books as initialBooks, categories, Book, BookCategory, typeConfig, BookType } from "./components/bookData";
+import { books as initialBooks, Book, BookCategory, typeConfig, BookType } from "./components/bookData";
 import { API_BASE_URL, POLL_INTERVAL_MS } from "../config/api";
-import { getDataService, type IDataService, type RemoteBook } from "../services/api";
+import { getDataService, type IDataService, type RemoteBook, type RemoteCategory } from "../services/api";
 
 const getTypeInfo = (type: BookType) => typeConfig[type] ?? { label: "FILE", color: "#5a5a5a", bg: "#f0f0f0" };
 
@@ -23,6 +23,7 @@ import { MobileNav } from "./components/MobileNav";
 import { BookDetailModal } from "./components/BookDetailModal";
 import { ReaderModal } from "./components/readers/ReaderModal";
 import { ImportDialog } from "./components/ImportDialog";
+import { CategoryManager } from "./components/CategoryManager";
 
 export default function App() {
   const [bookList, setBookList] = useState(initialBooks);
@@ -35,11 +36,21 @@ export default function App() {
   const [sortBy, setSortBy] = useState<"recent" | "title" | "progress">("recent");
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [categoryList, setCategoryList] = useState<RemoteCategory[]>([]);
   const [service, setService] = useState<IDataService | null>(null);
 
   useEffect(() => {
     getDataService().then(setService);
   }, []);
+
+  const loadCategories = (svc: IDataService) => {
+    svc.getCategories().then(setCategoryList).catch(() => {});
+  };
+
+  useEffect(() => {
+    if (service) loadCategories(service);
+  }, [service]);
 
   const toColor = (s: string) => {
     let hash = 0;
@@ -70,7 +81,7 @@ export default function App() {
             const isRepoBook = b.source_type === "github" || b.source_type === "youtube";
             const bookId = b.repo_id || b.book_id;
             const bookType = toBookType(b.file_type);
-            const category = isRepoBook ? "generated" as BookCategory : "documents" as BookCategory;
+            const category = (b.category || "uncategorized") as BookCategory;
             const coverUrl = coverImageUrl(b.cover_url);
             const cover = coverUrl || (b.cover_html
               ? ""
@@ -103,7 +114,7 @@ export default function App() {
               lastRead: b.last_read_at ? b.last_read_at.split("T")[0] : undefined,
               size,
               description: b.description || "",
-              tags: b.language ? [b.language] : [],
+              tags: (b.tags && b.tags.length > 0) ? b.tags : (b.language ? [b.language] : []),
               isFavorite: false,
               genStatus: b.status as "pending" | "fetching" | "planning" | "cover" | "writing" | "reviewing" | "publishing" | "done" | "failed" | "no_book" | undefined,
               sourceType: b.source_type as "github" | "file" | "url" | "youtube",
@@ -142,7 +153,11 @@ export default function App() {
   const handleBookImported = (info: { id: string; title: string; author: string; sourceType: string; fileType: string; totalPages?: number }) => {
     const isRepoBook = info.sourceType === "github" || info.sourceType === "youtube";
     const bookType = toBookType(info.fileType);
-    const category = isRepoBook ? "generated" as BookCategory : "documents" as BookCategory;
+    const category = (
+      info.sourceType === "youtube" ? "youtube"
+      : isRepoBook ? "generated"
+      : "imported"
+    ) as BookCategory;
     const cover = isRepoBook
       ? `https://opengraph.githubassets.com/1/${info.author}/${info.title}`
       : `https://placehold.co/200x280/${toColor(info.title).replace(/[^a-f0-9]/gi, "").slice(0, 6)}/fff?text=${encodeURIComponent(info.title.slice(0, 4))}`;
@@ -193,6 +208,29 @@ export default function App() {
     try {
       await service.updateBook(bookId, data);
     } catch {}
+  };
+
+  const handleCreateCategory = async (data: { label: string; icon?: string; color?: string }) => {
+    if (!service) return;
+    const created = await service.createCategory(data);
+    setCategoryList(prev => [...prev, created].sort((a, b) => a.sort_order - b.sort_order));
+  };
+
+  const handleUpdateCategory = async (id: string, data: Partial<{ label: string; icon: string; color: string; sort_order: number }>) => {
+    if (!service) return;
+    const updated = await service.updateCategory(id, data);
+    setCategoryList(prev => prev.map(c => c.id === id ? updated : c).sort((a, b) => a.sort_order - b.sort_order));
+  };
+
+  const handleDeleteCategory = async (id: string) => {
+    if (!service) return;
+    const removed = categoryList.find(c => c.id === id);
+    await service.deleteCategory(id);
+    setCategoryList(prev => prev.filter(c => c.id !== id));
+    if (removed) {
+      setBookList(prev => prev.map(b => b.category === removed.key ? { ...b, category: "uncategorized" as BookCategory } : b));
+      if (activeCategory === removed.key) setActiveCategory("all");
+    }
   };
 
   const handleGenerateBook = async (bookId: string) => {
@@ -262,18 +300,14 @@ export default function App() {
   }), [bookList]);
 
   const categoryCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const cat of categories) {
-      if (cat.id === "all") {
-        counts[cat.id] = bookList.length;
-      } else {
-        counts[cat.id] = bookList.filter(b => b.category === cat.id).length;
-      }
+    const counts: Record<string, number> = { all: bookList.length };
+    for (const cat of categoryList) {
+      counts[cat.key] = bookList.filter(b => b.category === cat.key).length;
     }
     return counts;
-  }, [bookList]);
+  }, [bookList, categoryList]);
 
-  const sectionTitle = activeSection === "favorites" ? "收藏夹" : activeSection === "recent" ? "最近阅读" : categories.find(c => c.id === activeCategory)?.label || "全部";
+  const sectionTitle = activeSection === "favorites" ? "收藏夹" : activeSection === "recent" ? "最近阅读" : activeCategory === "all" ? "全部" : categoryList.find(c => c.key === activeCategory)?.label || "全部";
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: "var(--background)", fontFamily: "Inter, sans-serif" }}>
@@ -286,6 +320,8 @@ export default function App() {
           onSectionChange={setActiveSection}
           onImport={() => setShowImportDialog(true)}
           categoryCounts={categoryCounts}
+          categories={categoryList}
+          onManageCategories={() => setShowCategoryManager(true)}
         />
       </div>
 
@@ -530,6 +566,7 @@ export default function App() {
           onDelete={handleDeleteBook}
           onUpdate={handleUpdateBook}
           onGenerate={handleGenerateBook}
+          categories={categoryList}
         />
       )}
 
@@ -546,6 +583,16 @@ export default function App() {
         open={showImportDialog}
         onClose={() => setShowImportDialog(false)}
         onImported={handleBookImported}
+      />
+
+      <CategoryManager
+        open={showCategoryManager}
+        onClose={() => setShowCategoryManager(false)}
+        categories={categoryList}
+        categoryCounts={categoryCounts}
+        onCreate={handleCreateCategory}
+        onUpdate={handleUpdateCategory}
+        onDelete={handleDeleteCategory}
       />
     </div>
   );

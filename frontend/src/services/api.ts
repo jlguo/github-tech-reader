@@ -24,6 +24,25 @@ export interface RemoteBook {
   last_read_at?: string | null;
   cover_html?: string | null;
   cover_url?: string | null;
+  category?: string;
+  tags?: string[];
+}
+
+export interface RemoteCategory {
+  id: string;
+  key: string;
+  label: string;
+  icon: string;
+  color: string;
+  sort_order: number;
+  is_system: boolean;
+}
+
+export interface CategoryInput {
+  label: string;
+  icon?: string;
+  color?: string;
+  sort_order?: number;
 }
 
 export interface BookContentResult {
@@ -78,6 +97,12 @@ export interface IDataService {
   // Repos
   addRepo(fullName: string): Promise<AddRepoResult>;
   fetchReadme(repoId: string): Promise<void>;
+
+  // Categories
+  getCategories(): Promise<RemoteCategory[]>;
+  createCategory(data: CategoryInput): Promise<RemoteCategory>;
+  updateCategory(id: string, data: Partial<CategoryInput>): Promise<RemoteCategory>;
+  deleteCategory(id: string): Promise<void>;
 
   // Book generation
   generateBook(repoId: string): Promise<void>;

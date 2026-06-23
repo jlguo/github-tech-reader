@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from app.core.config import settings
 from app.core.database import init_db
-from app.api import repos, reading, agents, books, imports, youtube
+from app.api import repos, reading, agents, books, imports, youtube, categories
 
 
 @asynccontextmanager
@@ -33,6 +33,7 @@ app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
 app.include_router(books.router, prefix="/api", tags=["books"])
 app.include_router(imports.router, prefix="/api/imports", tags=["imports"])
 app.include_router(youtube.router, prefix="/api/youtube", tags=["youtube"])
+app.include_router(categories.router, prefix="/api/categories", tags=["categories"])
 
 
 @app.get("/api/health")

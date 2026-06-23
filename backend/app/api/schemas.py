@@ -102,6 +102,8 @@ class BookListItem(BaseModel):
     status: str
     source_type: str = "github"
     file_type: str | None = None
+    category: str = "uncategorized"
+    tags: list[str] = []
     chapter_count: int
     completed_chapters: int = 0
     current_phase: str | None = None
@@ -111,6 +113,32 @@ class BookListItem(BaseModel):
     cover_url: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class CategoryResponse(BaseModel):
+    id: str
+    key: str
+    label: str
+    icon: str
+    color: str
+    sort_order: int
+    is_system: bool
+
+    model_config = {"from_attributes": True}
+
+
+class CategoryCreateRequest(BaseModel):
+    label: str
+    icon: str = "BookOpen"
+    color: str = "#c17f3a"
+    sort_order: int | None = None
+
+
+class CategoryUpdateRequest(BaseModel):
+    label: str | None = None
+    icon: str | None = None
+    color: str | None = None
+    sort_order: int | None = None
 
 
 class BookUpdateRequest(BaseModel):

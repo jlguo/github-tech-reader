@@ -76,7 +76,7 @@ async def start_youtube_book_generation(
     if request.repo_id and not url:
         repo_result = await db.execute(select(Repo).where(Repo.id == request.repo_id))
         repo = repo_result.scalar()
-        if not repo or repo.category != "youtube":
+        if not repo or repo.source_type != "youtube":
             raise HTTPException(status_code=404, detail="YouTube book not found")
         url = repo.html_url
 

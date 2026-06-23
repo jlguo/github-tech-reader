@@ -534,3 +534,112 @@ test.describe("Bookshelf - HTML Reading Progress", () => {
   // ImportedBook progress (currently POST /api/reading/progress
   // only accepts valid Repo.id, not ImportedBook.id).
 });
+
+test.describe("Bookshelf - Category Management", () => {
+  async function openCategoryManager(page: Page) {
+    await page.locator('[data-testid="sidebar-manage-categories"]').click();
+    await expect(page.locator('[data-testid="category-manager"]')).toBeVisible({ timeout: 5000 });
+  }
+
+  test("manager lists system categories and marks them non-deletable", async ({ page }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await openCategoryManager(page);
+
+    for (const key of ["generated", "documents", "imported", "youtube", "uncategorized"]) {
+      await expect(page.locator(`[data-testid="category-row-${key}"]`)).toBeVisible();
+    }
+    // System rows expose edit but never delete
+    await expect(page.locator('[data-testid="category-edit-generated"]')).toBeVisible();
+    await expect(page.locator('[data-testid="category-delete-generated"]')).toHaveCount(0);
+  });
+
+  test("creates and deletes a custom category", async ({ page }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await openCategoryManager(page);
+
+    const name = `测试分类${Date.now().toString().slice(-5)}`;
+    await page.locator('[data-testid="category-new-name"]').fill(name);
+    await page.locator('[data-testid="category-add-btn"]').click();
+
+    const newRow = page.locator('[data-testid^="category-row-"]', { hasText: name });
+    await expect(newRow).toBeVisible({ timeout: 5000 });
+
+    const deleteBtn = newRow.locator('[data-testid^="category-delete-"]');
+    await expect(deleteBtn).toBeVisible();
+    await deleteBtn.click();
+    await newRow.getByRole("button", { name: "是" }).click();
+    await expect(page.locator('[data-testid^="category-row-"]', { hasText: name })).toHaveCount(0, { timeout: 5000 });
+  });
+
+  test("rejects duplicate category label", async ({ page }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await openCategoryManager(page);
+
+    await page.locator('[data-testid="category-new-name"]').fill("AI 生成");
+    await page.locator('[data-testid="category-add-btn"]').click();
+
+    await expect(page.locator('[data-testid="category-error"]')).toBeVisible({ timeout: 5000 });
+  });
+
+  test("custom category appears in the sidebar shelf list", async ({ page }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await openCategoryManager(page);
+
+    const name = `书架${Date.now().toString().slice(-5)}`;
+    await page.locator('[data-testid="category-new-name"]').fill(name);
+    await page.locator('[data-testid="category-add-btn"]').click();
+    await expect(page.locator('[data-testid^="category-row-"]', { hasText: name })).toBeVisible({ timeout: 5000 });
+
+    await page.keyboard.press("Escape");
+    await expect(page.locator('[data-testid="category-manager"]')).not.toBeVisible();
+
+    await expect(page.locator('[data-testid^="sidebar-category-"]', { hasText: name })).toBeVisible({ timeout: 5000 });
+  });
+});
+
+test.describe("Bookshelf - Per-Book Category & Tags", () => {
+  test("reassigns a book category and persists across reload", async ({ page }) => {
+    test.setTimeout(60000);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await uploadFileViaUI(page, "progress-test");
+
+    const card = bookCard(page, "progress-test");
+    await expect(card).toBeVisible({ timeout: 15000 });
+    await card.click();
+    await expect(page.locator('[data-testid="book-detail-content"]')).toBeVisible({ timeout: 5000 });
+
+    await page.locator('[data-testid="book-detail-category-select"]').click();
+    await page.getByRole("option", { name: /文档资料/ }).click();
+
+    await page.locator('[data-testid="book-detail-close"]').click();
+    await page.reload({ waitUntil: "domcontentloaded" });
+
+    await page.locator('[data-testid="sidebar-category-documents"]').click();
+    await expect(bookCard(page, "progress-test")).toBeVisible({ timeout: 15000 });
+  });
+
+  test("adds and removes a tag, persisting across reload", async ({ page }) => {
+    test.setTimeout(60000);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await uploadFileViaUI(page, "progress-test");
+
+    const card = bookCard(page, "progress-test");
+    await expect(card).toBeVisible({ timeout: 15000 });
+    await card.click();
+    await expect(page.locator('[data-testid="book-detail-content"]')).toBeVisible({ timeout: 5000 });
+
+    const tag = `标签${Date.now().toString().slice(-4)}`;
+    await page.locator('[data-testid="book-detail-tag-input"]').fill(tag);
+    await page.locator('[data-testid="book-detail-tag-add"]').click();
+    await expect(page.locator(`[data-testid="book-detail-tag-${tag}"]`)).toBeVisible({ timeout: 5000 });
+
+    await page.locator('[data-testid="book-detail-close"]').click();
+    await page.reload({ waitUntil: "domcontentloaded" });
+
+    await bookCard(page, "progress-test").click();
+    await expect(page.locator(`[data-testid="book-detail-tag-${tag}"]`)).toBeVisible({ timeout: 5000 });
+
+    await page.locator(`[data-testid="book-detail-tag-remove-${tag}"]`).click();
+    await expect(page.locator(`[data-testid="book-detail-tag-${tag}"]`)).toHaveCount(0, { timeout: 5000 });
+  });
+});

@@ -1,0 +1,1136 @@
+{
+  "version": "2.13",
+  "children": [
+    {
+      "type": "frame",
+      "id": "kXjK3",
+      "x": 0,
+      "y": 0,
+      "name": "Category Manager Screen",
+      "clip": true,
+      "width": 1280,
+      "height": 900,
+      "fill": "$background",
+      "layout": "none",
+      "children": [
+        {
+          "type": "rectangle",
+          "id": "Ixa25",
+          "x": 0,
+          "y": 0,
+          "name": "Backdrop",
+          "fill": "#2c1a0e80",
+          "width": 1280,
+          "height": 900
+        },
+        {
+          "type": "frame",
+          "id": "jCj7X",
+          "x": 340,
+          "y": 90,
+          "name": "Dialog",
+          "clip": true,
+          "width": 600,
+          "fill": "$card",
+          "cornerRadius": 14,
+          "effect": {
+            "type": "shadow",
+            "shadowType": "outer",
+            "color": "#2c1a0e55",
+            "offset": {
+              "x": 0,
+              "y": 24
+            },
+            "blur": 60
+          },
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "frame",
+              "id": "vfwkL",
+              "name": "Header",
+              "width": "fill_container",
+              "fill": "$card",
+              "padding": [
+                24,
+                28
+              ],
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "dZe8n",
+                  "name": "Header Left",
+                  "layout": "vertical",
+                  "gap": 4,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "JkwVM",
+                      "name": "Title",
+                      "fill": "$foreground",
+                      "content": "管理分类",
+                      "fontFamily": "$font-heading",
+                      "fontSize": 24,
+                      "fontWeight": "700"
+                    },
+                    {
+                      "type": "text",
+                      "id": "e4LjyK",
+                      "name": "Subtitle",
+                      "fill": "$muted-foreground",
+                      "content": "创建、重命名或删除书架分类",
+                      "fontFamily": "$font-body",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Cf8GH",
+                  "name": "Close",
+                  "width": 34,
+                  "height": 34,
+                  "fill": "$muted",
+                  "cornerRadius": 8,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "sbM1Y",
+                      "name": "Close Icon",
+                      "width": 18,
+                      "height": 18,
+                      "icon": "x",
+                      "library": "lucide",
+                      "fill": "$muted-foreground"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "rectangle",
+              "id": "B8P38",
+              "name": "Divider",
+              "fill": "$border",
+              "width": "fill_container",
+              "height": 1
+            },
+            {
+              "type": "frame",
+              "id": "lzU2r",
+              "name": "List Body",
+              "width": "fill_container",
+              "fill": "$background",
+              "layout": "vertical",
+              "gap": 8,
+              "padding": [
+                16,
+                20
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "SAYmx",
+                  "name": "List Section Label",
+                  "fill": "$muted-foreground",
+                  "content": "所有分类",
+                  "fontFamily": "$font-body",
+                  "fontSize": 12,
+                  "fontWeight": "600",
+                  "letterSpacing": 0.6
+                },
+                {
+                  "id": "KwoVa",
+                  "type": "ref",
+                  "ref": "y6jDPk",
+                  "name": "Row AI 生成",
+                  "width": "fill_container",
+                  "descendants": {
+                    "Dpx1o": {
+                      "fill": "#c17f3a"
+                    },
+                    "yfcOw": {
+                      "icon": "book-open"
+                    },
+                    "rpc51": {
+                      "content": "AI 生成"
+                    },
+                    "C4vkV": {
+                      "content": "5 本书"
+                    },
+                    "v4vnK": {
+                      "enabled": true
+                    },
+                    "wsJ2J": {
+                      "enabled": false
+                    }
+                  }
+                },
+                {
+                  "id": "rpOzR",
+                  "type": "ref",
+                  "ref": "y6jDPk",
+                  "name": "Row 文档资料",
+                  "width": "fill_container",
+                  "descendants": {
+                    "Dpx1o": {
+                      "fill": "#5c3d1e"
+                    },
+                    "yfcOw": {
+                      "icon": "file-text"
+                    },
+                    "rpc51": {
+                      "content": "文档资料"
+                    },
+                    "C4vkV": {
+                      "content": "9 本书"
+                    },
+                    "v4vnK": {
+                      "enabled": true
+                    },
+                    "wsJ2J": {
+                      "enabled": false
+                    }
+                  }
+                },
+                {
+                  "id": "Ryugj",
+                  "type": "ref",
+                  "ref": "y6jDPk",
+                  "name": "Row 视频",
+                  "width": "fill_container",
+                  "descendants": {
+                    "Dpx1o": {
+                      "fill": "#7a2e1e"
+                    },
+                    "yfcOw": {
+                      "icon": "youtube"
+                    },
+                    "rpc51": {
+                      "content": "视频"
+                    },
+                    "C4vkV": {
+                      "content": "3 本书"
+                    },
+                    "v4vnK": {
+                      "enabled": true
+                    },
+                    "wsJ2J": {
+                      "enabled": false
+                    }
+                  }
+                },
+                {
+                  "id": "zCIqe",
+                  "type": "ref",
+                  "ref": "y6jDPk",
+                  "name": "Row 未分类",
+                  "width": "fill_container",
+                  "descendants": {
+                    "Dpx1o": {
+                      "fill": "#8a8a8a"
+                    },
+                    "yfcOw": {
+                      "icon": "folder"
+                    },
+                    "rpc51": {
+                      "content": "未分类"
+                    },
+                    "C4vkV": {
+                      "content": "2 本书"
+                    },
+                    "v4vnK": {
+                      "enabled": true
+                    },
+                    "wsJ2J": {
+                      "enabled": false
+                    }
+                  }
+                },
+                {
+                  "id": "VmSMm",
+                  "type": "ref",
+                  "ref": "y6jDPk",
+                  "name": "Row 科幻小说",
+                  "width": "fill_container",
+                  "descendants": {
+                    "Dpx1o": {
+                      "fill": "#3d6b8a"
+                    },
+                    "yfcOw": {
+                      "icon": "rocket"
+                    },
+                    "rpc51": {
+                      "content": "科幻小说"
+                    },
+                    "C4vkV": {
+                      "content": "4 本书"
+                    },
+                    "v4vnK": {
+                      "enabled": false
+                    },
+                    "wsJ2J": {
+                      "enabled": true
+                    }
+                  }
+                },
+                {
+                  "id": "Ce29b",
+                  "type": "ref",
+                  "ref": "y6jDPk",
+                  "name": "Row 前端工程",
+                  "width": "fill_container",
+                  "descendants": {
+                    "Dpx1o": {
+                      "fill": "#2d7a4a"
+                    },
+                    "yfcOw": {
+                      "icon": "code"
+                    },
+                    "rpc51": {
+                      "content": "前端工程"
+                    },
+                    "C4vkV": {
+                      "content": "7 本书"
+                    },
+                    "v4vnK": {
+                      "enabled": false
+                    },
+                    "wsJ2J": {
+                      "enabled": true
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "rectangle",
+              "id": "a9OwdX",
+              "name": "Footer Divider",
+              "fill": "$border",
+              "width": "fill_container",
+              "height": 1
+            },
+            {
+              "type": "frame",
+              "id": "PuBbv",
+              "name": "Footer",
+              "width": "fill_container",
+              "fill": "$card",
+              "layout": "vertical",
+              "gap": 12,
+              "padding": [
+                18,
+                20
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "yAzB8",
+                  "name": "Add Label",
+                  "fill": "$foreground",
+                  "content": "新建分类",
+                  "fontFamily": "$font-body",
+                  "fontSize": 13,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "OQlHO",
+                  "name": "Form Row",
+                  "width": "fill_container",
+                  "gap": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "ucZRw",
+                      "name": "Color Picker",
+                      "width": 44,
+                      "height": 44,
+                      "fill": "$accent",
+                      "cornerRadius": 10,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "UDkn7",
+                          "name": "Color Icon",
+                          "width": 18,
+                          "height": 18,
+                          "icon": "palette",
+                          "library": "lucide",
+                          "fill": "$accent-foreground"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "MEcpE",
+                      "name": "Icon Picker",
+                      "width": 44,
+                      "height": 44,
+                      "fill": "$input-background",
+                      "cornerRadius": 10,
+                      "stroke": "$border",
+                      "strokeWidth": 1,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "Q25kq",
+                          "name": "Icon Glyph",
+                          "width": 18,
+                          "height": 18,
+                          "icon": "book-open",
+                          "library": "lucide",
+                          "fill": "$muted-foreground"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "jB5Ku",
+                      "name": "Name Input",
+                      "width": "fill_container",
+                      "height": 44,
+                      "fill": "$input-background",
+                      "cornerRadius": 10,
+                      "stroke": "$border",
+                      "strokeWidth": 1,
+                      "padding": [
+                        0,
+                        14
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "YOCLo",
+                          "name": "Input Placeholder",
+                          "fill": "$muted-foreground",
+                          "content": "输入分类名称…",
+                          "fontFamily": "$font-body",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "eBXuI",
+                      "name": "Add Btn",
+                      "height": 44,
+                      "fill": "$primary",
+                      "cornerRadius": 10,
+                      "gap": 7,
+                      "padding": [
+                        0,
+                        20
+                      ],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "jOfnl",
+                          "name": "Add Icon",
+                          "width": 16,
+                          "height": 16,
+                          "icon": "plus",
+                          "library": "lucide",
+                          "fill": "$primary-foreground"
+                        },
+                        {
+                          "type": "text",
+                          "id": "EIdNV",
+                          "name": "Add Text",
+                          "fill": "$primary-foreground",
+                          "content": "添加",
+                          "fontFamily": "$font-body",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "y6jDPk",
+      "x": 0,
+      "y": -160,
+      "name": "Category Row",
+      "reusable": true,
+      "width": 560,
+      "fill": "$card",
+      "cornerRadius": 10,
+      "gap": 12,
+      "padding": [
+        12,
+        14
+      ],
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "frame",
+          "id": "Dpx1o",
+          "name": "Swatch",
+          "width": 38,
+          "height": 38,
+          "fill": "$accent",
+          "cornerRadius": 9,
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "icon",
+              "id": "yfcOw",
+              "name": "Row Icon",
+              "width": 19,
+              "height": 19,
+              "icon": "book-open",
+              "library": "lucide",
+              "fill": "$accent-foreground"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "Z6yIt",
+          "name": "Row Info",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 3,
+          "children": [
+            {
+              "type": "text",
+              "id": "rpc51",
+              "name": "Row Label",
+              "fill": "$foreground",
+              "content": "分类名称",
+              "fontFamily": "$font-body",
+              "fontSize": 15,
+              "fontWeight": "500"
+            },
+            {
+              "type": "text",
+              "id": "C4vkV",
+              "name": "Row Meta",
+              "fill": "$muted-foreground",
+              "content": "12 本书",
+              "fontFamily": "$font-body",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "v4vnK",
+          "name": "System Badge",
+          "fill": "$secondary",
+          "cornerRadius": 20,
+          "padding": [
+            4,
+            9
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "oPR3s",
+              "name": "Badge Text",
+              "fill": "$muted-foreground",
+              "content": "系统",
+              "fontFamily": "$font-body",
+              "fontSize": 11,
+              "fontWeight": "500"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "f0vcNO",
+          "name": "Row Actions",
+          "gap": 6,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "n70BTN",
+              "name": "Edit Btn",
+              "width": 32,
+              "height": 32,
+              "fill": "$muted",
+              "cornerRadius": 8,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "G6qHQc",
+                  "name": "Edit Icon",
+                  "width": 15,
+                  "height": 15,
+                  "icon": "pencil",
+                  "library": "lucide",
+                  "fill": "$muted-foreground"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "wsJ2J",
+              "name": "Delete Btn",
+              "width": 32,
+              "height": 32,
+              "fill": "#c0392b18",
+              "cornerRadius": 8,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "x2NGkc",
+                  "name": "Delete Icon",
+                  "width": 15,
+                  "height": 15,
+                  "icon": "trash-2",
+                  "library": "lucide",
+                  "fill": "$destructive"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "wozIs",
+      "x": 1360,
+      "y": 0,
+      "name": "Book Edit Panel",
+      "clip": true,
+      "width": 520,
+      "fill": "$card",
+      "cornerRadius": 14,
+      "effect": {
+        "type": "shadow",
+        "shadowType": "outer",
+        "color": "#2c1a0e44",
+        "offset": {
+          "x": 0,
+          "y": 18
+        },
+        "blur": 48
+      },
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "x3WLn",
+          "name": "Panel Header",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 4,
+          "padding": [
+            22,
+            26,
+            18,
+            26
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "IaQYT",
+              "name": "Book Title",
+              "fill": "$foreground",
+              "content": "React 设计模式",
+              "fontFamily": "$font-heading",
+              "fontSize": 22,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "OK0ja",
+              "name": "Book Author",
+              "fill": "$muted-foreground",
+              "content": "facebook · GitHub 仓库",
+              "fontFamily": "$font-body",
+              "fontSize": 13,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "rectangle",
+          "id": "GmACW",
+          "name": "H Divider",
+          "fill": "$border",
+          "width": "fill_container",
+          "height": 1
+        },
+        {
+          "type": "frame",
+          "id": "AGoJE",
+          "name": "Panel Body",
+          "width": "fill_container",
+          "fill": "$background",
+          "layout": "vertical",
+          "gap": 22,
+          "padding": [
+            20,
+            26
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "IsUwu",
+              "name": "Category Field",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "w0HLci",
+                  "name": "Cat Field Label",
+                  "fill": "$foreground",
+                  "content": "分类",
+                  "fontFamily": "$font-body",
+                  "fontSize": 13,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "S1cje",
+                  "name": "Category Select",
+                  "width": "fill_container",
+                  "height": 46,
+                  "fill": "$card",
+                  "cornerRadius": 10,
+                  "stroke": "$border",
+                  "strokeWidth": 1,
+                  "gap": 10,
+                  "padding": [
+                    0,
+                    14
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "DaGvw",
+                      "name": "Select Left",
+                      "gap": 9,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "R5R8K",
+                          "name": "Select Swatch",
+                          "width": 24,
+                          "height": 24,
+                          "fill": "#2d7a4a",
+                          "cornerRadius": 6,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "LVOhL",
+                              "name": "Select Icon",
+                              "width": 13,
+                              "height": 13,
+                              "icon": "code",
+                              "library": "lucide",
+                              "fill": "#ffffff"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "JrjR2",
+                          "name": "Select Value",
+                          "fill": "$foreground",
+                          "content": "前端工程",
+                          "fontFamily": "$font-body",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "icon",
+                      "id": "c9BC4",
+                      "name": "Chevron",
+                      "width": 18,
+                      "height": 18,
+                      "icon": "chevron-down",
+                      "library": "lucide",
+                      "fill": "$muted-foreground"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "L6BYX",
+              "name": "Tag Field",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "c7PBFW",
+                  "name": "Tag Field Label",
+                  "fill": "$foreground",
+                  "content": "标签",
+                  "fontFamily": "$font-body",
+                  "fontSize": 13,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "Qk0vN",
+                  "name": "Tag Box",
+                  "width": "fill_container",
+                  "fill": "$card",
+                  "cornerRadius": 10,
+                  "stroke": "$border",
+                  "strokeWidth": 1,
+                  "gap": 8,
+                  "padding": [
+                    10,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "MGLk7",
+                      "name": "Chip JavaScript",
+                      "fill": "$secondary",
+                      "cornerRadius": 20,
+                      "gap": 6,
+                      "padding": [
+                        5,
+                        6,
+                        5,
+                        11
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "pMNwv",
+                          "name": "Chip Text",
+                          "fill": "$primary",
+                          "content": "JavaScript",
+                          "fontFamily": "$font-body",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "F3AJ3D",
+                          "name": "Chip X",
+                          "width": 18,
+                          "height": 18,
+                          "fill": "#5c3d1e22",
+                          "cornerRadius": 9,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "k0fmc",
+                              "name": "Chip X Icon",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "x",
+                              "library": "lucide",
+                              "fill": "$primary"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "lVLmU",
+                      "name": "Chip Hooks",
+                      "fill": "$secondary",
+                      "cornerRadius": 20,
+                      "gap": 6,
+                      "padding": [
+                        5,
+                        6,
+                        5,
+                        11
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "ajJF4",
+                          "name": "Chip Text",
+                          "fill": "$primary",
+                          "content": "Hooks",
+                          "fontFamily": "$font-body",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "MpFRL",
+                          "name": "Chip X",
+                          "width": 18,
+                          "height": 18,
+                          "fill": "#5c3d1e22",
+                          "cornerRadius": 9,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "Wbgb3",
+                              "name": "Chip X Icon",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "x",
+                              "library": "lucide",
+                              "fill": "$primary"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "g7VZJ5",
+                      "name": "Chip 状态管理",
+                      "fill": "$secondary",
+                      "cornerRadius": 20,
+                      "gap": 6,
+                      "padding": [
+                        5,
+                        6,
+                        5,
+                        11
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "nzcZL",
+                          "name": "Chip Text",
+                          "fill": "$primary",
+                          "content": "状态管理",
+                          "fontFamily": "$font-body",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "A7ENPv",
+                          "name": "Chip X",
+                          "width": 18,
+                          "height": 18,
+                          "fill": "#5c3d1e22",
+                          "cornerRadius": 9,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "znNfB",
+                              "name": "Chip X Icon",
+                              "width": 11,
+                              "height": 11,
+                              "icon": "x",
+                              "library": "lucide",
+                              "fill": "$primary"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "DhLhT",
+                      "name": "Tag Input",
+                      "fill": "$muted-foreground",
+                      "content": "添加标签…",
+                      "fontFamily": "$font-body",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "CBRcR",
+          "name": "Panel Footer",
+          "width": "fill_container",
+          "fill": "$card",
+          "gap": 12,
+          "padding": [
+            16,
+            26
+          ],
+          "justifyContent": "end",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "i59CyW",
+              "name": "Cancel Btn",
+              "height": 42,
+              "fill": "$muted",
+              "cornerRadius": 10,
+              "padding": [
+                0,
+                20
+              ],
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "t8c0RT",
+                  "name": "Cancel Text",
+                  "fill": "$muted-foreground",
+                  "content": "取消",
+                  "fontFamily": "$font-body",
+                  "fontSize": 14,
+                  "fontWeight": "500"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "T2G0M",
+              "name": "Save Btn",
+              "height": 42,
+              "fill": "$primary",
+              "cornerRadius": 10,
+              "gap": 7,
+              "padding": [
+                0,
+                24
+              ],
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "v0yi4p",
+                  "name": "Save Icon",
+                  "width": 16,
+                  "height": 16,
+                  "icon": "check",
+                  "library": "lucide",
+                  "fill": "$primary-foreground"
+                },
+                {
+                  "type": "text",
+                  "id": "Q2xwk",
+                  "name": "Save Text",
+                  "fill": "$primary-foreground",
+                  "content": "保存",
+                  "fontFamily": "$font-body",
+                  "fontSize": 14,
+                  "fontWeight": "500"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variables": {
+    "accent": {
+      "type": "color",
+      "value": "#c17f3a"
+    },
+    "accent-foreground": {
+      "type": "color",
+      "value": "#fffdf7"
+    },
+    "background": {
+      "type": "color",
+      "value": "#f5f0e8"
+    },
+    "border": {
+      "type": "color",
+      "value": "#e0d4bf"
+    },
+    "card": {
+      "type": "color",
+      "value": "#fffdf7"
+    },
+    "destructive": {
+      "type": "color",
+      "value": "#c0392b"
+    },
+    "font-body": {
+      "type": "string",
+      "value": "Inter"
+    },
+    "font-heading": {
+      "type": "string",
+      "value": "Playfair Display"
+    },
+    "foreground": {
+      "type": "color",
+      "value": "#2c1a0e"
+    },
+    "input-background": {
+      "type": "color",
+      "value": "#ede5d4"
+    },
+    "muted": {
+      "type": "color",
+      "value": "#ede5d4"
+    },
+    "muted-foreground": {
+      "type": "color",
+      "value": "#7a6248"
+    },
+    "primary": {
+      "type": "color",
+      "value": "#5c3d1e"
+    },
+    "primary-foreground": {
+      "type": "color",
+      "value": "#f5f0e8"
+    },
+    "secondary": {
+      "type": "color",
+      "value": "#e8dcc8"
+    }
+  }
+}

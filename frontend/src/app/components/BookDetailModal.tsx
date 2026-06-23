@@ -1,8 +1,10 @@
-import { X, BookOpen, Heart, Share2, Download, Trash2, Tag, Calendar, HardDrive, Pencil, Sparkles } from "lucide-react";
+import { X, BookOpen, Heart, Share2, Download, Trash2, Tag, Calendar, HardDrive, Pencil, Sparkles, Folder, Plus } from "lucide-react";
 import { useState } from "react";
 import { Book, typeConfig } from "./bookData";
 import { BookCover } from "./BookCover";
 import { useBookStatus, isProducing as checkIsProducing } from "../hooks/useBookStatus";
+import type { RemoteCategory } from "../../services/api";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
 const PHASE_LABELS: Record<string, string> = {
   pending: "准备生成...",
@@ -22,9 +24,11 @@ interface BookDetailModalProps {
   onDelete?: (bookId: string) => void;
   onUpdate?: (bookId: string, data: Record<string, any>) => void;
   onGenerate?: (bookId: string) => void;
+  categories?: RemoteCategory[];
 }
 
-export function BookDetailModal({ book, onClose, onToggleFavorite, onRead, onDelete, onUpdate, onGenerate }: BookDetailModalProps) {
+export function BookDetailModal({ book, onClose, onToggleFavorite, onRead, onDelete, onUpdate, onGenerate, categories = [] }: BookDetailModalProps) {
+  const [tagInput, setTagInput] = useState("");
   if (!book) return null;
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -173,6 +177,43 @@ export function BookDetailModal({ book, onClose, onToggleFavorite, onRead, onDel
         )}
 
         <div className="px-6 pb-6 space-y-4">
+          {/* Category */}
+          <div data-testid="book-detail-category">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Folder size={13} style={{ color: "var(--muted-foreground)" }} />
+              <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--muted-foreground)", fontFamily: "Inter, sans-serif" }}>
+                分类
+              </span>
+            </div>
+            <Select
+              value={book.category ?? "uncategorized"}
+              onValueChange={(newKey) => onUpdate?.(book.id, { category: newKey })}
+            >
+              <SelectTrigger
+                className="w-full h-9 text-sm rounded-lg"
+                style={{ background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)", fontFamily: "Inter, sans-serif" }}
+                data-testid="book-detail-category-select"
+              >
+                <SelectValue placeholder="选择分类" />
+              </SelectTrigger>
+              <SelectContent>
+                {[...categories]
+                  .sort((a, b) => a.sort_order - b.sort_order)
+                  .map((cat) => (
+                    <SelectItem key={cat.key} value={cat.key}>
+                      <span className="flex items-center gap-2">
+                        <span
+                          className="inline-block rounded-full"
+                          style={{ background: cat.color, width: 8, height: 8 }}
+                        />
+                        {cat.label}
+                      </span>
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           {/* Description */}
           <div data-testid="book-detail-description">
             <div className="flex items-center justify-between mb-2">
@@ -258,17 +299,65 @@ export function BookDetailModal({ book, onClose, onToggleFavorite, onRead, onDel
                 标签
               </span>
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              {book.tags.map(tag => (
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {(book.tags ?? []).map(tag => (
                 <span
                   key={tag}
-                  className="text-xs px-2.5 py-1 rounded-full"
+                  className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full"
                   style={{ background: "var(--secondary)", color: "var(--secondary-foreground)", fontFamily: "Inter, sans-serif" }}
                   data-testid={`book-detail-tag-${tag}`}
                 >
                   {tag}
+                  <button
+                    onClick={() => onUpdate?.(book.id, { tags: (book.tags ?? []).filter(t => t !== tag) })}
+                    className="ml-0.5 rounded-full hover:opacity-70 transition-opacity inline-flex items-center justify-center"
+                    style={{ width: 14, height: 14, color: "var(--secondary-foreground)" }}
+                    data-testid={`book-detail-tag-remove-${tag}`}
+                  >
+                    <X size={10} />
+                  </button>
                 </span>
               ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                value={tagInput}
+                onChange={e => setTagInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter") {
+                    const trimmed = tagInput.trim();
+                    if (trimmed && !(book.tags ?? []).includes(trimmed)) {
+                      onUpdate?.(book.id, { tags: [...(book.tags ?? []), trimmed] });
+                    }
+                    setTagInput("");
+                  }
+                }}
+                placeholder="添加标签..."
+                className="flex-1 text-xs px-2.5 py-1.5 rounded-lg border outline-none"
+                style={{
+                  color: "var(--foreground)",
+                  fontFamily: "Inter, sans-serif",
+                  background: "var(--background)",
+                  borderColor: "var(--border)",
+                }}
+                data-testid="book-detail-tag-input"
+              />
+              <button
+                onClick={() => {
+                  const trimmed = tagInput.trim();
+                  if (trimmed && !(book.tags ?? []).includes(trimmed)) {
+                    onUpdate?.(book.id, { tags: [...(book.tags ?? []), trimmed] });
+                  }
+                  setTagInput("");
+                }}
+                disabled={!tagInput.trim()}
+                className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-40"
+                style={{ background: "var(--accent)", color: "#fff", fontFamily: "Inter, sans-serif" }}
+                data-testid="book-detail-tag-add"
+              >
+                <Plus size={12} />
+                添加
+              </button>
             </div>
           </div>
             </div>

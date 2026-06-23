@@ -1,5 +1,5 @@
 export type BookType = "epub" | "pdf" | "word" | "txt" | "ppt" | "excel" | "html";
-export type BookCategory = "all" | "fiction" | "nonfiction" | "academic" | "documents" | "manga" | "generated";
+export type BookCategory = string;
 
 export interface Book {
   id: string;

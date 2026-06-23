@@ -184,6 +184,18 @@ export interface BookListItem {
   progress: number;
   progress_metadata?: string;
   cover_html?: string | null;
+  category?: string;
+  tags?: string;
+}
+
+export interface CategoryRow {
+  id: string;
+  key: string;
+  label: string;
+  icon: string;
+  color: string;
+  sort_order: number;
+  is_system: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -199,6 +211,9 @@ const BOOK_GEN_UPDATE_COLS = new Set([
 const IMPORTED_BOOK_UPDATE_COLS = new Set([
   "title", "author", "description", "category", "tags", "is_favorite",
 ]);
+const CATEGORY_UPDATE_COLS = new Set([
+  "label", "icon", "color", "sort_order",
+]);
 
 function uuid(): string {
   return crypto.randomUUID();
@@ -206,6 +221,14 @@ function uuid(): string {
 
 function nowISO(): string {
   return new Date().toISOString();
+}
+
+function slugify(text: string): string {
+  let slug = text.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  if (!slug) {
+    slug = "cat-" + crypto.randomUUID().replace(/-/g, "").slice(0, 8);
+  }
+  return slug;
 }
 
 // ---------------------------------------------------------------------------
@@ -273,6 +296,16 @@ CREATE TABLE IF NOT EXISTS book_generations (
     updated_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS categories (
+    id TEXT PRIMARY KEY,
+    key TEXT UNIQUE NOT NULL,
+    label TEXT NOT NULL,
+    icon TEXT DEFAULT 'BookOpen',
+    color TEXT DEFAULT '#c17f3a',
+    sort_order INTEGER DEFAULT 0,
+    is_system INTEGER DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS imported_books (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
@@ -325,6 +358,43 @@ export class BookDatabase {
     try { db.run('ALTER TABLE reading_progress ADD COLUMN metadata TEXT DEFAULT \'{}\''); } catch { /* already exists */ }
     // Migration: add cover_html column to book_generations if missing
     try { db.run('ALTER TABLE book_generations ADD COLUMN cover_html TEXT'); } catch { /* already exists */ }
+
+    // Seed system categories
+    const SYSTEM_CATEGORIES = [
+      { key: "generated", label: "AI 生成", icon: "BookOpen", color: "#c17f3a", sort_order: 10, is_system: 1 },
+      { key: "documents", label: "文档资料", icon: "FileText", color: "#5c3d1e", sort_order: 20, is_system: 1 },
+      { key: "imported", label: "导入内容", icon: "Download", color: "#3d6b8a", sort_order: 30, is_system: 1 },
+      { key: "youtube", label: "视频", icon: "Youtube", color: "#7a2e1e", sort_order: 40, is_system: 1 },
+      { key: "uncategorized", label: "未分类", icon: "Folder", color: "#8a8a8a", sort_order: 90, is_system: 1 },
+    ];
+    const existingCatKeys = new Set(
+      (db.exec("SELECT key FROM categories")[0]?.values ?? []).map((r) => String(r[0])),
+    );
+    for (const cat of SYSTEM_CATEGORIES) {
+      if (!existingCatKeys.has(cat.key)) {
+        db.run(
+          "INSERT INTO categories (id, key, label, icon, color, sort_order, is_system) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          [uuid(), cat.key, cat.label, cat.icon, cat.color, cat.sort_order, cat.is_system],
+        );
+        existingCatKeys.add(cat.key);
+      }
+    }
+
+    // Reconcile orphan categories: any category value used by repos or imported_books
+    // that doesn't exist in the categories table gets created as a non-system row.
+    for (const table of ["repos", "imported_books"]) {
+      const orphans = db.exec(`SELECT DISTINCT category FROM ${table} WHERE category IS NOT NULL AND category != ''`);
+      for (const row of orphans[0]?.values ?? []) {
+        const key = String(row[0]);
+        if (!existingCatKeys.has(key)) {
+          db.run(
+            "INSERT INTO categories (id, key, label, icon, color, sort_order, is_system) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [uuid(), key, key, "Folder", "#8a8a8a", 0, 0],
+          );
+          existingCatKeys.add(key);
+        }
+      }
+    }
 
     const persistFn = makePersistFn(() => db);
     return new BookDatabase(db, persistFn);
@@ -504,7 +574,9 @@ export class BookDatabase {
         COALESCE(bg.updated_at, r.added_at)     AS updated_at,
         COALESCE(rp.position, 0)                AS progress,
         rp.metadata                             AS progress_metadata,
-        rp.updated_at                           AS last_read_at
+        rp.updated_at                           AS last_read_at,
+        r.category,
+        r.tags
       FROM repos r
       LEFT JOIN book_generations bg ON bg.repo_id = r.id
       LEFT JOIN reading_progress rp ON rp.id = (
@@ -531,7 +603,9 @@ export class BookDatabase {
         ib.added_at                             AS updated_at,
         COALESCE(rp2.position, 0)               AS progress,
         rp2.metadata                            AS progress_metadata,
-        rp2.updated_at                          AS last_read_at
+        rp2.updated_at                          AS last_read_at,
+        ib.category,
+        ib.tags
       FROM imported_books ib
       LEFT JOIN reading_progress rp2 ON rp2.id = (
         SELECT id FROM reading_progress WHERE repo_id = ib.id ORDER BY updated_at DESC LIMIT 1
@@ -565,6 +639,8 @@ export class BookDatabase {
         progress_metadata: obj.progress_metadata as string | undefined,
         last_read_at: (obj.last_read_at as string) ?? null,
         cover_html: (obj.cover_html as string) ?? null,
+        category: obj.category as string | undefined,
+        tags: obj.tags as string | undefined,
       });
     }
     stmt.free();
@@ -736,6 +812,131 @@ export class BookDatabase {
     const row = stmt.step() ? stmt.getAsObject() : null;
     stmt.free();
     return row as unknown as ReadingProgressRow | null;
+  }
+
+  // -----------------------------------------------------------------------
+  // Categories
+  // -----------------------------------------------------------------------
+
+  listCategories(): CategoryRow[] {
+    const stmt = this.db.prepare("SELECT * FROM categories ORDER BY sort_order, label");
+    const rows: CategoryRow[] = [];
+    while (stmt.step()) {
+      rows.push(stmt.getAsObject() as unknown as CategoryRow);
+    }
+    stmt.free();
+    return rows;
+  }
+
+  getCategoryByKey(key: string): CategoryRow | null {
+    const stmt = this.db.prepare("SELECT * FROM categories WHERE key = ?");
+    stmt.bind([key]);
+    const row = stmt.step() ? (stmt.getAsObject() as unknown as CategoryRow) : null;
+    stmt.free();
+    return row;
+  }
+
+  async createCategory(data: {
+    label: string;
+    icon?: string;
+    color?: string;
+    sort_order?: number;
+  }): Promise<CategoryRow> {
+    const label = data.label.trim();
+    if (!label) throw new Error("Label must not be empty");
+
+    const key = slugify(label);
+
+    const dupLabel = this.db.prepare("SELECT id FROM categories WHERE LOWER(label) = LOWER(?)");
+    dupLabel.bind([label]);
+    if (dupLabel.step()) { dupLabel.free(); throw new Error("A category with this name already exists"); }
+    dupLabel.free();
+
+    const dupKey = this.db.prepare("SELECT id FROM categories WHERE key = ?");
+    dupKey.bind([key]);
+    if (dupKey.step()) { dupKey.free(); throw new Error("A category with this name already exists"); }
+    dupKey.free();
+
+    const id = uuid();
+    const stmtMax = this.db.prepare("SELECT COALESCE(MAX(sort_order), 0) AS m FROM categories");
+    stmtMax.step();
+    const maxOrder = (stmtMax.getAsObject() as { m: number }).m;
+    stmtMax.free();
+    const sortOrder = data.sort_order ?? maxOrder + 1;
+
+    const row: CategoryRow = {
+      id,
+      key,
+      label,
+      icon: data.icon ?? "BookOpen",
+      color: data.color ?? "#c17f3a",
+      sort_order: sortOrder,
+      is_system: 0,
+    };
+
+    this.db.run(
+      "INSERT INTO categories (id, key, label, icon, color, sort_order, is_system) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [row.id, row.key, row.label, row.icon, row.color, row.sort_order, row.is_system],
+    );
+    await this.persist();
+    return row;
+  }
+
+  async updateCategory(id: string, data: Partial<{
+    label: string;
+    icon: string;
+    color: string;
+    sort_order: number;
+  }>): Promise<CategoryRow | null> {
+    const existing = this.db.prepare("SELECT * FROM categories WHERE id = ?");
+    existing.bind([id]);
+    if (!existing.step()) { existing.free(); return null; }
+    existing.free();
+
+    if (data.label !== undefined) {
+      const label = data.label.trim();
+      if (!label) throw new Error("Label must not be empty");
+      const dupLabel = this.db.prepare(
+        "SELECT id FROM categories WHERE LOWER(label) = LOWER(?) AND id != ?",
+      );
+      dupLabel.bind([label, id]);
+      if (dupLabel.step()) { dupLabel.free(); throw new Error("A category with this name already exists"); }
+      dupLabel.free();
+    }
+
+    const setClauses: string[] = [];
+    const values: SqlValue[] = [];
+    for (const [key, value] of Object.entries(data)) {
+      if (!CATEGORY_UPDATE_COLS.has(key)) continue;
+      setClauses.push(`${key} = ?`);
+      values.push((value ?? null) as SqlValue);
+    }
+    if (setClauses.length > 0) {
+      values.push(id);
+      this.db.run(`UPDATE categories SET ${setClauses.join(", ")} WHERE id = ?`, values);
+      await this.persist();
+    }
+
+    const updated = this.db.prepare("SELECT * FROM categories WHERE id = ?");
+    updated.bind([id]);
+    const result = updated.step() ? (updated.getAsObject() as unknown as CategoryRow) : null;
+    updated.free();
+    return result;
+  }
+
+  async deleteCategory(id: string): Promise<void> {
+    const existing = this.db.prepare("SELECT * FROM categories WHERE id = ?");
+    existing.bind([id]);
+    if (!existing.step()) { existing.free(); return; }
+    const row = existing.getAsObject() as unknown as CategoryRow;
+    existing.free();
+
+    if (row.is_system) throw new Error("System categories cannot be deleted");
+
+    this.db.run("UPDATE repos SET category = 'uncategorized' WHERE category = ?", [row.key]);
+    this.db.run("UPDATE imported_books SET category = 'uncategorized' WHERE category = ?", [row.key]);
+    this.db.run("DELETE FROM categories WHERE id = ?", [id]);
+    await this.persist();
   }
 
   async deleteBook(repoId: string): Promise<void> {

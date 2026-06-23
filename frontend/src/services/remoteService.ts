@@ -9,6 +9,8 @@
 import type {
   IDataService,
   RemoteBook,
+  RemoteCategory,
+  CategoryInput,
   BookContentResult,
   BookGenStatus,
   AddRepoResult,
@@ -92,8 +94,49 @@ export class RemoteDataService implements IDataService {
     }
   }
 
-  // ── Book generation ────────────────────────────────────────────
+  // ── Categories ─────────────────────────────────────────────────
 
+  async getCategories(): Promise<RemoteCategory[]> {
+    const r = await fetch(`${this.#base}/categories`);
+    if (!r.ok) throw new Error(`GET /categories failed: ${r.status}`);
+    return r.json();
+  }
+
+  async createCategory(data: CategoryInput): Promise<RemoteCategory> {
+    const r = await fetch(`${this.#base}/categories`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error((err as { detail?: string }).detail ?? `Failed to create category (${r.status})`);
+    }
+    return r.json();
+  }
+
+  async updateCategory(id: string, data: Partial<CategoryInput>): Promise<RemoteCategory> {
+    const r = await fetch(`${this.#base}/categories/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error((err as { detail?: string }).detail ?? `Failed to update category (${r.status})`);
+    }
+    return r.json();
+  }
+
+  async deleteCategory(id: string): Promise<void> {
+    const r = await fetch(`${this.#base}/categories/${id}`, { method: "DELETE" });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error((err as { detail?: string }).detail ?? `Failed to delete category (${r.status})`);
+    }
+  }
+
+  // ── Book generation ────────────────────────────────────────────
   async generateBook(repoId: string): Promise<void> {
     const r = await fetch(`${this.#base}/agents/generate-book/${repoId}`, {
       method: "POST",

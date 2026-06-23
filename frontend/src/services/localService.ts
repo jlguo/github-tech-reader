@@ -1,6 +1,8 @@
 import type {
   IDataService,
   RemoteBook,
+  RemoteCategory,
+  CategoryInput,
   BookContentResult,
   BookGenStatus,
   AddRepoResult,
@@ -129,6 +131,8 @@ export class LocalDataService implements IDataService {
       progress_metadata: item.progress_metadata,
       last_read_at: item.last_read_at,
       cover_html: item.cover_html,
+      category: item.category,
+      tags: item.tags ? JSON.parse(item.tags) as string[] : undefined,
     }));
   }
 
@@ -198,6 +202,62 @@ export class LocalDataService implements IDataService {
       });
       await this.#db.persist();
     }
+  }
+
+  // ── Categories ───────────────────────────────────────────────────
+
+  async getCategories(): Promise<RemoteCategory[]> {
+    const rows = this.#db.listCategories();
+    return rows.map((r) => ({
+      id: r.id,
+      key: r.key,
+      label: r.label,
+      icon: r.icon,
+      color: r.color,
+      sort_order: r.sort_order,
+      is_system: !!r.is_system,
+    }));
+  }
+
+  async createCategory(data: CategoryInput): Promise<RemoteCategory> {
+    const row = await this.#db.createCategory({
+      label: data.label,
+      icon: data.icon,
+      color: data.color,
+      sort_order: data.sort_order,
+    });
+    return {
+      id: row.id,
+      key: row.key,
+      label: row.label,
+      icon: row.icon,
+      color: row.color,
+      sort_order: row.sort_order,
+      is_system: !!row.is_system,
+    };
+  }
+
+  async updateCategory(id: string, data: Partial<CategoryInput>): Promise<RemoteCategory> {
+    const row = await this.#db.updateCategory(id, {
+      label: data.label,
+      icon: data.icon,
+      color: data.color,
+      sort_order: data.sort_order,
+    });
+    if (!row) throw new Error("Category not found");
+    return {
+      id: row.id,
+      key: row.key,
+      label: row.label,
+      icon: row.icon,
+      color: row.color,
+      sort_order: row.sort_order,
+      is_system: !!row.is_system,
+    };
+  }
+
+  async deleteCategory(id: string): Promise<void> {
+    await this.#db.deleteCategory(id);
   }
 
   // ── Book generation ─────────────────────────────────────────────
