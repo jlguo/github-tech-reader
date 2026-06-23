@@ -137,6 +137,25 @@ test.describe("Bookshelf - Book Detail", () => {
     await page.locator('[data-testid="book-detail-favorite"]').click();
     await expect(page.locator('[data-testid="book-detail-content"]')).toBeVisible();
   });
+
+  test("toggles favorite from grid card without opening detail", async ({ page }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    const card = page.locator('[data-testid^="book-card-grid-"]').first();
+    await expect(card).toBeVisible({ timeout: 10000 });
+    const tid = await card.getAttribute("data-testid");
+    const id = (tid ?? "").replace("book-card-grid-", "");
+
+    await card.hover();
+    const fav = page.locator(`[data-testid="book-favorite-${id}"]`);
+    const before = await fav.evaluate((el) => getComputedStyle(el).color);
+    await fav.click();
+
+    await expect(page.locator('[data-testid="book-detail-content"]')).not.toBeVisible();
+    await expect
+      .poll(async () => fav.evaluate((el) => getComputedStyle(el).color))
+      .not.toBe(before);
+  });
 });
 
 test.describe("Bookshelf - Import Dialog", () => {

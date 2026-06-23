@@ -108,7 +108,7 @@ export function BookCard({ book, viewMode, onToggleFavorite, onOpen }: BookCardP
         <BookCover book={book} size="md" />
         <button
           onClick={e => { e.stopPropagation(); onToggleFavorite(book.id); }}
-          className="absolute top-2 right-2 p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-all"
+          className="absolute top-2 right-2 z-10 p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-all"
           style={{ background: "rgba(255,255,255,0.9)", color: book.isFavorite ? "#c17f3a" : "var(--muted-foreground)" }}
           data-testid={`book-favorite-${book.id}`}
         >
@@ -147,7 +147,7 @@ export function BookCard({ book, viewMode, onToggleFavorite, onOpen }: BookCardP
 
       {/* Hover overlay */}
       <div
-        className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 rounded-xl"
+        className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 rounded-xl pointer-events-none"
         style={{ background: "rgba(92,61,30,0.12)" }}
       >
         <div
