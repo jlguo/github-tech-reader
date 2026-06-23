@@ -1,7 +1,9 @@
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
@@ -14,6 +16,8 @@ from app.services.file_storage import (
     load_book_html, load_cover_html, load_chapter,
     load_import_content, delete_book_content, delete_import_content,
 )
+
+_COVERS_DIR = Path(__file__).parent.parent.parent / "data" / "covers"
 
 router = APIRouter()
 
@@ -53,6 +57,7 @@ async def list_books(
         latest_progress = None
         if repo.reading_progress:
             latest_progress = max(repo.reading_progress, key=lambda p: p.updated_at)
+        cover_url = f"/api/books/{gen.id}/cover" if gen and gen.cover_path else None
         books.append(BookListItem(
             repo_id=repo.id,
             book_id=gen.id if gen else "",
@@ -70,6 +75,7 @@ async def list_books(
             progress=latest_progress.position if latest_progress else None,
             progress_metadata=None,
             last_read_at=latest_progress.updated_at if latest_progress else None,
+            cover_url=cover_url,
             created_at=gen.created_at if gen else repo.added_at,
             updated_at=gen.updated_at if gen else repo.added_at,
         ))
@@ -82,6 +88,7 @@ async def list_books(
     imported_query = imported_query.order_by(ImportedBook.added_at.desc())
     imported_result = await db.execute(imported_query)
     for imported_book in imported_result.scalars():
+        cover_url = f"/api/books/{imported_book.id}/cover" if imported_book.cover_path else None
         books.append(BookListItem(
             repo_id=imported_book.id,
             book_id=imported_book.id,
@@ -97,6 +104,7 @@ async def list_books(
             completed_chapters=0,
             progress=imported_book.progress_position if imported_book.progress_position else None,
             last_read_at=imported_book.progress_updated_at,
+            cover_url=cover_url,
             created_at=imported_book.added_at,
             updated_at=imported_book.progress_updated_at or imported_book.added_at,
         ))
@@ -127,6 +135,7 @@ async def get_book_content(book_id: str, db: AsyncSession = Depends(get_db)):
             title=gen.repo.name if gen.repo else "Unknown",
             html_content=load_book_html(gen.id) or "",
             cover_html=load_cover_html(gen.id),
+            cover_url=f"/api/books/{gen.id}/cover" if gen.cover_path else None,
             chapters=[
                 SectionResponse(
                     id=ch.id, section_type=ch.section_type,
@@ -148,6 +157,7 @@ async def get_book_content(book_id: str, db: AsyncSession = Depends(get_db)):
             title=imported.title,
             html_content=load_import_content(imported.id) or "",
             cover_html=None,
+            cover_url=f"/api/books/{imported.id}/cover" if imported.cover_path else None,
             chapters=[],
         )
 
@@ -181,6 +191,75 @@ async def get_book_by_repo(repo_id: str, db: AsyncSession = Depends(get_db)):
         title=gen.repo.name if gen.repo else "Unknown",
         html_content=load_book_html(gen.id) or "",
         cover_html=load_cover_html(gen.id),
+        cover_url=f"/api/books/{gen.id}/cover" if gen.cover_path else None,
+        chapters=[
+            SectionResponse(
+                id=ch.id,
+                section_type=ch.section_type,
+                title=ch.title,
+                content=load_chapter(gen.id, ch.chapter_number or 0) or "",
+                order_index=ch.order_index,
+                metadata_=ch.metadata_,
+                created_at=ch.created_at,
+            )
+            for ch in chapters
+        ],
+    )
+
+
+@router.get("/books/{book_id}/cover")
+async def get_book_cover(book_id: str, db: AsyncSession = Depends(get_db)):
+    """Serve the cover PNG for any book (generated or imported)."""
+    gen_result = await db.execute(
+        select(BookGeneration).where(BookGeneration.id == book_id)
+    )
+    gen = gen_result.scalar()
+    if gen and gen.cover_path:
+        cover_path = Path(gen.cover_path)
+        if cover_path.is_file():
+            return FileResponse(
+                str(cover_path),
+                media_type="image/png",
+                headers={
+                    "Cache-Control": "public, max-age=86400",
+                    "X-Content-Type-Options": "nosniff",
+                },
+            )
+
+    imp_result = await db.execute(
+        select(ImportedBook).where(ImportedBook.id == book_id)
+    )
+    imp = imp_result.scalar()
+    if imp and imp.cover_path:
+        cover_path = Path(imp.cover_path)
+        if cover_path.is_file():
+            return FileResponse(
+                str(cover_path),
+                media_type="image/png",
+                headers={
+                    "Cache-Control": "public, max-age=86400",
+                    "X-Content-Type-Options": "nosniff",
+                },
+            )
+
+    raise HTTPException(status_code=404, detail="Cover not found")
+
+    chapters_result = await db.execute(
+        select(ContentSection)
+        .where(
+            ContentSection.repo_id == gen.repo_id,
+            ContentSection.section_type == "book_chapter",
+        )
+        .order_by(ContentSection.chapter_number)
+    )
+    chapters = chapters_result.scalars().all()
+
+    return BookContentResponse(
+        book_id=gen.id,
+        title=gen.repo.name if gen.repo else "Unknown",
+        html_content=load_book_html(gen.id) or "",
+        cover_html=load_cover_html(gen.id),
+        cover_url=f"/api/books/{gen.id}/cover" if gen.cover_path else None,
         chapters=[
             SectionResponse(
                 id=ch.id,

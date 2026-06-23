@@ -108,6 +108,7 @@ class BookListItem(BaseModel):
     progress: float | None = None
     progress_metadata: str | None = None
     last_read_at: datetime | None = None
+    cover_url: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -125,4 +126,5 @@ class BookContentResponse(BaseModel):
     title: str
     html_content: str
     cover_html: str | None = None
+    cover_url: str | None = None
     chapters: list["SectionResponse"] = []

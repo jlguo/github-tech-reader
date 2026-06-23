@@ -1,7 +1,7 @@
 from pathlib import Path
 from urllib.parse import urlparse
 
-from sqlalchemy import event
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 
@@ -40,3 +40,15 @@ async def init_db():
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+        # Lightweight migration: add cover_path column if missing
+        for table, col in [
+            ("book_generations", "cover_path"),
+            ("imported_books", "cover_path"),
+        ]:
+            result = await conn.execute(
+                text(f"SELECT COUNT(*) AS cnt FROM pragma_table_info('{table}') WHERE name='{col}'")
+            )
+            row = result.one_or_none()
+            if row and row[0] == 0:
+                await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} VARCHAR(512)"))

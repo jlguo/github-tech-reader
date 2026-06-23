@@ -22,6 +22,7 @@ class ImportedBook(Base):
     category: Mapped[str] = mapped_column(String(64), default="imported")
     tags: Mapped[list[str]] = mapped_column(JSON, default=list)
     is_favorite: Mapped[bool] = mapped_column(Boolean, default=False)
+    cover_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     progress_position: Mapped[float] = mapped_column(Float, default=0.0)
     progress_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     added_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

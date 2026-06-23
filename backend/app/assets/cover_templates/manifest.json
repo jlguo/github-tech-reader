@@ -1,0 +1,66 @@
+{
+  "_comment": "Cover template manifest. Coordinates are in TEMPLATE space (400x600 design units). The blank background PNGs in ./blank/ are exported at 2x (800x1200), so the Pillow compositor must multiply every x/y/width/height/fontSize by SCALE=2 when drawing onto the blank PNG. Origin is top-left. Text fields list their box rect + font + size + weight + color + align. 'maxWidth' fields wrap; titles should shrink-to-fit if they overflow the box height. Colors are hex from the project theme.",
+  "scale": 2,
+  "canvas": { "width": 400, "height": 600 },
+  "theme": {
+    "surface_primary": "#f5f0e8",
+    "surface_inverse": "#5c3d1e",
+    "surface_deep": "#2c1a0e",
+    "foreground_primary": "#2c1a0e",
+    "foreground_secondary": "#6b5840",
+    "foreground_inverse": "#f5f0e8",
+    "accent_primary": "#c17f3a",
+    "border_subtle": "#dcd3c2"
+  },
+  "fonts": {
+    "_comment": "Bundle these TTFs under backend/app/assets/fonts/. Map weights to actual files.",
+    "heading": { "family": "Playfair Display", "files": { "700": "PlayfairDisplay-Bold.ttf", "400": "PlayfairDisplay-Regular.ttf", "italic400": "PlayfairDisplay-Italic.ttf" } },
+    "body": { "family": "Source Serif 4", "files": { "400": "SourceSerif4-Regular.ttf", "300": "SourceSerif4-Light.ttf" } },
+    "caption": { "family": "Inter", "files": { "600": "Inter-SemiBold.ttf", "500": "Inter-Medium.ttf", "400": "Inter-Regular.ttf", "700": "Inter-Bold.ttf" } }
+  },
+  "templates": {
+    "github": {
+      "background": "blank/github.png",
+      "source_types": ["github"],
+      "fields": {
+        "title":    { "x": 40, "y": 226, "maxWidth": 320, "maxHeight": 55, "font": "heading", "weight": "700", "fontSize": 52, "lineHeight": 1.05, "color": "#2c1a0e", "align": "left", "valign": "top", "shrinkToFit": true },
+        "tagline":  { "x": 40, "y": 297, "maxWidth": 320, "maxHeight": 54, "font": "body", "weight": "400", "fontSize": 19, "lineHeight": 1.4, "color": "#6b5840", "align": "left" },
+        "language": { "x": 57, "y": 502, "font": "caption", "weight": "500", "fontSize": 13, "color": "#6b5840", "align": "left" },
+        "stars":    { "x": 163, "y": 502, "font": "caption", "weight": "500", "fontSize": 13, "color": "#6b5840", "align": "left" },
+        "author":   { "x": 40, "y": 532, "maxWidth": 320, "font": "heading", "weight": "400", "italic": true, "fontSize": 18, "color": "#2c1a0e", "align": "left" }
+      }
+    },
+    "youtube": {
+      "background": "blank/youtube.png",
+      "source_types": ["youtube"],
+      "fields": {
+        "duration": { "x": 324, "y": 216, "font": "caption", "weight": "600", "fontSize": 12, "color": "#ffffff", "align": "left" },
+        "title":    { "x": 40, "y": 373, "maxWidth": 320, "maxHeight": 84, "font": "heading", "weight": "700", "fontSize": 38, "lineHeight": 1.1, "color": "#f5f0e8", "align": "left", "valign": "top", "shrinkToFit": true },
+        "tagline":  { "x": 40, "y": 473, "maxWidth": 320, "maxHeight": 48, "font": "body", "weight": "400", "fontSize": 17, "lineHeight": 1.4, "color": "#c9bda8", "align": "left" },
+        "channel":  { "x": 68, "y": 537, "maxWidth": 290, "font": "heading", "weight": "400", "italic": true, "fontSize": 17, "color": "#f5f0e8", "align": "left" }
+      }
+    },
+    "url": {
+      "background": "blank/url.png",
+      "source_types": ["url"],
+      "fields": {
+        "domain":  { "x": 67, "y": 20, "maxWidth": 290, "font": "caption", "weight": "500", "fontSize": 13, "color": "#f5f0e8", "align": "left" },
+        "title":   { "x": 40, "y": 134, "maxWidth": 320, "maxHeight": 96, "font": "heading", "weight": "700", "fontSize": 44, "lineHeight": 1.08, "color": "#2c1a0e", "align": "left", "valign": "top", "shrinkToFit": true },
+        "tagline": { "x": 40, "y": 248, "maxWidth": 320, "maxHeight": 52, "font": "body", "weight": "400", "fontSize": 18, "lineHeight": 1.45, "color": "#6b5840", "align": "left" },
+        "author":  { "x": 40, "y": 532, "maxWidth": 320, "font": "heading", "weight": "400", "italic": true, "fontSize": 18, "color": "#2c1a0e", "align": "left" }
+      }
+    },
+    "file": {
+      "background": "blank/file.png",
+      "source_types": ["file"],
+      "fields": {
+        "ext_label": { "x": 200, "y": 245, "font": "caption", "weight": "700", "fontSize": 30, "color": "#f5f0e8", "align": "center" },
+        "title":     { "x": 40, "y": 355, "maxWidth": 320, "maxHeight": 40, "font": "heading", "weight": "700", "fontSize": 34, "lineHeight": 1.12, "color": "#2c1a0e", "align": "center", "valign": "top", "shrinkToFit": true },
+        "tagline":   { "x": 40, "y": 405, "maxWidth": 320, "font": "body", "weight": "400", "fontSize": 16, "lineHeight": 1.4, "color": "#6b5840", "align": "center" },
+        "author":    { "x": 40, "y": 535, "maxWidth": 200, "font": "heading", "weight": "400", "italic": true, "fontSize": 16, "color": "#2c1a0e", "align": "left" },
+        "size":      { "x": 360, "y": 538, "font": "caption", "weight": "500", "fontSize": 12, "color": "#6b5840", "align": "right" }
+      },
+      "ext_label_map": { "pdf": "PDF", "epub": "EPUB", "txt": "TXT", "doc": "DOC", "docx": "DOC", "ppt": "PPT", "pptx": "PPT", "xls": "XLS", "xlsx": "XLS", "html": "HTML", "htm": "HTML", "md": "MD" }
+    }
+  }
+}

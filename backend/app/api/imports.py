@@ -16,6 +16,10 @@ from sqlalchemy import select
 from app.core.database import get_db, async_session
 from app.models.imported_book import ImportedBook
 from app.services.file_storage import save_import_content, load_import_content, delete_import_content
+from app.services.cover_extractor import extract_cover
+from app.services.cover_renderer import render_cover
+
+_COVERS_DIR = Path(__file__).parent.parent.parent / "data" / "covers"
 
 router = APIRouter()
 
@@ -44,6 +48,18 @@ def _detect_file_type(filename: str) -> str:
 def _title_from_filename(filename: str) -> str:
     stem = Path(filename).stem
     return stem.replace("_", " ").replace("-", " ").strip() or "Untitled"
+
+
+def _human_size(size_bytes: int) -> str:
+    if size_bytes < 1024:
+        return f"{size_bytes}B"
+    elif size_bytes < 1024 * 1024:
+        return f"{size_bytes // 1024}KB"
+    else:
+        return f"{size_bytes / (1024*1024):.1f}MB"
+
+
+
 
 
 def _validate_url(url: str) -> None:
@@ -122,6 +138,37 @@ async def upload_book(
                 raise HTTPException(status_code=413, detail=f"File too large (max {MAX_UPLOAD_SIZE // (1024*1024)}MB)")
             f.write(chunk)
 
+    cover_path: str | None = None
+    _COVERS_DIR.mkdir(parents=True, exist_ok=True)
+    cover_out = str(_COVERS_DIR / f"{file_id}.png")
+
+    if file_type in ("epub", "pdf"):
+        try:
+            data = extract_cover(str(saved_path), file_type)
+            if data:
+                from PIL import Image
+                from io import BytesIO
+                Image.open(BytesIO(data)).save(cover_out, "PNG")
+                cover_path = cover_out
+        except Exception as exc:
+            logger = __import__("logging").getLogger(__name__)
+            logger.warning("Cover extract failed for %s: %s", file_id, exc)
+
+    if not cover_path:
+        ext_label = FILE_TYPE_MAP.get(Path(file.filename).suffix.lower(), "FILE").upper()
+        try:
+            render_cover("file", {
+                "ext_label": ext_label,
+                "title": book_title,
+                "tagline": "Uploaded document",
+                "author": book_author or "",
+                "size": _human_size(bytes_read),
+            }, cover_out)
+            cover_path = cover_out
+        except Exception as exc:
+            logger = __import__("logging").getLogger(__name__)
+            logger.warning("Cover render failed for %s: %s", file_id, exc)
+
     async with async_session() as session:
         book = ImportedBook(
             id=file_id,
@@ -131,6 +178,7 @@ async def upload_book(
             file_type=file_type,
             file_path=str(saved_path),
             size_bytes=bytes_read,
+            cover_path=cover_path,
         )
         session.add(book)
         await session.commit()
@@ -179,15 +227,39 @@ async def import_url(
     elif "text/markdown" in content_type or url.endswith(".md"):
         file_type = "txt"
 
+    book_id = str(uuid.uuid4())
+
+    cover_path: str | None = None
+    try:
+        domain = urlparse(url).hostname or "web"
+        tagline = ""
+        m = re.search(r'<meta\s+name="description"\s+content="([^"]*)"', html, re.IGNORECASE)
+        if m:
+            tagline = m.group(1)[:90]
+        if not tagline:
+            tagline = (book_title or "")[:90]
+        _COVERS_DIR.mkdir(parents=True, exist_ok=True)
+        render_cover("url", {
+            "domain": domain,
+            "title": book_title,
+            "tagline": tagline,
+            "author": domain,
+        }, str(_COVERS_DIR / f"{book_id}.png"))
+        cover_path = str(_COVERS_DIR / f"{book_id}.png")
+    except Exception as exc:
+        logger = __import__("logging").getLogger(__name__)
+        logger.warning("Cover render failed for URL import %s: %s", book_id, exc)
+
     async with async_session() as session:
         book = ImportedBook(
-            id=str(uuid.uuid4()),
+            id=book_id,
             title=book_title,
             author=book_author,
             source_type="url",
             file_type=file_type,
             original_url=url,
             size_bytes=len(html.encode()),
+            cover_path=cover_path,
         )
         session.add(book)
         await session.commit()

@@ -18,6 +18,7 @@ uv.lock
 backend/data/*.db
 backend/data/uploads/
 backend/data/content/
+backend/data/covers/
 
 # Dev artifacts
 .playwright-mcp/

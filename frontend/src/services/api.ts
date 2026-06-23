@@ -23,6 +23,7 @@ export interface RemoteBook {
   progress_metadata?: string;
   last_read_at?: string | null;
   cover_html?: string | null;
+  cover_url?: string | null;
 }
 
 export interface BookContentResult {

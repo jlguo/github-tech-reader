@@ -440,8 +440,43 @@ async def generate_book_cover(repo_id, repo_name, repo_description, readme_conte
             print(f"[cover] Review found issues: {review_feedback[:100]}")
             cover_html = await _run_cover_crew(repo_name, repo_description, outline, owner, review_feedback)
 
+    cover_image_path = _render_png_cover(repo_name, repo_description, owner, repo_id)
+
     return {"outline": outline, "cover_html": cover_html, "snapshot": snapshot,
-            "chapter_count": chapter_count, "repo_name": repo_name}
+            "chapter_count": chapter_count, "repo_name": repo_name,
+            "cover_image_path": cover_image_path}
+
+
+def _render_png_cover(repo_name: str, repo_description: str, owner: str, repo_id: str) -> str | None:
+    """Render a PNG cover from template, save to data/covers/{repo_id}.png."""
+    from app.services.cover_renderer import render_cover
+    from pathlib import Path
+    from app.core.config import settings
+
+    data_dir = settings.data_dir or str(Path(__file__).parent.parent.parent / "data")
+    covers_dir = Path(data_dir) / "covers"
+    covers_dir.mkdir(parents=True, exist_ok=True)
+    out_path = str(covers_dir / f"{repo_id}.png")
+
+    tagline = (repo_description or "")[:90].strip()
+    if not tagline:
+        tagline = "A technical book from GitHub"
+
+    lang = ""
+    stars = ""
+
+    try:
+        render_cover("github", {
+            "title": repo_name.split("/")[-1] if "/" in repo_name else repo_name,
+            "tagline": tagline,
+            "author": owner,
+            "language": "",
+            "stars": "",
+        }, out_path)
+        return out_path
+    except Exception as exc:
+        print(f"[cover] PNG rendering failed: {exc}")
+        return None
 
 
 async def generate_book_content(repo_name: str, outline: list[dict], snapshot: str,

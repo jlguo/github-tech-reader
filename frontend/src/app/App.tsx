@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { Search, LayoutGrid, List, SlidersHorizontal, X, Clock, TrendingUp, BookOpen } from "lucide-react";
 import { books as initialBooks, categories, Book, BookCategory, typeConfig, BookType } from "./components/bookData";
-import { POLL_INTERVAL_MS } from "../config/api";
+import { API_BASE_URL, POLL_INTERVAL_MS } from "../config/api";
 import { getDataService, type IDataService, type RemoteBook } from "../services/api";
 
 const getTypeInfo = (type: BookType) => typeConfig[type] ?? { label: "FILE", color: "#5a5a5a", bg: "#f0f0f0" };
@@ -47,6 +47,16 @@ export default function App() {
     return `hsl(${hash % 360}, 40%, ${30 + (hash % 20)}%)`;
   };
 
+  const coverImageUrl = (cu: string | null | undefined): string => {
+    if (!cu) return "";
+    try {
+      const origin = new URL(API_BASE_URL).origin;
+      return `${origin}${cu}`;
+    } catch {
+      return cu;
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
 
@@ -61,11 +71,12 @@ export default function App() {
             const bookId = b.repo_id || b.book_id;
             const bookType = toBookType(b.file_type);
             const category = isRepoBook ? "generated" as BookCategory : "documents" as BookCategory;
-            const cover = b.cover_html
+            const coverUrl = coverImageUrl(b.cover_url);
+            const cover = coverUrl || (b.cover_html
               ? ""
               : isRepoBook
               ? `https://opengraph.githubassets.com/1/${b.author}/${b.title}`
-              : `https://placehold.co/200x280/${toColor(b.title).replace(/[^a-f0-9]/gi, "").slice(0, 6)}/fff?text=${encodeURIComponent(b.title.slice(0, 4))}`;
+              : `https://placehold.co/200x280/${toColor(b.title).replace(/[^a-f0-9]/gi, "").slice(0, 6)}/fff?text=${encodeURIComponent(b.title.slice(0, 4))}`);
             const size = isRepoBook
               ? (b.status === "done" ? `${b.chapter_count} 章` : b.status === "failed" ? "生成失败" : b.status === "no_book" ? "未生成" : "创作中...")
               : (b.file_type || "html").toUpperCase();

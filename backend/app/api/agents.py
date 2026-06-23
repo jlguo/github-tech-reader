@@ -116,6 +116,7 @@ async def _run_book_pipeline(
         outline = cover_result["outline"]
         snapshot = cover_result["snapshot"]
         cover_html = cover_result["cover_html"]
+        cover_image_path = cover_result.get("cover_image_path")
 
         async with async_session() as session:
             gen_result = await session.execute(
@@ -127,6 +128,8 @@ async def _run_book_pipeline(
                 gen.current_phase = "writing"
                 gen.total_chapters = len(outline)
                 gen.outline = {"chapters": outline}
+                if cover_image_path:
+                    gen.cover_path = cover_image_path
                 gen.updated_at = datetime.now(timezone.utc)
                 await session.commit()
 

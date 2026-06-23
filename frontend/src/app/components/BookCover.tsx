@@ -30,8 +30,7 @@ export function BookCover({ book, size = "md" }: BookCoverProps) {
   const [imgError, setImgError] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
 
-  // Render generated cover HTML as a scaled mini-iframe when no image URL exists
-  if (!book.cover && book.coverHtml) {
+  if ((!book.cover || imgError) && book.coverHtml) {
     return (
       <div
         className={`${s.width} ${s.height} relative flex-shrink-0 overflow-hidden shadow-md`}
