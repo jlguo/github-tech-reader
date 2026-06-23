@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, DragEvent } from "react";
-import { X, Github, Loader2, CheckCircle, AlertCircle, BookOpen, Sparkles, Upload, Link, FileText } from "lucide-react";
+import { X, Github, Loader2, CheckCircle, AlertCircle, BookOpen, Sparkles, Upload, Link, FileText, Youtube } from "lucide-react";
 import { getDataService, type IDataService } from "../../services/api";
 
-type ImportTab = "github" | "file" | "url";
+type ImportTab = "github" | "youtube" | "file" | "url";
 type ImportStep = "input" | "loading" | "success" | "error";
 
 interface ImportResult {
@@ -32,6 +32,7 @@ interface ImportDialogProps {
 
 const TABS: { key: ImportTab; label: string; icon: typeof Github }[] = [
   { key: "github", label: "GitHub", icon: Github },
+  { key: "youtube", label: "YouTube", icon: Youtube },
   { key: "file", label: "上传文件", icon: Upload },
   { key: "url", label: "网页链接", icon: Link },
 ];
@@ -147,13 +148,47 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
     }
   };
 
+  const handleYoutubeImport = async () => {
+    const url = input.trim();
+    if (!url || !service) return;
+    setStep("loading");
+    setError("");
+
+    try {
+      const data = await service.generateYoutubeBook(url);
+      setResult({
+        id: data.repo_id,
+        title: `YouTube: ${data.video_id}`,
+        author: "YouTube",
+        source_type: "youtube",
+        gen_started: true,
+      });
+      setStep("success");
+      onImported({
+        id: data.repo_id,
+        title: `YouTube: ${data.video_id}`,
+        author: "YouTube",
+        sourceType: "youtube",
+        fileType: "html",
+      });
+    } catch (e: any) {
+      setError(e.message || "Failed to start YouTube book generation");
+      setStep("error");
+    }
+  };
+
   const handleImport = () => {
     if (tab === "github") handleGithubImport();
+    else if (tab === "youtube") handleYoutubeImport();
     else if (tab === "file") handleFileUpload();
     else handleUrlImport();
   };
 
-  const canImport = tab === "github" ? !!fullName : tab === "file" ? !!selectedFile : input.trim().length > 0;
+  const isValidYoutubeUrl = (u: string) => {
+    return /(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)[\w-]{11}/i.test(u.trim());
+  };
+
+  const canImport = tab === "github" ? !!fullName : tab === "youtube" ? isValidYoutubeUrl(input) : tab === "file" ? !!selectedFile : input.trim().length > 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -202,7 +237,7 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
             <div className="flex flex-col items-center py-8 gap-3">
               <Loader2 size={32} className="animate-spin" style={{ color: "var(--accent)" }} />
               <p className="text-sm" style={{ color: "var(--muted-foreground)", fontFamily: "Inter, sans-serif" }}>
-                {tab === "github" ? "正在获取仓库信息..." : tab === "file" ? "正在上传文件..." : "正在获取网页内容..."}
+                {tab === "github" ? "正在获取仓库信息..." : tab === "youtube" ? "正在提取视频字幕..." : tab === "file" ? "正在上传文件..." : "正在获取网页内容..."}
               </p>
             </div>
           ) : step === "success" && result ? (
@@ -216,6 +251,8 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
               <p className="text-xs" style={{ color: "var(--muted-foreground)", fontFamily: "Inter, sans-serif" }}>
                 {result.source_type === "github"
                   ? `README ${result.readme_fetched ? "已获取" : "未获取"}${result.gen_started ? " • AI 生成已启动" : ""}`
+                  : result.source_type === "youtube"
+                  ? "字幕已提取 • AI 书籍生成已启动"
                   : result.source_type === "file"
                   ? `${result.file_type?.toUpperCase()} • ${result.author}`
                   : `网页 • ${result.file_type?.toUpperCase()}`}
@@ -269,6 +306,39 @@ export function ImportDialog({ open, onClose, onImported }: ImportDialogProps) {
                   {input.trim() && !fullName && (
                     <p data-testid="import-dialog-error-format" className="text-xs" style={{ color: "#dc5050", fontFamily: "Inter, sans-serif" }}>
                       请输入有效的 GitHub 仓库格式，例如 owner/repo
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {tab === "youtube" && (
+                <div className="space-y-3">
+                  <label className="block text-sm font-medium" style={{ fontFamily: "Inter, sans-serif", color: "var(--foreground)" }}>
+                    输入 YouTube 视频链接
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      data-testid="import-dialog-input"
+                      value={input}
+                      onChange={e => setInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter" && canImport) handleImport(); }}
+                      placeholder="https://www.youtube.com/watch?v=..."
+                      className="flex-1 px-3 py-2.5 rounded-xl text-sm border outline-none transition-colors focus:border-[var(--accent)]"
+                      style={{
+                        background: "var(--background)",
+                        borderColor: "var(--border)",
+                        color: "var(--foreground)",
+                        fontFamily: "Inter, sans-serif",
+                      }}
+                      autoFocus
+                    />
+                  </div>
+                  <p className="text-xs" style={{ color: "var(--muted-foreground)", fontFamily: "Inter, sans-serif" }}>
+                    支持 youtube.com 和 youtu.be 链接。将提取视频字幕，通过 AI 生成章节式电子书。
+                  </p>
+                  {input.trim() && !isValidYoutubeUrl(input) && (
+                    <p data-testid="import-dialog-error-format" className="text-xs" style={{ color: "#dc5050", fontFamily: "Inter, sans-serif" }}>
+                      请输入有效的 YouTube 视频链接
                     </p>
                   )}
                 </div>

@@ -80,6 +80,11 @@ export interface IDataService {
   generateBook(repoId: string): Promise<void>;
   getBookStatus(repoId: string): Promise<BookGenStatus | null>;
 
+  // YouTube book generation
+  generateYoutubeBook(url: string): Promise<{ repo_id: string; video_id: string }>;
+  getYoutubeBookStatusStreamUrl(repoId: string): string;
+  getYoutubeBookStatusUrl(repoId: string): string;
+
   // Imports
   uploadFile(file: File, title: string, author: string): Promise<ImportResult>;
   importUrl(url: string): Promise<ImportResult>;

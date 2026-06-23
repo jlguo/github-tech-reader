@@ -113,6 +113,32 @@ export class RemoteDataService implements IDataService {
     return r.json();
   }
 
+  // ── YouTube book generation ─────────────────────────────────────
+
+  async generateYoutubeBook(url: string): Promise<{ repo_id: string; video_id: string }> {
+    const r = await fetch(`${this.#base}/youtube/generate-book`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(
+        (err as { detail?: string }).detail ??
+          "Failed to start YouTube book generation",
+      );
+    }
+    return r.json();
+  }
+
+  getYoutubeBookStatusStreamUrl(repoId: string): string {
+    return `${this.#base}/youtube/book-status/${repoId}/stream`;
+  }
+
+  getYoutubeBookStatusUrl(repoId: string): string {
+    return `${this.#base}/youtube/book-status/${repoId}`;
+  }
+
   // ── Imports ────────────────────────────────────────────────────
 
   async uploadFile(

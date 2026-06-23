@@ -351,6 +351,24 @@ def _prepend_cover(html: str, cover: str) -> str:
     return cover + html
 
 
+async def generate_book_plan(
+    content_title: str,
+    content_description: str,
+    chapter_count: int,
+    snapshot: str,
+) -> list[dict]:
+    """Generate a book outline from any text content (not just GitHub repos).
+
+    This is a content-agnostic version of the planning step — it takes
+    pre-built snapshot text and returns a chapter outline. Useful for
+    YouTube transcripts, uploaded documents, or any text source.
+    """
+    _ensure_crewai()
+    return await _run_planning_crew(
+        content_title, content_description, chapter_count, snapshot
+    )
+
+
 async def generate_book_cover(repo_id, repo_name, repo_description, readme_content, status_updater) -> dict:
     _ensure_crewai()
 
