@@ -127,6 +127,7 @@ export class LocalDataService implements IDataService {
       file_type: item.file_type || "html",
       progress: Math.round(item.progress),
       progress_metadata: item.progress_metadata,
+      last_read_at: item.last_read_at,
       cover_html: item.cover_html,
     }));
   }

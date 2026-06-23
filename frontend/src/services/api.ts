@@ -21,6 +21,7 @@ export interface RemoteBook {
   file_type: string | null;
   progress?: number;
   progress_metadata?: string;
+  last_read_at?: string | null;
   cover_html?: string | null;
 }
 

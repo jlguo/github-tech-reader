@@ -180,6 +180,7 @@ export interface BookListItem {
   current_phase?: string | null;
   created_at?: string;
   updated_at?: string;
+  last_read_at?: string | null;
   progress: number;
   progress_metadata?: string;
   cover_html?: string | null;
@@ -502,7 +503,8 @@ export class BookDatabase {
         r.added_at                              AS created_at,
         COALESCE(bg.updated_at, r.added_at)     AS updated_at,
         COALESCE(rp.position, 0)                AS progress,
-        rp.metadata                             AS progress_metadata
+        rp.metadata                             AS progress_metadata,
+        rp.updated_at                           AS last_read_at
       FROM repos r
       LEFT JOIN book_generations bg ON bg.repo_id = r.id
       LEFT JOIN reading_progress rp ON rp.id = (
@@ -528,7 +530,8 @@ export class BookDatabase {
         ib.added_at                             AS created_at,
         ib.added_at                             AS updated_at,
         COALESCE(rp2.position, 0)               AS progress,
-        rp2.metadata                            AS progress_metadata
+        rp2.metadata                            AS progress_metadata,
+        rp2.updated_at                          AS last_read_at
       FROM imported_books ib
       LEFT JOIN reading_progress rp2 ON rp2.id = (
         SELECT id FROM reading_progress WHERE repo_id = ib.id ORDER BY updated_at DESC LIMIT 1
@@ -560,6 +563,7 @@ export class BookDatabase {
         updated_at: obj.updated_at as string | undefined,
         progress: (obj.progress as number) ?? 0,
         progress_metadata: obj.progress_metadata as string | undefined,
+        last_read_at: (obj.last_read_at as string) ?? null,
         cover_html: (obj.cover_html as string) ?? null,
       });
     }

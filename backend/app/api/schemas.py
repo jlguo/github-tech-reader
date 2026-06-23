@@ -107,6 +107,7 @@ class BookListItem(BaseModel):
     current_phase: str | None = None
     progress: float | None = None
     progress_metadata: str | None = None
+    last_read_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

@@ -87,6 +87,7 @@ export default function App() {
               totalPages: metaTotal || b.chapter_count,
               currentPage: metaPage,
               addedDate: new Date().toISOString().split("T")[0],
+              lastRead: b.last_read_at ? b.last_read_at.split("T")[0] : undefined,
               size,
               description: b.description || "",
               tags: b.language ? [b.language] : [],

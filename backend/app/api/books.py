@@ -69,6 +69,7 @@ async def list_books(
             current_phase=gen.current_phase if gen else None,
             progress=latest_progress.position if latest_progress else None,
             progress_metadata=None,
+            last_read_at=latest_progress.updated_at if latest_progress else None,
             created_at=gen.created_at if gen else repo.added_at,
             updated_at=gen.updated_at if gen else repo.added_at,
         ))
@@ -95,6 +96,7 @@ async def list_books(
             chapter_count=0,
             completed_chapters=0,
             progress=imported_book.progress_position if imported_book.progress_position else None,
+            last_read_at=imported_book.progress_updated_at,
             created_at=imported_book.added_at,
             updated_at=imported_book.progress_updated_at or imported_book.added_at,
         ))
