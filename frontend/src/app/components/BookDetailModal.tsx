@@ -27,6 +27,7 @@ interface BookDetailModalProps {
 
 export function BookDetailModal({ book, onClose, onToggleFavorite, onRead, onDelete, onUpdate, onGenerate, allTags = [] }: BookDetailModalProps) {
   const [tagInput, setTagInput] = useState("");
+  const [showAllTags, setShowAllTags] = useState(false);
   if (!book) return null;
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -325,13 +326,16 @@ export function BookDetailModal({ book, onClose, onToggleFavorite, onRead, onDel
             {(() => {
               const suggestions = allTags.filter(tag => !(book.tags ?? []).includes(tag));
               if (suggestions.length === 0) return null;
+              const TAG_LIMIT = 20;
+              const visible = showAllTags ? suggestions : suggestions.slice(0, TAG_LIMIT);
+              const hiddenCount = suggestions.length - visible.length;
               return (
                 <div className="mt-3" data-testid="book-detail-tag-suggestions">
                   <span className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--muted-foreground)", fontFamily: "Inter, sans-serif" }}>
                     可选标签
                   </span>
                   <div className="flex flex-wrap gap-1.5">
-                    {suggestions.map(tag => (
+                    {visible.map(tag => (
                       <button
                         key={tag}
                         onClick={() => onUpdate?.(book.id, { tags: [...(book.tags ?? []), tag] })}
@@ -343,6 +347,26 @@ export function BookDetailModal({ book, onClose, onToggleFavorite, onRead, onDel
                         {tag}
                       </button>
                     ))}
+                    {hiddenCount > 0 && (
+                      <button
+                        onClick={() => setShowAllTags(true)}
+                        className="inline-flex items-center text-xs px-2.5 py-1 rounded-full border transition-colors hover:opacity-70"
+                        style={{ borderColor: "var(--border)", color: "var(--accent)", background: "transparent", fontFamily: "Inter, sans-serif" }}
+                        data-testid="book-detail-tag-suggest-more"
+                      >
+                        更多 +{hiddenCount}
+                      </button>
+                    )}
+                    {showAllTags && suggestions.length > TAG_LIMIT && (
+                      <button
+                        onClick={() => setShowAllTags(false)}
+                        className="inline-flex items-center text-xs px-2.5 py-1 rounded-full border transition-colors hover:opacity-70"
+                        style={{ borderColor: "var(--border)", color: "var(--muted-foreground)", background: "transparent", fontFamily: "Inter, sans-serif" }}
+                        data-testid="book-detail-tag-suggest-less"
+                      >
+                        收起
+                      </button>
+                    )}
                   </div>
                 </div>
               );
