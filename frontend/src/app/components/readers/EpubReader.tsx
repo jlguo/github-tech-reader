@@ -128,11 +128,18 @@ export function EpubReader({ book, onBookmarkReady, restoreAnchor }: EpubReaderP
         });
 
         rendition.on("click", (e: MouseEvent) => {
+          // epub.js reports clientX/Y in the scrolled iframe content space, not
+          // the visible viewport: paginated mode lays all pages side-by-side and
+          // scrolls .epub-container horizontally, so clientX grows by one page
+          // width per page. Subtract the scroller offset to map back to the
+          // visible page before testing the center zone.
           const container = containerRef.current;
-          if (!container) return;
-          const rect = container.getBoundingClientRect();
-          const relX = (e.screenX - window.screenX - rect.left) / rect.width;
-          const relY = (e.screenY - window.screenY - rect.top) / rect.height;
+          const scroller = container?.querySelector(".epub-container") as HTMLElement | null;
+          const w = container?.clientWidth ?? 0;
+          const h = container?.clientHeight ?? 0;
+          if (w <= 0 || h <= 0) return;
+          const relX = (e.clientX - (scroller?.scrollLeft ?? 0)) / w;
+          const relY = (e.clientY - (scroller?.scrollTop ?? 0)) / h;
           if (relX < 0.3 || relX > 0.7 || relY < 0.3 || relY > 0.7) return;
           window.postMessage({ type: "reader-center-tap" }, window.location.origin);
         });
