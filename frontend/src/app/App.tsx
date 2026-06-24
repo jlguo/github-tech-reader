@@ -1,5 +1,6 @@
-import { useState, useMemo, useEffect } from "react";
-import { Search, LayoutGrid, List, SlidersHorizontal, X, Clock, TrendingUp, BookOpen } from "lucide-react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { Search, LayoutGrid, List, SlidersHorizontal, X, Clock, TrendingUp, BookOpen, ChevronDown, ArrowLeft } from "lucide-react";
+import { useIsMobile } from "./components/ui/use-mobile";
 import { books as initialBooks, Book, BookCategory, typeConfig, BookType } from "./components/bookData";
 import { API_BASE_URL, POLL_INTERVAL_MS } from "../config/api";
 import { getDataService, type IDataService, type RemoteBook, type RemoteCategory } from "../services/api";
@@ -24,6 +25,7 @@ import { BookDetailModal } from "./components/BookDetailModal";
 import { ReaderModal } from "./components/readers/ReaderModal";
 import { ImportDialog } from "./components/ImportDialog";
 import { CategoryManager } from "./components/CategoryManager";
+import { CategoryPicker } from "./components/CategoryPicker";
 
 export default function App() {
   const [bookList, setBookList] = useState(initialBooks);
@@ -37,12 +39,24 @@ export default function App() {
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [categoryList, setCategoryList] = useState<RemoteCategory[]>([]);
   const [service, setService] = useState<IDataService | null>(null);
+  const isMobile = useIsMobile();
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     getDataService().then(setService);
   }, []);
+
+  useEffect(() => {
+    if (isSearchExpanded) searchInputRef.current?.focus();
+  }, [isSearchExpanded]);
+
+  useEffect(() => {
+    if (!isMobile) setIsSearchExpanded(false);
+  }, [isMobile]);
 
   const loadCategories = (svc: IDataService) => {
     svc.getCategories().then(setCategoryList).catch(() => {});
@@ -307,7 +321,69 @@ export default function App() {
     return counts;
   }, [bookList, categoryList]);
 
+  const allTagsMemo = useMemo(() => {
+    const tagSet = new Set<string>();
+    for (const b of bookList) {
+      for (const t of b.tags ?? []) {
+        tagSet.add(t);
+      }
+    }
+    return Array.from(tagSet).sort((a, b) => a.localeCompare(b, "zh"));
+  }, [bookList]);
+
   const sectionTitle = activeSection === "favorites" ? "收藏夹" : activeSection === "recent" ? "最近阅读" : activeCategory === "all" ? "全部" : categoryList.find(c => c.key === activeCategory)?.label || "全部";
+
+  const activeCategoryLabel = activeCategory === "all" ? "全部" : categoryList.find(c => c.key === activeCategory)?.label || "全部";
+
+  const viewControls = (
+    <div className="flex items-center gap-1 flex-shrink-0">
+      <button
+        onClick={() => setViewMode("grid")}
+        className="p-2 rounded-lg transition-colors"
+        style={{ background: viewMode === "grid" ? "var(--accent)" : "transparent", color: viewMode === "grid" ? "white" : "var(--muted-foreground)" }}
+        data-testid="view-mode-grid"
+      >
+        <LayoutGrid size={16} />
+      </button>
+      <button
+        onClick={() => setViewMode("list")}
+        className="p-2 rounded-lg transition-colors"
+        style={{ background: viewMode === "list" ? "var(--accent)" : "transparent", color: viewMode === "list" ? "white" : "var(--muted-foreground)" }}
+        data-testid="view-mode-list"
+      >
+        <List size={16} />
+      </button>
+      <div className="relative">
+        <button
+          onClick={() => setShowSortMenu(v => !v)}
+          className="p-2 rounded-lg transition-colors"
+          style={{ background: "transparent", color: "var(--muted-foreground)" }}
+          data-testid="sort-toggle"
+        >
+          <SlidersHorizontal size={16} />
+        </button>
+        {showSortMenu && (
+          <div
+            className="absolute right-0 top-10 z-20 rounded-xl overflow-hidden shadow-lg"
+            style={{ background: "var(--card)", border: "1px solid var(--border)", width: "140px" }}
+            data-testid="sort-menu"
+          >
+            {([{ id: "recent", label: "最近阅读" }, { id: "title", label: "书名排序" }, { id: "progress", label: "阅读进度" }] as const).map(opt => (
+              <button
+                key={opt.id}
+                onClick={() => { setSortBy(opt.id); setShowSortMenu(false); }}
+                className="w-full text-left px-4 py-2.5 text-sm transition-colors"
+                style={{ background: sortBy === opt.id ? "var(--accent)" : "transparent", color: sortBy === opt.id ? "white" : "var(--foreground)", fontFamily: "Inter, sans-serif" }}
+                data-testid={`sort-option-${opt.id}`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: "var(--background)", fontFamily: "Inter, sans-serif" }}>
@@ -329,94 +405,101 @@ export default function App() {
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden" data-testid="main-content">
         {/* Top bar */}
         <header
-          className="flex-shrink-0 px-4 lg:px-8 py-4 flex items-center gap-3 border-b"
+          className="flex-shrink-0 px-4 lg:px-8 py-4 flex items-center gap-2 lg:gap-3 border-b"
           style={{ background: "var(--card)", borderColor: "var(--border)" }}
           data-testid="header-bar"
         >
-          {/* Mobile logo */}
-          <div className="flex lg:hidden items-center gap-2 mr-2">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "var(--primary)" }}>
-              <BookOpen size={14} color="var(--accent)" />
-            </div>
-            <span style={{ fontFamily: "Playfair Display, serif", fontWeight: 700, color: "var(--foreground)", fontSize: "1rem" }}>云书架</span>
-          </div>
-
-          {/* Search */}
-          <div className="flex-1 relative">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--muted-foreground)" }} />
-            <input
-              type="text"
-              placeholder="搜索书名、作者、标签..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 rounded-lg text-sm outline-none transition-all"
-              data-testid="search-input"
-              style={{
-                background: "var(--muted)",
-                color: "var(--foreground)",
-                border: "1px solid transparent",
-                fontFamily: "Inter, sans-serif",
-              }}
-            />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "var(--muted-foreground)" }} data-testid="search-clear">
-                <X size={14} />
-              </button>
-            )}
-          </div>
-
-          {/* View controls */}
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <button
-              onClick={() => setViewMode("grid")}
-              className="p-2 rounded-lg transition-colors"
-              style={{ background: viewMode === "grid" ? "var(--accent)" : "transparent", color: viewMode === "grid" ? "white" : "var(--muted-foreground)" }}
-              data-testid="view-mode-grid"
-            >
-              <LayoutGrid size={16} />
-            </button>
-            <button
-              onClick={() => setViewMode("list")}
-              className="p-2 rounded-lg transition-colors"
-              style={{ background: viewMode === "list" ? "var(--accent)" : "transparent", color: viewMode === "list" ? "white" : "var(--muted-foreground)" }}
-              data-testid="view-mode-list"
-            >
-              <List size={16} />
-            </button>
-            <div className="relative">
+          {/* Mobile: expanded search */}
+          {isMobile && isSearchExpanded ? (
+            <>
               <button
-                onClick={() => setShowSortMenu(v => !v)}
-                className="p-2 rounded-lg transition-colors"
-                style={{ background: "transparent", color: "var(--muted-foreground)" }}
-                data-testid="sort-toggle"
+                onClick={() => { if (!searchQuery) setIsSearchExpanded(false); else { setSearchQuery(""); searchInputRef.current?.focus(); } }}
+                onMouseDown={e => e.preventDefault()}
+                className="p-2 rounded-lg flex-shrink-0 transition-colors"
+                style={{ color: "var(--muted-foreground)" }}
+                data-testid="search-back"
               >
-                <SlidersHorizontal size={16} />
+                <ArrowLeft size={18} />
               </button>
-              {showSortMenu && (
-                <div
-                  className="absolute right-0 top-10 z-20 rounded-xl overflow-hidden shadow-lg"
-                  style={{ background: "var(--card)", border: "1px solid var(--border)", width: "140px" }}
-                  data-testid="sort-menu"
-                >
-                  {[{ id: "recent", label: "最近阅读" }, { id: "title", label: "书名排序" }, { id: "progress", label: "阅读进度" }].map(opt => (
-                    <button
-                      key={opt.id}
-                      onClick={() => { setSortBy(opt.id as any); setShowSortMenu(false); }}
-                      className="w-full text-left px-4 py-2.5 text-sm transition-colors"
-                      style={{
-                        background: sortBy === opt.id ? "var(--accent)" : "transparent",
-                        color: sortBy === opt.id ? "white" : "var(--foreground)",
-                        fontFamily: "Inter, sans-serif",
-                      }}
-                      data-testid={`sort-option-${opt.id}`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
+              <div className="flex-1 relative">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--muted-foreground)" }} />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  placeholder="搜索书名、作者、标签..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  onBlur={() => { if (!searchQuery) setIsSearchExpanded(false); }}
+                  className="w-full pl-9 pr-9 py-2 rounded-lg text-sm outline-none transition-all"
+                  data-testid="search-input"
+                  style={{ background: "var(--muted)", color: "var(--foreground)", border: "1px solid transparent", fontFamily: "Inter, sans-serif" }}
+                />
+                {searchQuery && (
+                  <button onClick={() => setSearchQuery("")} onMouseDown={e => e.preventDefault()} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "var(--muted-foreground)" }} data-testid="search-clear">
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            </>
+          ) : isMobile ? (
+            /* Mobile: collapsed */
+            <>
+              {/* Mobile logo */}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: "var(--primary)" }}>
+                  <BookOpen size={14} color="var(--accent)" />
                 </div>
-              )}
-            </div>
-          </div>
+                <span className="hidden min-[400px]:inline truncate" style={{ fontFamily: "Playfair Display, serif", fontWeight: 700, color: "var(--foreground)", fontSize: "1rem" }}>云书架</span>
+              </div>
+
+              {/* Category pill */}
+              <button
+                onClick={() => setShowCategoryPicker(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm flex-1 min-w-0 transition-colors"
+                style={{ background: "var(--muted)", color: "var(--foreground)", fontFamily: "Inter, sans-serif", fontWeight: 500 }}
+                data-testid="category-pill"
+              >
+                <span className="truncate">{activeCategoryLabel}</span>
+                <ChevronDown size={14} className="flex-shrink-0" style={{ color: "var(--muted-foreground)" }} />
+              </button>
+
+              <button
+                onClick={() => setIsSearchExpanded(true)}
+                className="p-2 rounded-lg flex-shrink-0 transition-colors"
+                style={{ color: "var(--muted-foreground)" }}
+                data-testid="search-expand"
+              >
+                <Search size={18} />
+              </button>
+
+              {viewControls}
+            </>
+          ) : (
+            /* Desktop */
+            <>
+              {/* Search */}
+              <div className="flex-1 relative">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--muted-foreground)" }} />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  placeholder="搜索书名、作者、标签..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 rounded-lg text-sm outline-none transition-all"
+                  data-testid="search-input"
+                  style={{ background: "var(--muted)", color: "var(--foreground)", border: "1px solid transparent", fontFamily: "Inter, sans-serif" }}
+                />
+                {searchQuery && (
+                  <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "var(--muted-foreground)" }} data-testid="search-clear">
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+
+              {viewControls}
+            </>
+          )}
         </header>
 
         {/* Scrollable content */}
@@ -567,6 +650,7 @@ export default function App() {
           onUpdate={handleUpdateBook}
           onGenerate={handleGenerateBook}
           categories={categoryList}
+          allTags={allTagsMemo}
         />
       )}
 
@@ -593,6 +677,16 @@ export default function App() {
         onCreate={handleCreateCategory}
         onUpdate={handleUpdateCategory}
         onDelete={handleDeleteCategory}
+      />
+
+      <CategoryPicker
+        open={showCategoryPicker}
+        onOpenChange={setShowCategoryPicker}
+        activeCategory={activeCategory}
+        onCategoryChange={cat => { setActiveSection("shelf"); setActiveCategory(cat); }}
+        categories={categoryList}
+        categoryCounts={categoryCounts}
+        onManageCategories={() => setShowCategoryManager(true)}
       />
     </div>
   );

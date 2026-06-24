@@ -581,6 +581,25 @@ test.describe("Bookshelf - Category Management", () => {
     await expect(page.locator('[data-testid="category-error"]')).toBeVisible({ timeout: 5000 });
   });
 
+  test("new-category color picker opens fully inside the dialog (not clipped)", async ({ page }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await openCategoryManager(page);
+
+    await page.locator('[data-testid="category-new-color"]').click();
+    const popover = page.locator('[data-testid="category-new-color-popover"]');
+    await expect(popover).toBeVisible({ timeout: 5000 });
+
+    const dialog = page.locator('[data-testid="category-manager"]');
+    const popBox = await popover.boundingBox();
+    const dlgBox = await dialog.boundingBox();
+    expect(popBox).not.toBeNull();
+    expect(dlgBox).not.toBeNull();
+    if (popBox && dlgBox) {
+      expect(popBox.y).toBeGreaterThanOrEqual(dlgBox.y - 1);
+      expect(popBox.y + popBox.height).toBeLessThanOrEqual(dlgBox.y + dlgBox.height + 1);
+    }
+  });
+
   test("custom category appears in the sidebar shelf list", async ({ page }) => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await openCategoryManager(page);
@@ -642,4 +661,126 @@ test.describe("Bookshelf - Per-Book Category & Tags", () => {
     await page.locator(`[data-testid="book-detail-tag-remove-${tag}"]`).click();
     await expect(page.locator(`[data-testid="book-detail-tag-${tag}"]`)).toHaveCount(0, { timeout: 5000 });
   });
+
+  test("quick-selects an existing tag from suggestions", async ({ page }) => {
+    test.setTimeout(60000);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await uploadFileViaUI(page, "progress-test");
+
+    const card = bookCard(page, "progress-test");
+    await expect(card).toBeVisible({ timeout: 15000 });
+    await card.click();
+    await expect(page.locator('[data-testid="book-detail-content"]')).toBeVisible({ timeout: 5000 });
+
+    // GIVEN suggestions are populated from tags used across all books
+    const suggestions = page.locator('[data-testid="book-detail-tag-suggestions"]');
+    await expect(suggestions).toBeVisible({ timeout: 5000 });
+
+    const firstSuggestion = suggestions.locator('[data-testid^="book-detail-tag-suggest-"]').first();
+    await expect(firstSuggestion).toBeVisible({ timeout: 5000 });
+    const suggestTestId = await firstSuggestion.getAttribute("data-testid");
+    const tag = suggestTestId!.replace("book-detail-tag-suggest-", "");
+
+    // WHEN the suggestion chip is clicked
+    await firstSuggestion.click();
+
+    // THEN it becomes an active chip and leaves the suggestion list
+    await expect(page.locator(`[data-testid="book-detail-tag-${tag}"]`)).toBeVisible({ timeout: 5000 });
+    await expect(page.locator(`[data-testid="book-detail-tag-suggest-${tag}"]`)).toHaveCount(0, { timeout: 5000 });
+  });
 });
+
+test.describe("Bookshelf - Mobile Category UI", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("collapsed header shows logo, category pill and search icon", async ({ page }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    await expect(page.locator('[data-testid="category-pill"]')).toBeVisible();
+    await expect(page.locator('[data-testid="search-expand"]')).toBeVisible();
+    await expect(page.locator('[data-testid="pc-sidebar"]')).not.toBeVisible();
+    await expect(page.locator('[data-testid="category-pill"]')).toContainText("全部");
+  });
+
+  test("search icon expands input and back arrow collapses it", async ({ page }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    await page.locator('[data-testid="search-expand"]').click();
+    await expect(page.locator('[data-testid="search-input"]')).toBeVisible();
+    await expect(page.locator('[data-testid="search-back"]')).toBeVisible();
+    await expect(page.locator('[data-testid="category-pill"]')).toHaveCount(0);
+
+    await page.locator('[data-testid="search-back"]').click();
+    await expect(page.locator('[data-testid="category-pill"]')).toBeVisible();
+    await expect(page.locator('[data-testid="search-expand"]')).toBeVisible();
+  });
+
+  test("clear button empties query but keeps search expanded", async ({ page }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    await page.locator('[data-testid="search-expand"]').click();
+    await page.locator('[data-testid="search-input"]').fill("三体");
+    await expect(page.locator('[data-testid="search-clear"]')).toBeVisible();
+
+    await page.locator('[data-testid="search-clear"]').click();
+    await expect(page.locator('[data-testid="search-input"]')).toHaveValue("");
+    await expect(page.locator('[data-testid="search-input"]')).toBeVisible();
+  });
+
+  test("pill opens picker, selecting a category filters and updates pill", async ({ page }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    await page.locator('[data-testid="category-pill"]').click();
+    await expect(page.locator('[data-testid="category-picker"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid="category-picker-check-all"]')).toBeVisible();
+
+    await page.locator('[data-testid="category-picker-row-generated"]').click();
+    await expect(page.locator('[data-testid="category-picker"]')).not.toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid="category-pill"]')).toContainText("AI 生成");
+  });
+
+  test("picker bridges to category manager", async ({ page }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    await page.locator('[data-testid="category-pill"]').click();
+    await expect(page.locator('[data-testid="category-picker"]')).toBeVisible({ timeout: 5000 });
+
+    await page.locator('[data-testid="category-picker-manage"]').click();
+    await expect(page.locator('[data-testid="category-manager"]')).toBeVisible({ timeout: 5000 });
+  });
+});
+
+test.describe("Bookshelf - Small Phone Header (iPhone SE)", () => {
+  test.use({ viewport: { width: 375, height: 667 } });
+
+  test("header does not overflow horizontally and all controls fit", async ({ page }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    const header = page.locator('[data-testid="header-bar"]');
+    await expect(header).toBeVisible();
+
+    const overflow = await header.evaluate((el) => el.scrollWidth - el.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(1);
+
+    await expect(page.locator('[data-testid="category-pill"]')).toBeVisible();
+    await expect(page.locator('[data-testid="search-expand"]')).toBeVisible();
+    await expect(page.locator('[data-testid="view-mode-grid"]')).toBeVisible();
+    await expect(page.locator('[data-testid="view-mode-list"]')).toBeVisible();
+    await expect(page.locator('[data-testid="sort-toggle"]')).toBeVisible();
+  });
+
+  test("long active category label stays within viewport", async ({ page }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    await page.locator('[data-testid="category-pill"]').click();
+    await expect(page.locator('[data-testid="category-picker"]')).toBeVisible({ timeout: 5000 });
+    await page.locator('[data-testid="category-picker-row-uncategorized"]').click();
+    await expect(page.locator('[data-testid="category-picker"]')).not.toBeVisible({ timeout: 5000 });
+
+    const header = page.locator('[data-testid="header-bar"]');
+    const overflow = await header.evaluate((el) => el.scrollWidth - el.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(1);
+  });
+});
+
+

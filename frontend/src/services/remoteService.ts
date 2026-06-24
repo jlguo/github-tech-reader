@@ -9,6 +9,7 @@
 import type {
   IDataService,
   RemoteBook,
+  RemoteBookmark,
   RemoteCategory,
   CategoryInput,
   BookContentResult,
@@ -268,5 +269,34 @@ export class RemoteDataService implements IDataService {
         metadata: metadata ? JSON.stringify(metadata) : undefined,
       }),
     });
+  }
+
+  // ── Bookmarks ──────────────────────────────────────────────────
+
+  async getBookmarks(bookId: string): Promise<RemoteBookmark[]> {
+    const r = await fetch(`${this.#base}/bookmarks/${bookId}`);
+    if (!r.ok) throw new Error(`GET /bookmarks/${bookId} failed: ${r.status}`);
+    return r.json();
+  }
+
+  async addBookmark(
+    bookId: string,
+    label: string,
+    anchor: string,
+  ): Promise<RemoteBookmark> {
+    const r = await fetch(`${this.#base}/bookmarks/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ book_id: bookId, label, anchor }),
+    });
+    if (!r.ok) throw new Error(`POST /bookmarks failed: ${r.status}`);
+    return r.json();
+  }
+
+  async deleteBookmark(bookmarkId: string): Promise<void> {
+    const r = await fetch(`${this.#base}/bookmarks/${bookmarkId}`, {
+      method: "DELETE",
+    });
+    if (!r.ok) throw new Error(`DELETE /bookmarks/${bookmarkId} failed: ${r.status}`);
   }
 }

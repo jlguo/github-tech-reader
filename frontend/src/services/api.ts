@@ -28,6 +28,14 @@ export interface RemoteBook {
   tags?: string[];
 }
 
+export interface RemoteBookmark {
+  id: string;
+  book_id: string;
+  label: string;
+  anchor: string; // JSON string of the anchor envelope
+  created_at: string;
+}
+
 export interface RemoteCategory {
   id: string;
   key: string;
@@ -132,6 +140,11 @@ export interface IDataService {
     completed: boolean,
     metadata?: Record<string, unknown>,
   ): Promise<void>;
+
+  // Bookmarks
+  getBookmarks(bookId: string): Promise<RemoteBookmark[]>;
+  addBookmark(bookId: string, label: string, anchor: string): Promise<RemoteBookmark>;
+  deleteBookmark(bookmarkId: string): Promise<void>;
 }
 
 // ── Factory ────────────────────────────────────────────────────────

@@ -281,6 +281,9 @@ async def get_book_cover(book_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.delete("/books/{repo_id}")
 async def delete_book(repo_id: str, db: AsyncSession = Depends(get_db)):
+    from app.models.bookmark import Bookmark
+    await db.execute(delete(Bookmark).where(Bookmark.book_id == repo_id))
+
     gen_result = await db.execute(
         select(BookGeneration).where(BookGeneration.repo_id == repo_id)
     )
@@ -300,6 +303,7 @@ async def delete_book(repo_id: str, db: AsyncSession = Depends(get_db)):
         await db.commit()
 
     actual_repo_id = gen.repo_id if gen else repo_id
+    await db.execute(delete(Bookmark).where(Bookmark.book_id == actual_repo_id))
     repo_result = await db.execute(select(Repo).where(Repo.id == actual_repo_id))
     repo = repo_result.scalar()
     if not repo and gen:

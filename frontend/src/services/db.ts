@@ -164,6 +164,14 @@ export interface ReadingProgressRow {
   metadata: string;
 }
 
+export interface BookmarkRow {
+  id: string;
+  book_id: string;
+  label: string;
+  anchor: string;
+  created_at: string;
+}
+
 export interface BookListItem {
   repo_id: string;
   book_id: string;
@@ -321,6 +329,14 @@ CREATE TABLE IF NOT EXISTS imported_books (
     is_favorite INTEGER DEFAULT 0,
     added_at TEXT
 );
+
+CREATE TABLE IF NOT EXISTS bookmarks (
+    id TEXT PRIMARY KEY,
+    book_id TEXT NOT NULL,
+    label TEXT NOT NULL DEFAULT '',
+    anchor TEXT NOT NULL,
+    created_at TEXT
+);
 `;
 
 // ---------------------------------------------------------------------------
@@ -468,6 +484,7 @@ export class BookDatabase {
 
   async deleteRepo(id: string): Promise<void> {
     this.db.run('DELETE FROM repos WHERE id = ?', [id]);
+    this.db.run('DELETE FROM bookmarks WHERE book_id = ?', [id]);
     await this.contentStore.removeDir(`repos/${id}`);
     await this.contentStore.removeDir(`books/by-repo/${id}`);
     await this.persist();
@@ -701,6 +718,7 @@ export class BookDatabase {
 
   async deleteImportedBook(id: string): Promise<void> {
     this.db.run('DELETE FROM imported_books WHERE id = ?', [id]);
+    this.db.run('DELETE FROM bookmarks WHERE book_id = ?', [id]);
     await this.contentStore.removeDir(`imports/${id}`);
     await this.persist();
   }
@@ -812,6 +830,35 @@ export class BookDatabase {
     const row = stmt.step() ? stmt.getAsObject() : null;
     stmt.free();
     return row as unknown as ReadingProgressRow | null;
+  }
+
+  // -----------------------------------------------------------------------
+  // Bookmarks
+  // -----------------------------------------------------------------------
+
+  listBookmarks(bookId: string): BookmarkRow[] {
+    const stmt = this.db.prepare(
+      'SELECT * FROM bookmarks WHERE book_id = ? ORDER BY created_at DESC',
+    );
+    stmt.bind([bookId]);
+    const rows: BookmarkRow[] = [];
+    while (stmt.step()) rows.push(stmt.getAsObject() as unknown as BookmarkRow);
+    stmt.free();
+    return rows;
+  }
+
+  async insertBookmark(row: BookmarkRow): Promise<void> {
+    this.db.run(
+      `INSERT INTO bookmarks (id, book_id, label, anchor, created_at)
+       VALUES (?, ?, ?, ?, ?)`,
+      [row.id, row.book_id, row.label, row.anchor, row.created_at],
+    );
+    await this.persist();
+  }
+
+  async deleteBookmark(id: string): Promise<void> {
+    this.db.run('DELETE FROM bookmarks WHERE id = ?', [id]);
+    await this.persist();
   }
 
   // -----------------------------------------------------------------------

@@ -33,6 +33,7 @@ async def get_db() -> AsyncSession:
 async def init_db():
     import app.models.repo
     import app.models.imported_book
+    import app.models.bookmark
     from app.models.category import Category, SYSTEM_CATEGORIES
 
     parsed = urlparse(settings.database_url)

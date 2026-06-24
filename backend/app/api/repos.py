@@ -1,7 +1,7 @@
 import os
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
@@ -187,6 +187,9 @@ async def remove_repo(repo_id: str, db: AsyncSession = Depends(get_db)):
 
     if not repo and not imported:
         raise HTTPException(status_code=404, detail="Not found")
+
+    from app.models.bookmark import Bookmark
+    await db.execute(delete(Bookmark).where(Bookmark.book_id == repo_id))
 
     if repo:
         gen_result = await db.execute(

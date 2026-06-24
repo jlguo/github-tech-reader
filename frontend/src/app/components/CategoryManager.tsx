@@ -105,17 +105,25 @@ function ColorPicker({
   value,
   onChange,
   size = 44,
+  direction = "down",
+  testId,
 }: {
   value: string;
   onChange: (c: string) => void;
   size?: number;
+  direction?: "down" | "up";
+  testId?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const placement = direction === "up"
+    ? { bottom: "100%", marginBottom: 6 }
+    : { top: "100%", marginTop: 6 };
   return (
     <div style={{ position: "relative", flexShrink: 0 }}>
       <button
         type="button"
         onClick={() => setOpen(!open)}
+        data-testid={testId}
         style={{
           width: size,
           height: size,
@@ -133,11 +141,11 @@ function ColorPicker({
             onClick={() => setOpen(false)}
           />
           <div
+            data-testid={testId ? `${testId}-popover` : undefined}
             style={{
               position: "absolute",
-              top: "100%",
+              ...placement,
               left: 0,
-              marginTop: 6,
               zIndex: 10,
               background: "var(--card)",
               borderRadius: 10,
@@ -183,13 +191,18 @@ function IconPicker({
   onChange,
   color,
   size = 44,
+  direction = "down",
 }: {
   value: string;
   onChange: (n: string) => void;
   color: string;
   size?: number;
+  direction?: "down" | "up";
 }) {
   const [open, setOpen] = useState(false);
+  const placement = direction === "up"
+    ? { bottom: "100%", marginBottom: 6 }
+    : { top: "100%", marginTop: 6 };
   const CurrentIcon = resolveIcon(value);
   return (
     <div style={{ position: "relative", flexShrink: 0 }}>
@@ -219,9 +232,8 @@ function IconPicker({
           <div
             style={{
               position: "absolute",
-              top: "100%",
+              ...placement,
               left: 0,
-              marginTop: 6,
               zIndex: 10,
               background: "var(--card)",
               borderRadius: 10,
@@ -763,12 +775,13 @@ export function CategoryManager({
           </span>
 
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <ColorPicker value={newColor} onChange={setNewColor} />
+            <ColorPicker value={newColor} onChange={setNewColor} direction="up" testId="category-new-color" />
 
             <IconPicker
               value={newIcon}
               onChange={setNewIcon}
               color={newColor}
+              direction="up"
             />
 
             <Input

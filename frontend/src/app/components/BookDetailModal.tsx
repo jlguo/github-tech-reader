@@ -25,9 +25,10 @@ interface BookDetailModalProps {
   onUpdate?: (bookId: string, data: Record<string, any>) => void;
   onGenerate?: (bookId: string) => void;
   categories?: RemoteCategory[];
+  allTags?: string[];
 }
 
-export function BookDetailModal({ book, onClose, onToggleFavorite, onRead, onDelete, onUpdate, onGenerate, categories = [] }: BookDetailModalProps) {
+export function BookDetailModal({ book, onClose, onToggleFavorite, onRead, onDelete, onUpdate, onGenerate, categories = [], allTags = [] }: BookDetailModalProps) {
   const [tagInput, setTagInput] = useState("");
   if (!book) return null;
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -359,6 +360,33 @@ export function BookDetailModal({ book, onClose, onToggleFavorite, onRead, onDel
                 添加
               </button>
             </div>
+
+            {/* Existing tags quick-select */}
+            {(() => {
+              const suggestions = allTags.filter(tag => !(book.tags ?? []).includes(tag));
+              if (suggestions.length === 0) return null;
+              return (
+                <div className="mt-3" data-testid="book-detail-tag-suggestions">
+                  <span className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--muted-foreground)", fontFamily: "Inter, sans-serif" }}>
+                    可选标签
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {suggestions.map(tag => (
+                      <button
+                        key={tag}
+                        onClick={() => onUpdate?.(book.id, { tags: [...(book.tags ?? []), tag] })}
+                        className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition-colors hover:opacity-70"
+                        style={{ borderColor: "var(--border)", color: "var(--muted-foreground)", background: "transparent", fontFamily: "Inter, sans-serif" }}
+                        data-testid={`book-detail-tag-suggest-${tag}`}
+                      >
+                        <Plus size={10} />
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
             </div>
 

@@ -149,6 +149,22 @@ class BookUpdateRequest(BaseModel):
     is_favorite: bool | None = None
 
 
+class BookmarkCreateRequest(BaseModel):
+    book_id: str
+    label: str = ""
+    anchor: str  # JSON string of the anchor envelope
+
+
+class BookmarkResponse(BaseModel):
+    id: str
+    book_id: str
+    label: str
+    anchor: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class BookContentResponse(BaseModel):
     book_id: str
     title: str
