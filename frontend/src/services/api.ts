@@ -44,6 +44,7 @@ export interface RemoteCategory {
   color: string;
   sort_order: number;
   is_system: boolean;
+  labels: string[];
 }
 
 export interface CategoryInput {
@@ -51,6 +52,7 @@ export interface CategoryInput {
   icon?: string;
   color?: string;
   sort_order?: number;
+  labels?: string[];
 }
 
 export interface BookContentResult {

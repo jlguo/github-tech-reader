@@ -54,6 +54,7 @@ async def create_category(body: CategoryCreateRequest, db: AsyncSession = Depend
         label=label,
         icon=body.icon,
         color=body.color,
+        labels=body.labels,
         sort_order=sort_order,
         is_system=False,
     )
@@ -88,6 +89,8 @@ async def update_category(category_id: str, body: CategoryUpdateRequest, db: Asy
         category.icon = body.icon
     if body.color is not None:
         category.color = body.color
+    if body.labels is not None:
+        category.labels = body.labels
     if body.sort_order is not None:
         category.sort_order = body.sort_order
 

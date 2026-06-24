@@ -1,12 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, RotateCw } from "lucide-react";
 import { pptSlides } from "./readerData";
 import { Book } from "../bookData";
 import { getDataService } from "../../../services/api";
 import { useReadingProgress } from "../../hooks/useReadingProgress";
 import JSZip from "jszip";
+import type { BookmarkReaderApi, BookmarkAnchor, BookmarkCapableReaderProps } from "./bookmarkTypes";
 
-interface PptReaderProps {
+interface PptReaderProps extends BookmarkCapableReaderProps {
   book: Book;
 }
 
@@ -298,7 +299,7 @@ function TextSlide({ slide }: { slide: ParsedSlide }) {
   );
 }
 
-export function PptReader({ book }: PptReaderProps) {
+export function PptReader({ book, onBookmarkReady, restoreAnchor }: PptReaderProps) {
   const [current, setCurrent] = useState(0);
   const [slides, setSlides] = useState<ParsedSlide[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -311,6 +312,21 @@ export function PptReader({ book }: PptReaderProps) {
 
   const isDemo = book.isDemo === true;
   const slideCount = isDemo ? pptSlides.length : (slides?.length ?? 0);
+
+  const getAnchor = useCallback((): BookmarkAnchor | null => {
+    return slideCount > 0 ? { kind: "page", page: current + 1, total: slideCount } : null;
+  }, [current, slideCount]);
+
+  useEffect(() => {
+    onBookmarkReady?.({ getAnchor });
+    return () => onBookmarkReady?.(null);
+  }, [onBookmarkReady, getAnchor]);
+
+  useEffect(() => {
+    if (!restoreAnchor || restoreAnchor.kind !== "page" || slideCount === 0) return;
+    const target = Math.min(slideCount - 1, Math.max(0, restoreAnchor.page - 1));
+    setCurrent(target);
+  }, [restoreAnchor, slideCount]);
 
   useEffect(() => {
     if (slideCount === 0) return;

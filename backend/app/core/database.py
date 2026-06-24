@@ -55,6 +55,14 @@ async def init_db():
             if row and row[0] == 0:
                 await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} VARCHAR(512)"))
 
+        # Lightweight migration: add categories.labels JSON column if missing
+        result = await conn.execute(
+            text("SELECT COUNT(*) AS cnt FROM pragma_table_info('categories') WHERE name='labels'")
+        )
+        row = result.one_or_none()
+        if row and row[0] == 0:
+            await conn.execute(text("ALTER TABLE categories ADD COLUMN labels JSON DEFAULT '[]'"))
+
     async with async_session() as session:
         existing = (await session.execute(select(Category.key))).scalars().all()
         existing_keys = set(existing)
@@ -64,7 +72,24 @@ async def init_db():
                 existing_keys.add(spec["key"])
         await session.commit()
 
+        await _backfill_system_labels(session)
         await _reconcile_orphan_categories(session, existing_keys)
+
+
+async def _backfill_system_labels(session):
+    from app.models.category import Category, SYSTEM_CATEGORIES
+
+    changed = False
+    for spec in SYSTEM_CATEGORIES:
+        cat = (
+            await session.execute(select(Category).where(Category.key == spec["key"]))
+        ).scalar_one_or_none()
+        if cat is not None and not cat.labels and spec["labels"]:
+            cat.labels = spec["labels"]
+            changed = True
+    if changed:
+        await session.commit()
+
 
 
 async def _reconcile_orphan_categories(session, known_keys: set[str]):

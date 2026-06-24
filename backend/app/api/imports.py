@@ -179,6 +179,7 @@ async def upload_book(
             file_path=str(saved_path),
             size_bytes=bytes_read,
             cover_path=cover_path,
+            tags=["导入内容"],
         )
         session.add(book)
         await session.commit()
@@ -260,6 +261,7 @@ async def import_url(
             original_url=url,
             size_bytes=len(html.encode()),
             cover_path=cover_path,
+            tags=["导入内容"],
         )
         session.add(book)
         await session.commit()

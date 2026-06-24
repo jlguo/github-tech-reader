@@ -39,15 +39,15 @@ cd backend && uv run uvicorn app.main:app --reload --port 8000  # start API serv
 ```
 frontend/          # React SPA (Vite)
   src/
-    app/           # App component, pages
-    components/    # shadcn/ui, BookCard, Sidebar, readers
-    components/readers/  # ReaderModal (dispatcher) + Epub/Pdf/Html/File/Doc/Ppt/Excel/Txt/Manga readers
-    hooks/         # useBookStatus (SSE + poll fallback), useReadingProgress
+    app/           # App.tsx + components/ + hooks/
+      components/  # shadcn/ui, BookCard, BookCover, BookDetailModal, Sidebar, CategoryManager, CategoryPicker, readers/
+        readers/   # ReaderModal (dispatcher) + Epub/Pdf/Html/File/Doc/Ppt/Excel/Txt/Manga readers
+      hooks/       # useBookStatus (SSE + poll fallback), useReadingProgress
     services/      # Data layer abstraction + on-device PWA runtime
     utils/         # sanitize.ts (DOMPurify HTML sanitizer)
     styles/        # fonts, tailwind, theme CSS
-    assets/        # static assets (figma:asset/ resolves here)
     config/        # api.ts (API_BASE_URL, POLL_INTERVAL_MS)
+    main.tsx       # entrypoint
   public/
     sql-wasm.wasm  # SQLite engine (645 KB, loaded by sql.js)
     icon-192.png   # PWA icons (placeholder)
@@ -57,10 +57,11 @@ backend/           # FastAPI (Python)
   app/
     main.py        # FastAPI entrypoint, CORS, lifespan, SPA static serving (path-traversal guarded)
     core/          # config.py (settings, reader.db), database.py (async engine, PRAGMA foreign_keys=ON)
-    models/        # SQLAlchemy ORM models (Repo, BookGeneration, ImportedBook, ContentSection)
-    api/           # REST endpoints (repos, reading, agents, books, imports)
-    services/      # GitHub API client (httpx), file_storage (uploads + content persistence)
+    models/        # SQLAlchemy ORM (repo.py: Repo, ReadingProgress, ContentSection, BookGeneration; imported_book.py; category.py; bookmark.py)
+    api/           # REST endpoints (repos, reading, agents, books, imports, youtube, categories, bookmarks, schemas)
+    services/      # github (httpx), file_storage, cover_extractor, cover_renderer, youtube
     agents/        # CrewAI agent team for book chapter generation
+    utils/         # slugify.py (category key generation from label)
     events.py      # In-process pub/sub for SSE status streaming
   data/            # SQLite database (reader.db) + uploads/ (auto-created)
 ```
@@ -74,11 +75,11 @@ backend/           # FastAPI (Python)
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `api.ts` | 143 | `IDataService` interface + factory (`getDataService()`, `switchToLocal()`) |
-| `remoteService.ts` | 197 | `RemoteDataService` — 1:1 fetch wrapper for Python backend |
-| `localService.ts` | 424 | `LocalDataService` — full on-device implementation (sql.js + OPFS + book generation) |
-| `db.ts` | 840 | `BookDatabase` — SQLite via sql.js, 5 tables, full CRUD, book list JOIN |
-| `bookGenerator.ts` | 334 | Port of CrewAI pipeline (`crew.py`) to TypeScript: planning → cover → writing → review → publish |
+| `api.ts` | 192 | `IDataService` interface + factory (`getDataService()`, `switchToLocal()`, `resetDataService()`) |
+| `remoteService.ts` | 301 | `RemoteDataService` — 1:1 fetch wrapper for Python backend |
+| `localService.ts` | 549 | `LocalDataService` — full on-device implementation (sql.js + OPFS + book generation) |
+| `db.ts` | 1139 | `BookDatabase` — SQLite via sql.js, 7 tables, full CRUD, book list JOIN |
+| `bookGenerator.ts` | 397 | Port of CrewAI pipeline (`crew.py`) to TypeScript: planning → cover → writing → review → publish |
 | `githubApi.ts` | 196 | `GitHubApi` — GitHub REST API via browser fetch (readme, issues, repo info) |
 | `llmClient.ts` | 60 | `LlmClient` — OpenAI-compatible chat completions via browser fetch |
 
@@ -294,9 +295,22 @@ The `sandbox` directive (no `allow-scripts`/`allow-same-origin`) means the serve
 - **`useReadingProgress(bookId)`** hook — debounced (500ms) save with unmount flush via `useEffect` cleanup
 - **Scroll tracking**: `HtmlReader` and `FileReader` listen to iframe scroll events, compute position as `scrollTop / (scrollHeight - clientHeight)`
 - **Persistence**: `useReadingProgress.save()` → `IDataService.updateReadingProgress()` → POST `/api/reading/progress` → `reading_progress` table
-- **BookCard display**: progress bar shown when `book.progress > 0 && book.type !== "pdf"` (PDF progress hidden since Chrome's built-in viewer is sealed)
+- **BookCard display**: progress bar shown when `book.progress > 0` (both list and grid layouts)
 - **Backend**: `/api/books` returns `progress` (latest `reading_progress.position` by `updated_at`) and `progress_metadata`
 - **Multiple progress rows**: reading_progress table appends rows (no unique constraint); `/api/books` picks max by `updated_at`
+
+### Categories — Label-Based Membership (runtime-managed)
+
+Categories are **runtime-manageable** (created/edited/deleted via the UI) and membership is computed by **label matching**, not a stored per-book category field.
+
+- **Model** (`backend/app/models/category.py`): `Category` has `key` (slug, unique), `label` (display name), `icon`, `color`, `labels: list[str]` (JSON), `sort_order`, `is_system`. `key` is generated from `label` via `app/utils/slugify.py` (`[^a-z0-9]+ → -`; falls back to `cat-<uuid8>` for non-ASCII labels like Chinese).
+- **Membership semantics**: a book belongs to a category when **any** of the book's `tags` matches **any** of the category's defining `labels`. Multi-membership is allowed (a book can appear under several categories). A category with **empty `labels` matches nothing** (except `uncategorized`, handled client-side).
+- **`SYSTEM_CATEGORIES`** (seeded, `is_system=True`, cannot be deleted): `generated` (labels `["AI 生成"]`), `documents` (`["文档资料"]`), `imported` (`["导入内容"]`), `youtube` (`["视频"]`), `uncategorized` (`[]`, sort_order 90).
+- **Import-time tag injection** (so books auto-join system categories): uploads tagged `导入内容`, youtube tagged `视频`, documents tagged `文档资料`, generated tagged `AI 生成`. Keep these in sync with `SYSTEM_CATEGORIES` labels.
+- **Frontend membership** (`App.tsx` `bookMatchesCategory(book, key, categoryList)`): drives shelf filtering and per-category counts. The legacy `book.category` field is **vestigial** — never filter on it.
+- **`POST/PATCH /api/categories`** validates non-empty label + case-insensitive label/key uniqueness (409 on dup). **`DELETE`** is blocked for system categories (403); deleting a custom category reassigns the stale `Repo.category`/`ImportedBook.category` strings to `uncategorized` (cleanup of the vestigial field).
+- **Components**: `CategoryManager.tsx` (create/edit/delete dialog — create form is **collapsed by default** behind a "+ 新建分类" ghost button, expands on demand; uses a LabelPicker with suggestion chips for defining labels). `CategoryPicker.tsx` (mobile category selector). The per-book category `<select>` was **removed** from `BookDetailModal.tsx` — books are organized purely by editing their tags + category labels.
+- **Per-book tags**: `BookDetailModal` edits a book's `tags` (free-form, with quick-select chips of existing labels). Tags are what category labels match against.
 
 ### E2E Tests — **ALWAYS verify with Playwright**
 
@@ -311,7 +325,7 @@ npx playwright test --headed <spec>             # single spec, visible browser
 
 - **Config**: `playwright.config.ts` — testDir `tests/e2e`, 30s timeout, 1 retry, system Chrome via `executablePath`
 - **Web server**: reuses existing Vite on port 5173 (`reuseExistingServer: true`)
-- **Spec files**: `bookshelf.spec.ts` (layout, view toggle, search, sort, detail modal, import validation, progress smoke), `reader-interactions.spec.ts` (tap/swipe/scroll per reader), `reader-topbar-toggle.spec.ts` (center-tap topbar toggle across all reader types, real uploaded fixtures), `readers-local.spec.ts`, `readers-remote.spec.ts`, `youtube-import.spec.ts` (dialog UI, API integration, already_done flow)
+- **Spec files**: `bookshelf.spec.ts` (layout, view toggle, search, sort, detail modal, import validation, progress smoke, category filter + management, per-book tags, mobile category UI, iPhone SE header), `reader-interactions.spec.ts` (tap/swipe/scroll per reader), `reader-topbar-toggle.spec.ts` (center-tap topbar toggle across all reader types, real uploaded fixtures), `readers-local.spec.ts`, `readers-remote.spec.ts`, `youtube-import.spec.ts` (dialog UI, API integration, already_done flow), `bookmarks.spec.ts`, `cover-fallback.spec.ts`, `cover-integration.spec.ts`, `cover-real.spec.ts`, `epub-progress.spec.ts`, `pdf-progress.spec.ts`, `recent-reading.spec.ts`
 - **Smoke test tip**: use `waitUntil: "domcontentloaded"` — `waitUntil: "load"` blocks on OpenGraph cover images (8.5s each)
 
 #### Smoke Test Practices
@@ -340,10 +354,23 @@ npx playwright test --headed <spec>             # single spec, visible browser
 | GET | `/api/books` | List all books (join Repo+BookGeneration + ImportedBook) |
 | GET | `/api/books/{book_id}` | Get book content (supports generated + imported) |
 | GET | `/api/books/by-repo/{repo_id}` | Get book HTML content by repo ID |
+| GET | `/api/books/{book_id}/cover` | Get book cover image |
+| PATCH | `/api/books/{repo_id}` | Update book metadata |
+| DELETE | `/api/books/{repo_id}` | Delete book |
 | POST | `/api/imports/upload` | Upload file (multipart — epub/pdf/txt/doc/ppt/xlsx/html) |
 | POST | `/api/imports/import-url` | Import web page by URL |
 | GET | `/api/imports/{id}/file` | Serve uploaded file (inline, for iframe embedding) |
 | GET | `/api/imports/{id}/content` | Get imported URL content |
+| POST | `/api/youtube/generate-book` | Generate book from YouTube video |
+| GET | `/api/youtube/book-status/{repo_id}` | YouTube book generation status (polling) |
+| GET | `/api/youtube/book-status/{repo_id}/stream` | SSE YouTube book status stream |
+| GET | `/api/categories` | List categories |
+| POST | `/api/categories` | Create category |
+| PATCH | `/api/categories/{category_id}` | Update category |
+| DELETE | `/api/categories/{category_id}` | Delete category |
+| GET | `/api/bookmarks/{book_id}` | List bookmarks for a book |
+| POST | `/api/bookmarks` | Create bookmark |
+| DELETE | `/api/bookmarks/{bookmark_id}` | Delete bookmark |
 
 ### Import flow
 
@@ -392,6 +419,35 @@ The `docs/` directory contains a **Figma-generated prototype** with hardcoded mo
 - **Real data**: Backend APIs power the shelf with real GitHub repos, uploaded files, and URL imports
 - **Mock readers**: Epub/Pdf/Doc/Ppt/Excel readers still render mock/demo data; real generated books go through `HtmlReader` (same-origin srcDoc + sanitize). Uploaded files go through `FileReader` — HTML is fetched, DOMPurify-sanitized, and rendered via same-origin `srcDoc` (so the center-tap topbar script runs); binary files (pdf/epub/…) embed the sandboxed backend file URL directly.
 - **Design fidelity**: The warm cream/brown theme, typography, and layout from the prototype are preserved
+
+## Delegation — **HARD RULE**
+
+> **ALWAYS delegate work to sub-agents proactively.** Do not implement, explore, or
+> research alone when a specialized sub-agent can do it. This is non-negotiable.
+
+- **Decompose first**: break any non-trivial task into independent units and dispatch
+  each to a sub-agent — run them in parallel (`run_in_background=true`) whenever the
+  units have no shared state or sequential dependency.
+- **Match the agent to the work**:
+  - codebase search / pattern discovery → `explore`
+  - external libs, docs, OSS examples → `librarian`
+  - hard architecture / debugging / review → `oracle`
+  - frontend/UI/styling → `visual-engineering` category
+  - hard logic/algorithms → `ultrabrain` category
+  - autonomous end-to-end work → `deep` category
+- **Always pass `load_skills`**: evaluate available skills before every dispatch and
+  load the relevant ones (`[]` only when none match).
+- **Never duplicate delegated work**: once a sub-agent is searching/working, do not
+  manually redo the same search yourself — wait for results, then verify them.
+- **Verify after delegation**: confirm the deliverable works, follows existing patterns,
+  and met the stated MUST DO / MUST NOT DO constraints before marking complete.
+- **Consider git worktrees for new sessions / new topics**: when starting a new session
+  or a distinct new topic of work that could run in parallel with existing work,
+  consider creating a dedicated git worktree (and branch) for it so the new effort stays
+  isolated from the current working tree. This is a case-by-case judgment, not a hard
+  requirement — use it when the new topic would otherwise collide with in-progress
+  changes; skip it for small, self-contained edits in a single session. **Always get
+  explicit human approval before creating a worktree.**
 
 ## Conventions
 

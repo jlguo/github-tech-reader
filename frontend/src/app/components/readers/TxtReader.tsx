@@ -3,12 +3,13 @@ import { Minus, Plus, Moon, Sun } from "lucide-react";
 import { Book } from "../bookData";
 import { getDataService } from "../../../services/api";
 import { useReadingProgress } from "../../hooks/useReadingProgress";
+import type { BookmarkReaderApi, BookmarkAnchor, BookmarkCapableReaderProps } from "./bookmarkTypes";
 
-interface TxtReaderProps {
+interface TxtReaderProps extends BookmarkCapableReaderProps {
   book: Book;
 }
 
-export function TxtReader({ book }: TxtReaderProps) {
+export function TxtReader({ book, onBookmarkReady, restoreAnchor }: TxtReaderProps) {
   const [text, setText] = useState<string>("");
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +52,26 @@ export function TxtReader({ book }: TxtReaderProps) {
     const pct = Math.round((el.scrollTop / maxScroll) * 100);
     save({ percent: Math.max(pct, 1), completed: pct >= 95, metadata: {} });
   }, [save]);
+
+  const getAnchor = useCallback((): BookmarkAnchor | null => {
+    const el = scrollRef.current;
+    if (!el) return null;
+    const maxScroll = el.scrollHeight - el.clientHeight;
+    return { kind: "scroll", percent: maxScroll > 0 ? Math.round((el.scrollTop / maxScroll) * 100) : 0 };
+  }, []);
+
+  useEffect(() => {
+    onBookmarkReady?.({ getAnchor });
+    return () => onBookmarkReady?.(null);
+  }, [onBookmarkReady, getAnchor]);
+
+  useEffect(() => {
+    if (!restoreAnchor || restoreAnchor.kind !== "scroll" || !loaded) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    const maxScroll = el.scrollHeight - el.clientHeight;
+    if (maxScroll > 0) el.scrollTop = (restoreAnchor.percent / 100) * maxScroll;
+  }, [restoreAnchor, loaded]);
 
   if (error) {
     return (

@@ -1,6 +1,7 @@
 import type {
   IDataService,
   RemoteBook,
+  RemoteBookmark,
   RemoteCategory,
   CategoryInput,
   BookContentResult,
@@ -216,6 +217,7 @@ export class LocalDataService implements IDataService {
       color: r.color,
       sort_order: r.sort_order,
       is_system: !!r.is_system,
+      labels: r.labels,
     }));
   }
 
@@ -225,6 +227,7 @@ export class LocalDataService implements IDataService {
       icon: data.icon,
       color: data.color,
       sort_order: data.sort_order,
+      labels: data.labels,
     });
     return {
       id: row.id,
@@ -234,6 +237,7 @@ export class LocalDataService implements IDataService {
       color: row.color,
       sort_order: row.sort_order,
       is_system: !!row.is_system,
+      labels: row.labels,
     };
   }
 
@@ -243,6 +247,7 @@ export class LocalDataService implements IDataService {
       icon: data.icon,
       color: data.color,
       sort_order: data.sort_order,
+      labels: data.labels,
     });
     if (!row) throw new Error("Category not found");
     return {
@@ -253,6 +258,7 @@ export class LocalDataService implements IDataService {
       color: row.color,
       sort_order: row.sort_order,
       is_system: !!row.is_system,
+      labels: row.labels,
     };
   }
 
@@ -504,6 +510,40 @@ export class LocalDataService implements IDataService {
       updated_at: new Date().toISOString(),
       metadata: metadata ? JSON.stringify(metadata) : "{}",
     });
+    await this.#db.persist();
+  }
+
+  // ── Bookmarks ───────────────────────────────────────────────────
+
+  async getBookmarks(bookId: string): Promise<RemoteBookmark[]> {
+    return this.#db.listBookmarks(bookId).map((b) => ({
+      id: b.id,
+      book_id: b.book_id,
+      label: b.label,
+      anchor: b.anchor,
+      created_at: b.created_at,
+    }));
+  }
+
+  async addBookmark(
+    bookId: string,
+    label: string,
+    anchor: string,
+  ): Promise<RemoteBookmark> {
+    const row = {
+      id: crypto.randomUUID(),
+      book_id: bookId,
+      label,
+      anchor,
+      created_at: new Date().toISOString(),
+    };
+    await this.#db.insertBookmark(row);
+    await this.#db.persist();
+    return { ...row };
+  }
+
+  async deleteBookmark(bookmarkId: string): Promise<void> {
+    await this.#db.deleteBookmark(bookmarkId);
     await this.#db.persist();
   }
 }

@@ -541,6 +541,27 @@ test.describe("Bookshelf - Category Management", () => {
     await expect(page.locator('[data-testid="category-manager"]')).toBeVisible({ timeout: 5000 });
   }
 
+  async function openCreateForm(page: Page) {
+    await page.locator('[data-testid="category-new-toggle"]').click();
+    await expect(page.locator('[data-testid="category-new-form"]')).toBeVisible({ timeout: 5000 });
+  }
+
+  test("create form is collapsed by default and toggles open/closed", async ({ page }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await openCategoryManager(page);
+
+    await expect(page.locator('[data-testid="category-new-toggle"]')).toBeVisible();
+    await expect(page.locator('[data-testid="category-new-form"]')).toHaveCount(0);
+
+    await page.locator('[data-testid="category-new-toggle"]').click();
+    await expect(page.locator('[data-testid="category-new-form"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid="category-new-toggle"]')).toHaveCount(0);
+
+    await page.locator('[data-testid="category-new-cancel"]').click();
+    await expect(page.locator('[data-testid="category-new-form"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="category-new-toggle"]')).toBeVisible();
+  });
+
   test("manager lists system categories and marks them non-deletable", async ({ page }) => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await openCategoryManager(page);
@@ -558,6 +579,7 @@ test.describe("Bookshelf - Category Management", () => {
     await openCategoryManager(page);
 
     const name = `测试分类${Date.now().toString().slice(-5)}`;
+    await openCreateForm(page);
     await page.locator('[data-testid="category-new-name"]').fill(name);
     await page.locator('[data-testid="category-add-btn"]').click();
 
@@ -575,6 +597,7 @@ test.describe("Bookshelf - Category Management", () => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await openCategoryManager(page);
 
+    await openCreateForm(page);
     await page.locator('[data-testid="category-new-name"]').fill("AI 生成");
     await page.locator('[data-testid="category-add-btn"]').click();
 
@@ -585,6 +608,7 @@ test.describe("Bookshelf - Category Management", () => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await openCategoryManager(page);
 
+    await openCreateForm(page);
     await page.locator('[data-testid="category-new-color"]').click();
     const popover = page.locator('[data-testid="category-new-color-popover"]');
     await expect(popover).toBeVisible({ timeout: 5000 });
@@ -605,6 +629,7 @@ test.describe("Bookshelf - Category Management", () => {
     await openCategoryManager(page);
 
     const name = `书架${Date.now().toString().slice(-5)}`;
+    await openCreateForm(page);
     await page.locator('[data-testid="category-new-name"]').fill(name);
     await page.locator('[data-testid="category-add-btn"]').click();
     await expect(page.locator('[data-testid^="category-row-"]', { hasText: name })).toBeVisible({ timeout: 5000 });
@@ -614,10 +639,43 @@ test.describe("Bookshelf - Category Management", () => {
 
     await expect(page.locator('[data-testid^="sidebar-category-"]', { hasText: name })).toBeVisible({ timeout: 5000 });
   });
+
+  test("custom category with a defining label collects matching books", async ({ page }) => {
+    test.setTimeout(60000);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await uploadFileViaUI(page, "progress-test");
+
+    const tag = `主题${Date.now().toString().slice(-5)}`;
+
+    const card = bookCard(page, "progress-test");
+    await expect(card).toBeVisible({ timeout: 15000 });
+    await card.click();
+    await expect(page.locator('[data-testid="book-detail-content"]')).toBeVisible({ timeout: 5000 });
+    await page.locator('[data-testid="book-detail-tag-input"]').fill(tag);
+    await page.locator('[data-testid="book-detail-tag-add"]').click();
+    await expect(page.locator(`[data-testid="book-detail-tag-${tag}"]`)).toBeVisible({ timeout: 5000 });
+    await page.locator('[data-testid="book-detail-close"]').click();
+
+    await openCategoryManager(page);
+    const name = `合集${Date.now().toString().slice(-5)}`;
+    await openCreateForm(page);
+    await page.locator('[data-testid="category-new-name"]').fill(name);
+    await page.locator('[data-testid="category-new-labels-input"]').fill(tag);
+    await page.locator('[data-testid="category-new-labels-input"]').press("Enter");
+    await expect(page.locator(`[data-testid="category-new-labels-chip-${tag}"]`)).toBeVisible({ timeout: 5000 });
+    await page.locator('[data-testid="category-add-btn"]').click();
+    await expect(page.locator('[data-testid^="category-row-"]', { hasText: name })).toBeVisible({ timeout: 5000 });
+
+    await page.keyboard.press("Escape");
+    await expect(page.locator('[data-testid="category-manager"]')).not.toBeVisible();
+
+    await page.locator('[data-testid^="sidebar-category-"]', { hasText: name }).click();
+    await expect(bookCard(page, "progress-test")).toBeVisible({ timeout: 15000 });
+  });
 });
 
 test.describe("Bookshelf - Per-Book Category & Tags", () => {
-  test("reassigns a book category and persists across reload", async ({ page }) => {
+  test("book joins a category when its tag matches a category label", async ({ page }) => {
     test.setTimeout(60000);
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await uploadFileViaUI(page, "progress-test");
@@ -627,8 +685,9 @@ test.describe("Bookshelf - Per-Book Category & Tags", () => {
     await card.click();
     await expect(page.locator('[data-testid="book-detail-content"]')).toBeVisible({ timeout: 5000 });
 
-    await page.locator('[data-testid="book-detail-category-select"]').click();
-    await page.getByRole("option", { name: /文档资料/ }).click();
+    await page.locator('[data-testid="book-detail-tag-input"]').fill("文档资料");
+    await page.locator('[data-testid="book-detail-tag-add"]').click();
+    await expect(page.locator('[data-testid="book-detail-tag-文档资料"]')).toBeVisible({ timeout: 5000 });
 
     await page.locator('[data-testid="book-detail-close"]').click();
     await page.reload({ waitUntil: "domcontentloaded" });

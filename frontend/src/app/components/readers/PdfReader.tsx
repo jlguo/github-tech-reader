@@ -9,16 +9,20 @@ import {
 } from "@embedpdf/react-pdf-viewer";
 import pdfiumWasmUrl from "@embedpdf/pdfium/pdfium.wasm?url";
 import { useReadingProgress } from "../../hooks/useReadingProgress";
+import type { BookmarkReaderApi, BookmarkAnchor, BookmarkCapableReaderProps } from "./bookmarkTypes";
 
-interface PdfReaderProps {
+interface PdfReaderProps extends BookmarkCapableReaderProps {
   book: Book;
 }
 
-export function PdfReader({ book }: PdfReaderProps) {
+export function PdfReader({ book, onBookmarkReady, restoreAnchor }: PdfReaderProps) {
   const [error, setError] = useState<string | null>(null);
   const [buffer, setBuffer] = useState<ArrayBuffer | null>(null);
   const { save } = useReadingProgress(book.id);
   const unsubscribeRef = useRef<(() => void) | null>(null);
+  const pageRef = useRef<number>(0);
+  const totalRef = useRef<number>(0);
+  const capabilityRef = useRef<{ scrollToPage: (o: { pageNumber: number; behavior?: "instant"|"smooth"|"auto"; alignY?: number }) => void } | null>(null);
 
   const absWasmUrl = useMemo(
     () => new URL(pdfiumWasmUrl, window.location.href).toString(),
@@ -57,11 +61,14 @@ export function PdfReader({ book }: PdfReaderProps) {
         if (!scroll) return;
         const capability = scroll.provides();
         if (!capability) return;
+        capabilityRef.current = { scrollToPage: (o) => capability.scrollToPage(o) };
         unsubscribeRef.current?.();
         unsubscribeRef.current = capability.onPageChange((evt: PageChangeEvent) => {
           const total = evt.totalPages;
           if (!total || total <= 0) return;
           const page = evt.pageNumber;
+          pageRef.current = page;
+          totalRef.current = total;
           const pct = Math.round((page / total) * 100);
           save({
             percent: Math.max(Math.min(pct, 100), 1),
@@ -75,6 +82,22 @@ export function PdfReader({ book }: PdfReaderProps) {
     },
     [save],
   );
+
+  const getAnchor = useCallback((): BookmarkAnchor | null => {
+    return (pageRef.current && totalRef.current)
+      ? { kind: "page", page: pageRef.current, total: totalRef.current }
+      : null;
+  }, []);
+
+  useEffect(() => {
+    onBookmarkReady?.({ getAnchor });
+    return () => onBookmarkReady?.(null);
+  }, [onBookmarkReady, getAnchor]);
+
+  useEffect(() => {
+    if (!restoreAnchor || restoreAnchor.kind !== "page" || !capabilityRef.current) return;
+    capabilityRef.current.scrollToPage({ pageNumber: restoreAnchor.page, behavior: "auto", alignY: 0 });
+  }, [restoreAnchor]);
 
   if (error) {
     return (

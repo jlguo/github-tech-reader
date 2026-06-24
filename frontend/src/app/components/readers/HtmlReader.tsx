@@ -5,10 +5,11 @@ import { htmlContent as mockContent } from "./readerData";
 import { getDataService, type IDataService } from "../../../services/api";
 import { useReadingProgress } from "../../hooks/useReadingProgress";
 import { sanitizeHtml } from "../../../utils/sanitize";
+import type { BookmarkReaderApi, BookmarkAnchor, BookmarkCapableReaderProps } from "./bookmarkTypes";
 
 const SCROLL_DEBOUNCE_MS = 2000;
 
-interface HtmlReaderProps { book: Book; }
+interface HtmlReaderProps extends BookmarkCapableReaderProps { book: Book; }
 
 interface TocItem { id: string; title: string; level: number; }
 
@@ -70,7 +71,7 @@ function wrapCoverHtml(html: string): string {
 </head><body>${html}</body></html>`;
 }
 
-export function HtmlReader({ book }: HtmlReaderProps) {
+export function HtmlReader({ book, onBookmarkReady, restoreAnchor }: HtmlReaderProps) {
   const [realHtml, setRealHtml] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [activeId, setActiveId] = useState("s0");
@@ -82,6 +83,7 @@ export function HtmlReader({ book }: HtmlReaderProps) {
   const { save } = useReadingProgress(book.id);
   const [showCover, setShowCover] = useState(false);
   const coverHtmlRef = useRef<string>("");
+  const pendingScrollRef = useRef<number | null>(null);
 
   useEffect(() => {
     getDataService().then(setService);
@@ -131,11 +133,45 @@ export function HtmlReader({ book }: HtmlReaderProps) {
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
+  const getAnchor = useCallback((): BookmarkAnchor | null => {
+    const iframe = wrapperRef.current?.querySelector("iframe");
+    const doc = iframe?.contentDocument;
+    if (!doc) return null;
+    const de = doc.documentElement;
+    const maxScroll = de.scrollHeight - de.clientHeight;
+    return { kind: "scroll", percent: maxScroll > 0 ? Math.round((de.scrollTop / maxScroll) * 100) : 0 };
+  }, []);
+
+  useEffect(() => {
+    onBookmarkReady?.({ getAnchor });
+    return () => onBookmarkReady?.(null);
+  }, [onBookmarkReady, getAnchor]);
+
+  useEffect(() => {
+    if (!restoreAnchor || restoreAnchor.kind !== "scroll") return;
+    const iframe = wrapperRef.current?.querySelector("iframe");
+    const doc = iframe?.contentDocument;
+    if (doc) {
+      const de = doc.documentElement;
+      const maxScroll = de.scrollHeight - de.clientHeight;
+      if (maxScroll > 0) de.scrollTop = (restoreAnchor.percent / 100) * maxScroll;
+    } else {
+      pendingScrollRef.current = restoreAnchor.percent;
+    }
+  }, [restoreAnchor]);
+
   const handleContentLoad = useCallback(() => {
     const iframe = wrapperRef.current?.querySelector("iframe");
     if (!iframe?.contentDocument) return;
 
     const doc = iframe.contentDocument;
+
+    if (pendingScrollRef.current !== null) {
+      const de = doc.documentElement;
+      const maxScroll = de.scrollHeight - de.clientHeight;
+      if (maxScroll > 0) de.scrollTop = (pendingScrollRef.current / 100) * maxScroll;
+      pendingScrollRef.current = null;
+    }
 
     const onIntersect = (entries: IntersectionObserverEntry[]) => {
       for (const entry of entries) {

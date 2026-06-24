@@ -143,6 +143,7 @@ async def start_youtube_book_generation(
                 category="youtube",
                 source_type="youtube",
                 language="zh",
+                tags=["视频"],
             )
             db.add(repo)
         gen = BookGeneration(repo_id=repo.id, status="pending")

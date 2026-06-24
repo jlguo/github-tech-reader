@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   X,
   Pencil,
@@ -22,7 +22,7 @@ import {
   FileText,
   type LucideIcon,
 } from "lucide-react";
-import { Dialog, DialogContent, DialogTitle } from "./ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import type { RemoteCategory } from "../../services/api";
@@ -84,10 +84,12 @@ interface CategoryManagerProps {
   onClose: () => void;
   categories: RemoteCategory[];
   categoryCounts: Record<string, number>;
+  allTags: string[];
   onCreate: (data: {
     label: string;
     icon?: string;
     color?: string;
+    labels?: string[];
   }) => Promise<void>;
   onUpdate: (
     id: string,
@@ -96,6 +98,7 @@ interface CategoryManagerProps {
       icon: string;
       color: string;
       sort_order: number;
+      labels: string[];
     }>,
   ) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
@@ -287,19 +290,141 @@ function IconPicker({
   );
 }
 
+/* ── Label multi-select picker ── */
+function LabelPicker({
+  value,
+  onChange,
+  allTags,
+  testId,
+}: {
+  value: string[];
+  onChange: (labels: string[]) => void;
+  allTags: string[];
+  testId?: string;
+}) {
+  const [input, setInput] = useState("");
+  const toggle = (label: string) => {
+    onChange(value.includes(label) ? value.filter((l) => l !== label) : [...value, label]);
+  };
+  const addCustom = () => {
+    const label = input.trim();
+    if (!label) return;
+    if (!value.includes(label)) onChange([...value, label]);
+    setInput("");
+  };
+  const suggestions = allTags.filter((t) => !value.includes(t));
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }} data-testid={testId}>
+      <span style={{ fontSize: 12, color: "var(--muted-foreground)", fontFamily: "Inter, sans-serif" }}>
+        归属标签 · 含任一标签的书籍将归入该分类
+      </span>
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 8,
+          alignItems: "center",
+          padding: 10,
+          borderRadius: 10,
+          background: "var(--input-background)",
+          border: "1px solid var(--border)",
+        }}
+      >
+        {value.map((label) => (
+          <button
+            key={label}
+            type="button"
+            onClick={() => toggle(label)}
+            data-testid={testId ? `${testId}-chip-${label}` : undefined}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 5,
+              borderRadius: 20,
+              background: "var(--secondary)",
+              color: "var(--foreground)",
+              border: "none",
+              cursor: "pointer",
+              fontSize: 13,
+              padding: "5px 8px 5px 11px",
+              fontFamily: "Inter, sans-serif",
+            }}
+          >
+            {label}
+            <X size={13} style={{ color: "var(--muted-foreground)" }} />
+          </button>
+        ))}
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              addCustom();
+            }
+          }}
+          placeholder="添加标签…"
+          data-testid={testId ? `${testId}-input` : undefined}
+          style={{
+            flex: 1,
+            minWidth: 90,
+            border: "none",
+            outline: "none",
+            background: "transparent",
+            fontSize: 13,
+            color: "var(--foreground)",
+            fontFamily: "Inter, sans-serif",
+          }}
+        />
+      </div>
+      {suggestions.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, maxHeight: 96, overflowY: "auto" }}>
+          {suggestions.map((label) => (
+            <button
+              key={label}
+              type="button"
+              onClick={() => toggle(label)}
+              data-testid={testId ? `${testId}-suggest-${label}` : undefined}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+                borderRadius: 20,
+                background: "transparent",
+                color: "var(--muted-foreground)",
+                border: "1px solid var(--border)",
+                cursor: "pointer",
+                fontSize: 13,
+                padding: "5px 11px",
+                fontFamily: "Inter, sans-serif",
+              }}
+            >
+              <Plus size={12} />
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Main component ── */
 export function CategoryManager({
   open,
   onClose,
   categories,
   categoryCounts,
+  allTags,
   onCreate,
   onUpdate,
   onDelete,
 }: CategoryManagerProps) {
+  const [addMode, setAddMode] = useState(false);
   const [newLabel, setNewLabel] = useState("");
   const [newIcon, setNewIcon] = useState(DEFAULT_ICON);
   const [newColor, setNewColor] = useState(DEFAULT_COLOR);
+  const [newLabels, setNewLabels] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -307,8 +432,15 @@ export function CategoryManager({
   const [editLabel, setEditLabel] = useState("");
   const [editIcon, setEditIcon] = useState(DEFAULT_ICON);
   const [editColor, setEditColor] = useState(DEFAULT_COLOR);
+  const [editLabels, setEditLabels] = useState<string[]>([]);
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      (document.activeElement as HTMLElement | null)?.blur();
+    }
+  }, [open]);
 
   const sorted = [...categories].sort((a, b) => a.sort_order - b.sort_order);
 
@@ -316,6 +448,19 @@ export function CategoryManager({
     setNewLabel("");
     setNewIcon(DEFAULT_ICON);
     setNewColor(DEFAULT_COLOR);
+    setNewLabels([]);
+  };
+
+  const openAddForm = () => {
+    resetNewForm();
+    setError(null);
+    setAddMode(true);
+  };
+
+  const closeAddForm = () => {
+    resetNewForm();
+    setError(null);
+    setAddMode(false);
   };
 
   const handleCreate = async () => {
@@ -324,8 +469,9 @@ export function CategoryManager({
     setSubmitting(true);
     setError(null);
     try {
-      await onCreate({ label, icon: newIcon, color: newColor });
+      await onCreate({ label, icon: newIcon, color: newColor, labels: newLabels });
       resetNewForm();
+      setAddMode(false);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "创建失败");
     } finally {
@@ -338,6 +484,7 @@ export function CategoryManager({
     setEditLabel(cat.label);
     setEditIcon(cat.icon || DEFAULT_ICON);
     setEditColor(cat.color || DEFAULT_COLOR);
+    setEditLabels(cat.labels ?? []);
     setError(null);
   };
 
@@ -351,7 +498,7 @@ export function CategoryManager({
     if (!label) return;
     setError(null);
     try {
-      await onUpdate(id, { label, icon: editIcon, color: editColor });
+      await onUpdate(id, { label, icon: editIcon, color: editColor, labels: editLabels });
       setEditingId(null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "更新失败");
@@ -373,13 +520,16 @@ export function CategoryManager({
     <Dialog
       open={open}
       onOpenChange={(o) => {
-        if (!o) onClose();
+        if (!o) {
+          closeAddForm();
+          onClose();
+        }
       }}
     >
       <DialogContent
         className="sm:max-w-[600px] p-0 gap-0 overflow-hidden"
         data-testid="category-manager"
-        style={{ background: "var(--card)", borderRadius: 14 }}
+        style={{ background: "var(--card)", borderRadius: 14, maxHeight: "90vh", display: "flex", flexDirection: "column" }}
       >
         {/* hide the built-in close button — we use our own in the header */}
         <style>{`
@@ -388,6 +538,7 @@ export function CategoryManager({
 
         {/* hidden DialogTitle for Radix accessibility */}
         <DialogTitle style={{ display: "none" }}>管理分类</DialogTitle>
+        <DialogDescription style={{ display: "none" }}>管理书架分类与标签</DialogDescription>
 
         {/* ── Header ── */}
         <div
@@ -459,7 +610,8 @@ export function CategoryManager({
             display: "flex",
             flexDirection: "column",
             gap: 8,
-            maxHeight: 360,
+            flex: 1,
+            minHeight: 0,
             overflowY: "auto",
           }}
         >
@@ -496,70 +648,78 @@ export function CategoryManager({
               >
                 {isEditing ? (
                   /* ── EDIT MODE ── */
-                  <>
-                    <ColorPicker
-                      value={editColor}
-                      onChange={setEditColor}
-                      size={38}
-                    />
-                    <IconPicker
-                      value={editIcon}
-                      onChange={setEditIcon}
-                      color={editColor}
-                      size={38}
-                    />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <Input
-                        value={editLabel}
-                        onChange={(e) => setEditLabel(e.target.value)}
-                        data-testid={`category-edit-input-${cat.key}`}
-                        className="h-9"
-                        style={{ fontSize: 14 }}
-                        placeholder="分类名称"
+                  <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <ColorPicker
+                        value={editColor}
+                        onChange={setEditColor}
+                        size={38}
                       />
-                    </div>
-                    <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                      <button
-                        type="button"
-                        onClick={() => handleUpdate(cat.id)}
-                        data-testid={`category-edit-save-${cat.key}`}
-                        style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: 8,
-                          background: "var(--primary)",
-                          color: "white",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          border: "none",
-                          cursor: "pointer",
-                        }}
-                      >
-                        <Check size={15} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={cancelEdit}
-                        style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: 8,
-                          background: "var(--muted)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          border: "none",
-                          cursor: "pointer",
-                        }}
-                      >
-                        <X
-                          size={15}
-                          style={{ color: "var(--muted-foreground)" }}
+                      <IconPicker
+                        value={editIcon}
+                        onChange={setEditIcon}
+                        color={editColor}
+                        size={38}
+                      />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <Input
+                          value={editLabel}
+                          onChange={(e) => setEditLabel(e.target.value)}
+                          data-testid={`category-edit-input-${cat.key}`}
+                          className="h-9"
+                          style={{ fontSize: 14 }}
+                          placeholder="分类名称"
                         />
-                      </button>
+                      </div>
+                      <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdate(cat.id)}
+                          data-testid={`category-edit-save-${cat.key}`}
+                          style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: 8,
+                            background: "var(--primary)",
+                            color: "white",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            border: "none",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <Check size={15} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelEdit}
+                          style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: 8,
+                            background: "var(--muted)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            border: "none",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <X
+                            size={15}
+                            style={{ color: "var(--muted-foreground)" }}
+                          />
+                        </button>
+                      </div>
                     </div>
-                  </>
+                    <LabelPicker
+                      value={editLabels}
+                      onChange={setEditLabels}
+                      allTags={allTags}
+                      testId={`category-edit-labels-${cat.key}`}
+                    />
+                  </div>
                 ) : (
                   /* ── DISPLAY MODE ── */
                   <>
@@ -608,6 +768,27 @@ export function CategoryManager({
                       >
                         {count} 本书
                       </span>
+                      {(cat.labels ?? []).length > 0 && (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 2 }}>
+                          {(cat.labels ?? []).map((label) => (
+                            <span
+                              key={label}
+                              data-testid={`category-row-label-${cat.key}-${label}`}
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 500,
+                                color: "var(--muted-foreground)",
+                                background: "var(--secondary)",
+                                borderRadius: 6,
+                                padding: "3px 8px",
+                                fontFamily: "Inter, sans-serif",
+                              }}
+                            >
+                              {label}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     {/* system badge */}
@@ -753,77 +934,175 @@ export function CategoryManager({
           style={{ height: 1, background: "var(--border)", width: "100%" }}
         />
 
-        {/* ── New Category Form ── */}
+        {/* ── Footer: collapsed button OR expanded create form ── */}
         <div
           style={{
-            padding: "18px 20px",
-            background: "var(--card)",
-            display: "flex",
-            flexDirection: "column",
-            gap: 12,
+            padding: addMode ? "16px 20px" : "14px 20px",
+            background: addMode ? "var(--background)" : "var(--card)",
+            flexShrink: 0,
           }}
         >
-          <span
-            style={{
-              fontSize: 13,
-              fontWeight: 600,
-              color: "var(--foreground)",
-              fontFamily: "Inter, sans-serif",
-            }}
-          >
-            新建分类
-          </span>
-
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <ColorPicker value={newColor} onChange={setNewColor} direction="up" testId="category-new-color" />
-
-            <IconPicker
-              value={newIcon}
-              onChange={setNewIcon}
-              color={newColor}
-              direction="up"
-            />
-
-            <Input
-              value={newLabel}
-              onChange={(e) => setNewLabel(e.target.value)}
-              placeholder="输入分类名称..."
-              data-testid="category-new-name"
-              className="flex-1 h-11"
-              style={{
-                borderRadius: 10,
-                fontSize: 14,
-                borderColor: "var(--border)",
-                background: "var(--input-background)",
-              }}
-            />
-
-            <Button
+          {!addMode ? (
+            <button
               type="button"
-              onClick={handleCreate}
-              disabled={!newLabel.trim() || submitting}
-              data-testid="category-add-btn"
-              variant="default"
-              className="h-11"
+              onClick={openAddForm}
+              data-testid="category-new-toggle"
               style={{
+                width: "100%",
+                height: 46,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
                 borderRadius: 10,
-                padding: "0 20px",
+                border: "1px solid var(--border)",
+                background: "var(--card)",
+                color: "var(--primary)",
                 fontSize: 14,
-                fontWeight: 500,
-                gap: 7,
-                flexShrink: 0,
+                fontWeight: 600,
+                fontFamily: "Inter, sans-serif",
+                cursor: "pointer",
               }}
             >
-              {submitting ? (
-                "..."
-              ) : (
-                <>
-                  <Plus size={16} />
-                  添加
-                </>
-              )}
-            </Button>
-          </div>
+              <Plus size={16} />
+              新建分类
+            </button>
+          ) : (
+            <div
+              data-testid="category-new-form"
+              style={{
+                background: "var(--card)",
+                border: "1px solid var(--border)",
+                borderRadius: 12,
+                padding: 16,
+                display: "flex",
+                flexDirection: "column",
+                gap: 14,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: "var(--foreground)",
+                    fontFamily: "Inter, sans-serif",
+                  }}
+                >
+                  新建分类
+                </span>
+                <button
+                  type="button"
+                  onClick={closeAddForm}
+                  data-testid="category-new-close"
+                  aria-label="关闭新建分类"
+                  style={{
+                    width: 26,
+                    height: 26,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: 7,
+                    border: "none",
+                    background: "var(--muted)",
+                    color: "var(--muted-foreground)",
+                    cursor: "pointer",
+                  }}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <ColorPicker value={newColor} onChange={setNewColor} direction="up" testId="category-new-color" />
+
+                <IconPicker
+                  value={newIcon}
+                  onChange={setNewIcon}
+                  color={newColor}
+                  direction="up"
+                />
+
+                <Input
+                  value={newLabel}
+                  onChange={(e) => setNewLabel(e.target.value)}
+                  placeholder="输入分类名称..."
+                  data-testid="category-new-name"
+                  className="flex-1 h-11"
+                  style={{
+                    borderRadius: 10,
+                    fontSize: 14,
+                    borderColor: "var(--border)",
+                    background: "var(--input-background)",
+                  }}
+                />
+              </div>
+
+              <LabelPicker
+                value={newLabels}
+                onChange={setNewLabels}
+                allTags={allTags}
+                testId="category-new-labels"
+              />
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  alignItems: "center",
+                  justifyContent: "flex-end",
+                }}
+              >
+                <Button
+                  type="button"
+                  onClick={closeAddForm}
+                  data-testid="category-new-cancel"
+                  variant="secondary"
+                  className="h-10"
+                  style={{
+                    borderRadius: 10,
+                    padding: "0 18px",
+                    fontSize: 14,
+                    fontWeight: 500,
+                  }}
+                >
+                  取消
+                </Button>
+
+                <Button
+                  type="button"
+                  onClick={handleCreate}
+                  disabled={!newLabel.trim() || submitting}
+                  data-testid="category-add-btn"
+                  variant="default"
+                  className="h-10"
+                  style={{
+                    borderRadius: 10,
+                    padding: "0 20px",
+                    fontSize: 14,
+                    fontWeight: 500,
+                    gap: 7,
+                    flexShrink: 0,
+                  }}
+                >
+                  {submitting ? (
+                    "..."
+                  ) : (
+                    <>
+                      <Check size={16} />
+                      创建分类
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>

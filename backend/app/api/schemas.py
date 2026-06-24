@@ -121,6 +121,7 @@ class CategoryResponse(BaseModel):
     label: str
     icon: str
     color: str
+    labels: list[str] = []
     sort_order: int
     is_system: bool
 
@@ -131,6 +132,7 @@ class CategoryCreateRequest(BaseModel):
     label: str
     icon: str = "BookOpen"
     color: str = "#c17f3a"
+    labels: list[str] = []
     sort_order: int | None = None
 
 
@@ -138,6 +140,7 @@ class CategoryUpdateRequest(BaseModel):
     label: str | None = None
     icon: str | None = None
     color: str | None = None
+    labels: list[str] | None = None
     sort_order: int | None = None
 
 

@@ -1,19 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import * as XLSX from "xlsx";
 import { excelData } from "./readerData";
 import { Book } from "../bookData";
 import { getDataService } from "../../../services/api";
 import { useReadingProgress } from "../../hooks/useReadingProgress";
+import type { BookmarkReaderApi, BookmarkAnchor, BookmarkCapableReaderProps } from "./bookmarkTypes";
 
-interface ExcelReaderProps {
+interface ExcelReaderProps extends BookmarkCapableReaderProps {
   book: Book;
 }
 
 const MAX_ROWS = 100;
 const toolbarTabs = ["文件", "开始", "插入", "页面布局", "公式", "数据", "审阅", "视图"];
 
-export function ExcelReader({ book }: ExcelReaderProps) {
+export function ExcelReader({ book, onBookmarkReady, restoreAnchor }: ExcelReaderProps) {
   const isDemo = book.isDemo ?? false;
   const { save } = useReadingProgress(book.id);
   const [loading, setLoading] = useState(true);
@@ -47,6 +48,21 @@ export function ExcelReader({ book }: ExcelReaderProps) {
   const isHighlighted = (ri: number) => isDemo && excelData.highlights.includes(ri);
   const isGrowth = (cell: string) => isDemo && cell.startsWith("+");
   const isNegGrowth = (cell: string) => isDemo && cell.startsWith("-");
+
+  const getAnchor = useCallback((): BookmarkAnchor | null => {
+    return sheets.length > 0 ? { kind: "sheet", sheet: activeSheet, total: sheets.length } : null;
+  }, [activeSheet, sheets]);
+
+  useEffect(() => {
+    onBookmarkReady?.({ getAnchor });
+    return () => onBookmarkReady?.(null);
+  }, [onBookmarkReady, getAnchor]);
+
+  useEffect(() => {
+    if (!restoreAnchor || restoreAnchor.kind !== "sheet" || sheets.length === 0) return;
+    const target = Math.min(sheets.length - 1, Math.max(0, restoreAnchor.sheet));
+    setActiveSheet(target);
+  }, [restoreAnchor, sheets]);
 
   const getCellValue = () => {
     if (!selectedCell) return "";

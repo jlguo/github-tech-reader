@@ -1,16 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, RotateCcw, ZoomIn } from "lucide-react";
 import { mangaPages } from "./readerData";
 import { Book } from "../bookData";
 import { getDataService } from "../../../services/api";
 import { useReadingProgress } from "../../hooks/useReadingProgress";
 import JSZip from "jszip";
+import type { BookmarkReaderApi, BookmarkAnchor, BookmarkCapableReaderProps } from "./bookmarkTypes";
 
-interface MangaReaderProps {
+interface MangaReaderProps extends BookmarkCapableReaderProps {
   book: Book;
 }
 
-export function MangaReader({ book }: MangaReaderProps) {
+export function MangaReader({ book, onBookmarkReady, restoreAnchor }: MangaReaderProps) {
   const [page, setPage] = useState(0);
   const [direction, setDirection] = useState<"rtl" | "ltr">("rtl");
   const [zoom, setZoom] = useState(false);
@@ -28,6 +29,21 @@ export function MangaReader({ book }: MangaReaderProps) {
   }, [isDemo, imageUrls]);
 
   const totalPages = allImages.length;
+
+  const getAnchor = useCallback((): BookmarkAnchor | null => {
+    return totalPages > 0 ? { kind: "page", page: page + 1, total: totalPages } : null;
+  }, [page, totalPages]);
+
+  useEffect(() => {
+    onBookmarkReady?.({ getAnchor });
+    return () => onBookmarkReady?.(null);
+  }, [onBookmarkReady, getAnchor]);
+
+  useEffect(() => {
+    if (!restoreAnchor || restoreAnchor.kind !== "page" || totalPages === 0) return;
+    const target = Math.min(totalPages - 1, Math.max(0, restoreAnchor.page - 1));
+    setPage(target);
+  }, [restoreAnchor, totalPages]);
 
   useEffect(() => {
     save({ percent: totalPages > 0 ? Math.round((page + 1) / totalPages * 100) : 0, completed: page >= totalPages - 1, metadata: {} });

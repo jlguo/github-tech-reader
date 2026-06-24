@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, List, Type, Sun, Moon, Minus, Plus } from "lucide-react";
 import { epubContent } from "./readerData";
 import { Book } from "../bookData";
@@ -6,8 +6,9 @@ import { getDataService } from "../../../services/api";
 import { useReadingProgress } from "../../hooks/useReadingProgress";
 import ePub from "epubjs";
 import type { Book as EpubjsBook, NavItem, Rendition, Location } from "epubjs";
+import type { BookmarkReaderApi, BookmarkAnchor, BookmarkCapableReaderProps } from "./bookmarkTypes";
 
-interface EpubReaderProps {
+interface EpubReaderProps extends BookmarkCapableReaderProps {
   book: Book;
 }
 
@@ -22,7 +23,7 @@ function flattenToc(items: NavItem[]): NavItem[] {
   return result;
 }
 
-export function EpubReader({ book }: EpubReaderProps) {
+export function EpubReader({ book, onBookmarkReady, restoreAnchor }: EpubReaderProps) {
   const [page, setPage] = useState(0);
   const [showToc, setShowToc] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
@@ -40,6 +41,22 @@ export function EpubReader({ book }: EpubReaderProps) {
   const bookRef = useRef<EpubjsBook | null>(null);
 
   const { save } = useReadingProgress(book.id);
+
+  const getAnchor = useCallback((): BookmarkAnchor | null => {
+    const loc = renditionRef.current?.currentLocation();
+    const cfi = loc?.start?.cfi;
+    return cfi ? { kind: "cfi" as const, cfi, percent: currentPercent } : null;
+  }, [currentPercent]);
+
+  useEffect(() => {
+    onBookmarkReady?.({ getAnchor });
+    return () => onBookmarkReady?.(null);
+  }, [onBookmarkReady, getAnchor]);
+
+  useEffect(() => {
+    if (!restoreAnchor || restoreAnchor.kind !== "cfi" || !renditionRef.current) return;
+    renditionRef.current.display(restoreAnchor.cfi);
+  }, [restoreAnchor]);
 
   useEffect(() => {
     if (book.isDemo) return;

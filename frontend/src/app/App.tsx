@@ -17,6 +17,29 @@ const FILE_TYPE_TO_BOOK_TYPE: Record<string, BookType> = {
 
 const toBookType = (fileType: string | null | undefined): BookType =>
   FILE_TYPE_TO_BOOK_TYPE[(fileType || "html").toLowerCase()] ?? "html";
+
+// A book belongs to a category when any of its tags matches one of the
+// category's defining labels. Categories with no labels match nothing —
+// except "uncategorized", which collects books that match no other category.
+const bookMatchesCategory = (
+  book: Book,
+  catKey: string,
+  categories: RemoteCategory[],
+): boolean => {
+  const cat = categories.find(c => c.key === catKey);
+  if (!cat) return false;
+  const labels = cat.labels ?? [];
+  if (labels.length > 0) return book.tags.some(t => labels.includes(t));
+  if (cat.key === "uncategorized") {
+    return !categories.some(
+      c =>
+        c.key !== "uncategorized" &&
+        (c.labels ?? []).length > 0 &&
+        book.tags.some(t => (c.labels ?? []).includes(t)),
+    );
+  }
+  return false;
+};
 import { BookCard } from "./components/BookCard";
 import { BookCover } from "./components/BookCover";
 import { Sidebar } from "./components/Sidebar";
@@ -224,13 +247,13 @@ export default function App() {
     } catch {}
   };
 
-  const handleCreateCategory = async (data: { label: string; icon?: string; color?: string }) => {
+  const handleCreateCategory = async (data: { label: string; icon?: string; color?: string; labels?: string[] }) => {
     if (!service) return;
     const created = await service.createCategory(data);
     setCategoryList(prev => [...prev, created].sort((a, b) => a.sort_order - b.sort_order));
   };
 
-  const handleUpdateCategory = async (id: string, data: Partial<{ label: string; icon: string; color: string; sort_order: number }>) => {
+  const handleUpdateCategory = async (id: string, data: Partial<{ label: string; icon: string; color: string; sort_order: number; labels: string[] }>) => {
     if (!service) return;
     const updated = await service.updateCategory(id, data);
     setCategoryList(prev => prev.map(c => c.id === id ? updated : c).sort((a, b) => a.sort_order - b.sort_order));
@@ -241,10 +264,7 @@ export default function App() {
     const removed = categoryList.find(c => c.id === id);
     await service.deleteCategory(id);
     setCategoryList(prev => prev.filter(c => c.id !== id));
-    if (removed) {
-      setBookList(prev => prev.map(b => b.category === removed.key ? { ...b, category: "uncategorized" as BookCategory } : b));
-      if (activeCategory === removed.key) setActiveCategory("all");
-    }
+    if (removed && activeCategory === removed.key) setActiveCategory("all");
   };
 
   const handleGenerateBook = async (bookId: string) => {
@@ -291,7 +311,7 @@ export default function App() {
     if (activeSection === "favorites") result = result.filter(b => b.isFavorite);
     else if (activeSection === "recent") result = result.filter(b => b.lastRead).sort((a, b) => (b.lastRead || "") > (a.lastRead || "") ? 1 : -1);
     else if (activeSection === "shelf") {
-      if (activeCategory !== "all") result = result.filter(b => b.category === activeCategory);
+      if (activeCategory !== "all") result = result.filter(b => bookMatchesCategory(b, activeCategory, categoryList));
     }
 
     if (searchQuery) {
@@ -303,7 +323,7 @@ export default function App() {
     else if (sortBy === "progress") result = [...result].sort((a, b) => b.progress - a.progress);
 
     return result;
-  }, [bookList, activeCategory, activeSection, searchQuery, sortBy]);
+  }, [bookList, activeCategory, activeSection, searchQuery, sortBy, categoryList]);
 
   const recentBooks = useMemo(() => bookList.filter(b => b.lastRead).sort((a, b) => (b.lastRead || "") > (a.lastRead || "") ? 1 : -1).slice(0, 4), [bookList]);
 
@@ -316,7 +336,7 @@ export default function App() {
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = { all: bookList.length };
     for (const cat of categoryList) {
-      counts[cat.key] = bookList.filter(b => b.category === cat.key).length;
+      counts[cat.key] = bookList.filter(b => bookMatchesCategory(b, cat.key, categoryList)).length;
     }
     return counts;
   }, [bookList, categoryList]);
@@ -649,7 +669,6 @@ export default function App() {
           onDelete={handleDeleteBook}
           onUpdate={handleUpdateBook}
           onGenerate={handleGenerateBook}
-          categories={categoryList}
           allTags={allTagsMemo}
         />
       )}
@@ -674,6 +693,7 @@ export default function App() {
         onClose={() => setShowCategoryManager(false)}
         categories={categoryList}
         categoryCounts={categoryCounts}
+        allTags={allTagsMemo}
         onCreate={handleCreateCategory}
         onUpdate={handleUpdateCategory}
         onDelete={handleDeleteCategory}

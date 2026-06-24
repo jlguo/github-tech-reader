@@ -204,6 +204,7 @@ export interface CategoryRow {
   color: string;
   sort_order: number;
   is_system: number;
+  labels: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -220,8 +221,29 @@ const IMPORTED_BOOK_UPDATE_COLS = new Set([
   "title", "author", "description", "category", "tags", "is_favorite",
 ]);
 const CATEGORY_UPDATE_COLS = new Set([
-  "label", "icon", "color", "sort_order",
+  "label", "icon", "color", "sort_order", "labels",
 ]);
+
+function toCategoryRow(obj: Record<string, unknown>): CategoryRow {
+  let labels: string[] = [];
+  const raw = obj.labels;
+  if (typeof raw === "string" && raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) labels = parsed.map((l) => String(l));
+    } catch { /* malformed JSON → empty */ }
+  }
+  return {
+    id: String(obj.id),
+    key: String(obj.key),
+    label: String(obj.label),
+    icon: String(obj.icon),
+    color: String(obj.color),
+    sort_order: Number(obj.sort_order),
+    is_system: Number(obj.is_system),
+    labels,
+  };
+}
 
 function uuid(): string {
   return crypto.randomUUID();
@@ -311,7 +333,8 @@ CREATE TABLE IF NOT EXISTS categories (
     icon TEXT DEFAULT 'BookOpen',
     color TEXT DEFAULT '#c17f3a',
     sort_order INTEGER DEFAULT 0,
-    is_system INTEGER DEFAULT 0
+    is_system INTEGER DEFAULT 0,
+    labels TEXT DEFAULT '[]'
 );
 
 CREATE TABLE IF NOT EXISTS imported_books (
@@ -374,14 +397,16 @@ export class BookDatabase {
     try { db.run('ALTER TABLE reading_progress ADD COLUMN metadata TEXT DEFAULT \'{}\''); } catch { /* already exists */ }
     // Migration: add cover_html column to book_generations if missing
     try { db.run('ALTER TABLE book_generations ADD COLUMN cover_html TEXT'); } catch { /* already exists */ }
+    // Migration: add labels column to categories if missing
+    try { db.run('ALTER TABLE categories ADD COLUMN labels TEXT DEFAULT \'[]\''); } catch { /* already exists */ }
 
     // Seed system categories
     const SYSTEM_CATEGORIES = [
-      { key: "generated", label: "AI 生成", icon: "BookOpen", color: "#c17f3a", sort_order: 10, is_system: 1 },
-      { key: "documents", label: "文档资料", icon: "FileText", color: "#5c3d1e", sort_order: 20, is_system: 1 },
-      { key: "imported", label: "导入内容", icon: "Download", color: "#3d6b8a", sort_order: 30, is_system: 1 },
-      { key: "youtube", label: "视频", icon: "Youtube", color: "#7a2e1e", sort_order: 40, is_system: 1 },
-      { key: "uncategorized", label: "未分类", icon: "Folder", color: "#8a8a8a", sort_order: 90, is_system: 1 },
+      { key: "generated", label: "AI 生成", icon: "BookOpen", color: "#c17f3a", sort_order: 10, is_system: 1, labels: ["AI 生成"] },
+      { key: "documents", label: "文档资料", icon: "FileText", color: "#5c3d1e", sort_order: 20, is_system: 1, labels: ["文档资料"] },
+      { key: "imported", label: "导入内容", icon: "Download", color: "#3d6b8a", sort_order: 30, is_system: 1, labels: ["导入内容"] },
+      { key: "youtube", label: "视频", icon: "Youtube", color: "#7a2e1e", sort_order: 40, is_system: 1, labels: ["视频"] },
+      { key: "uncategorized", label: "未分类", icon: "Folder", color: "#8a8a8a", sort_order: 90, is_system: 1, labels: [] },
     ];
     const existingCatKeys = new Set(
       (db.exec("SELECT key FROM categories")[0]?.values ?? []).map((r) => String(r[0])),
@@ -389,10 +414,15 @@ export class BookDatabase {
     for (const cat of SYSTEM_CATEGORIES) {
       if (!existingCatKeys.has(cat.key)) {
         db.run(
-          "INSERT INTO categories (id, key, label, icon, color, sort_order, is_system) VALUES (?, ?, ?, ?, ?, ?, ?)",
-          [uuid(), cat.key, cat.label, cat.icon, cat.color, cat.sort_order, cat.is_system],
+          "INSERT INTO categories (id, key, label, icon, color, sort_order, is_system, labels) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          [uuid(), cat.key, cat.label, cat.icon, cat.color, cat.sort_order, cat.is_system, JSON.stringify(cat.labels)],
         );
         existingCatKeys.add(cat.key);
+      } else if (cat.labels.length > 0) {
+        db.run(
+          "UPDATE categories SET labels = ? WHERE key = ? AND (labels IS NULL OR labels = '' OR labels = '[]')",
+          [JSON.stringify(cat.labels), cat.key],
+        );
       }
     }
 
@@ -404,8 +434,8 @@ export class BookDatabase {
         const key = String(row[0]);
         if (!existingCatKeys.has(key)) {
           db.run(
-            "INSERT INTO categories (id, key, label, icon, color, sort_order, is_system) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            [uuid(), key, key, "Folder", "#8a8a8a", 0, 0],
+            "INSERT INTO categories (id, key, label, icon, color, sort_order, is_system, labels) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [uuid(), key, key, "Folder", "#8a8a8a", 0, 0, "[]"],
           );
           existingCatKeys.add(key);
         }
@@ -869,7 +899,7 @@ export class BookDatabase {
     const stmt = this.db.prepare("SELECT * FROM categories ORDER BY sort_order, label");
     const rows: CategoryRow[] = [];
     while (stmt.step()) {
-      rows.push(stmt.getAsObject() as unknown as CategoryRow);
+      rows.push(toCategoryRow(stmt.getAsObject()));
     }
     stmt.free();
     return rows;
@@ -878,7 +908,7 @@ export class BookDatabase {
   getCategoryByKey(key: string): CategoryRow | null {
     const stmt = this.db.prepare("SELECT * FROM categories WHERE key = ?");
     stmt.bind([key]);
-    const row = stmt.step() ? (stmt.getAsObject() as unknown as CategoryRow) : null;
+    const row = stmt.step() ? toCategoryRow(stmt.getAsObject()) : null;
     stmt.free();
     return row;
   }
@@ -888,6 +918,7 @@ export class BookDatabase {
     icon?: string;
     color?: string;
     sort_order?: number;
+    labels?: string[];
   }): Promise<CategoryRow> {
     const label = data.label.trim();
     if (!label) throw new Error("Label must not be empty");
@@ -919,11 +950,12 @@ export class BookDatabase {
       color: data.color ?? "#c17f3a",
       sort_order: sortOrder,
       is_system: 0,
+      labels: data.labels ?? [],
     };
 
     this.db.run(
-      "INSERT INTO categories (id, key, label, icon, color, sort_order, is_system) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      [row.id, row.key, row.label, row.icon, row.color, row.sort_order, row.is_system],
+      "INSERT INTO categories (id, key, label, icon, color, sort_order, is_system, labels) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      [row.id, row.key, row.label, row.icon, row.color, row.sort_order, row.is_system, JSON.stringify(row.labels)],
     );
     await this.persist();
     return row;
@@ -934,6 +966,7 @@ export class BookDatabase {
     icon: string;
     color: string;
     sort_order: number;
+    labels: string[];
   }>): Promise<CategoryRow | null> {
     const existing = this.db.prepare("SELECT * FROM categories WHERE id = ?");
     existing.bind([id]);
@@ -956,7 +989,11 @@ export class BookDatabase {
     for (const [key, value] of Object.entries(data)) {
       if (!CATEGORY_UPDATE_COLS.has(key)) continue;
       setClauses.push(`${key} = ?`);
-      values.push((value ?? null) as SqlValue);
+      if (key === "labels") {
+        values.push(JSON.stringify(value ?? []));
+      } else {
+        values.push((value ?? null) as SqlValue);
+      }
     }
     if (setClauses.length > 0) {
       values.push(id);
@@ -966,7 +1003,7 @@ export class BookDatabase {
 
     const updated = this.db.prepare("SELECT * FROM categories WHERE id = ?");
     updated.bind([id]);
-    const result = updated.step() ? (updated.getAsObject() as unknown as CategoryRow) : null;
+    const result = updated.step() ? toCategoryRow(updated.getAsObject()) : null;
     updated.free();
     return result;
   }
@@ -992,6 +1029,7 @@ export class BookDatabase {
     this.db.run('DELETE FROM content_sections WHERE repo_id = ?', [repoId]);
     this.db.run('DELETE FROM reading_progress WHERE repo_id = ?', [repoId]);
     this.db.run('DELETE FROM imported_books WHERE id = ?', [repoId]);
+    this.db.run('DELETE FROM bookmarks WHERE book_id = ?', [repoId]);
     await this.contentStore.removeDir(`repos/${repoId}`);
     await this.contentStore.removeDir(`books/by-repo/${repoId}`);
     await this.contentStore.removeDir(`imports/${repoId}`);

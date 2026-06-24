@@ -1,7 +1,8 @@
 import { BookOpen, BookMarked, Lightbulb, GraduationCap, FileText, Smile, Folder, Youtube, Rocket, Code, Film, Music, Newspaper, Briefcase, Globe, Star, Download, Check, Settings2, type LucideIcon } from "lucide-react";
 import type { BookCategory } from "./bookData";
 import type { RemoteCategory } from "../../services/api";
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "./ui/drawer";
+import { useEffect } from "react";
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from "./ui/drawer";
 
 const iconMap = {
   BookOpen, BookMarked, Lightbulb, GraduationCap, FileText, Smile,
@@ -29,6 +30,12 @@ export function CategoryPicker({
   categoryCounts,
   onManageCategories,
 }: CategoryPickerProps) {
+  useEffect(() => {
+    if (open) {
+      (document.activeElement as HTMLElement | null)?.blur();
+    }
+  }, [open]);
+
   const allCategories = [{ key: "all", label: "全部", icon: "BookOpen" }, ...categories];
 
   const handleSelect = (key: string) => {
@@ -54,6 +61,7 @@ export function CategoryPicker({
           >
             选择分类
           </DrawerTitle>
+          <DrawerDescription style={{ display: "none" }}>选择要查看的书架分类</DrawerDescription>
         </DrawerHeader>
 
         {/* Category rows */}

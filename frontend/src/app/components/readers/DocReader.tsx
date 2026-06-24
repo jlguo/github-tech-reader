@@ -5,13 +5,14 @@ import { Book } from "../bookData";
 import { getDataService } from "../../../services/api";
 import { useReadingProgress } from "../../hooks/useReadingProgress";
 import { sanitizeHtml } from "../../../utils/sanitize";
+import type { BookmarkReaderApi, BookmarkAnchor, BookmarkCapableReaderProps } from "./bookmarkTypes";
 
 const SCROLL_DEBOUNCE_MS = 400;
 const FONT_MIN = 14;
 const FONT_MAX = 22;
 const FONT_DEFAULT = 16;
 
-interface DocReaderProps {
+interface DocReaderProps extends BookmarkCapableReaderProps {
   book: Book;
 }
 
@@ -193,7 +194,7 @@ function DocToolbar({ title, theme, darkMode, onToggleDark, fontSize, onFontChan
   );
 }
 
-export function DocReader({ book }: DocReaderProps) {
+export function DocReader({ book, onBookmarkReady, restoreAnchor }: DocReaderProps) {
   const [expandedSections, setExpandedSections] = useState<Record<number, boolean>>({ 0: true, 1: true, 2: true, 3: true });
   const [realHtml, setRealHtml] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -208,8 +209,36 @@ export function DocReader({ book }: DocReaderProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const { save } = useReadingProgress(book.id);
   const theme = docTheme(darkMode);
+  const pendingScrollRef = useRef<number | null>(null);
 
   const toggle = (i: number) => setExpandedSections(v => ({ ...v, [i]: !v[i] }));
+
+  const getAnchor = useCallback((): BookmarkAnchor | null => {
+    const iframe = wrapperRef.current?.querySelector("iframe");
+    const doc = iframe?.contentDocument;
+    if (!doc) return null;
+    const de = doc.documentElement;
+    const maxScroll = de.scrollHeight - de.clientHeight;
+    return { kind: "scroll", percent: maxScroll > 0 ? Math.round((de.scrollTop / maxScroll) * 100) : 0 };
+  }, []);
+
+  useEffect(() => {
+    onBookmarkReady?.({ getAnchor });
+    return () => onBookmarkReady?.(null);
+  }, [onBookmarkReady, getAnchor]);
+
+  useEffect(() => {
+    if (!restoreAnchor || restoreAnchor.kind !== "scroll") return;
+    const iframe = wrapperRef.current?.querySelector("iframe");
+    const doc = iframe?.contentDocument;
+    if (doc) {
+      const de = doc.documentElement;
+      const maxScroll = de.scrollHeight - de.clientHeight;
+      if (maxScroll > 0) de.scrollTop = (restoreAnchor.percent / 100) * maxScroll;
+    } else {
+      pendingScrollRef.current = restoreAnchor.percent;
+    }
+  }, [restoreAnchor]);
 
   useEffect(() => {
     if (book.isDemo) {
@@ -269,7 +298,12 @@ export function DocReader({ book }: DocReaderProps) {
 
     const doc = iframe.contentDocument;
 
-    if (book.progress > 0 && book.progress < 100) {
+    if (pendingScrollRef.current !== null) {
+      const de = doc.documentElement;
+      const maxScroll = de.scrollHeight - de.clientHeight;
+      if (maxScroll > 0) de.scrollTop = (pendingScrollRef.current / 100) * maxScroll;
+      pendingScrollRef.current = null;
+    } else if (book.progress > 0 && book.progress < 100) {
       const maxScroll = doc.documentElement.scrollHeight - doc.documentElement.clientHeight;
       if (maxScroll > 0) doc.documentElement.scrollTop = (book.progress / 100) * maxScroll;
     }
