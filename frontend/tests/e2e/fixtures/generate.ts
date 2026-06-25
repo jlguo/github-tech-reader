@@ -12,11 +12,11 @@ function ensureDir(dir: string) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
-function writeZip(filepath: string, entries: { name: string; data: Buffer | string; stored?: boolean }[]) {
-  const archiver = require("archiver");
+async function writeZip(filepath: string, entries: { name: string; data: Buffer | string; stored?: boolean }[]) {
+  const archiver = await import("archiver");
   ensureDir(path.dirname(filepath));
   const output = fs.createWriteStream(filepath);
-  const archive = archiver("zip", { zlib: { level: 9 } });
+  const archive = archiver.default("zip", { zlib: { level: 9 } });
   output.on("close", () => {});
   archive.pipe(output);
   for (const e of entries) {
@@ -64,7 +64,7 @@ function buildMultiPagePdf(nPages: number): string {
   return header + body + xref + trailer;
 }
 
-export function generateTestFiles() {
+export async function generateTestFiles() {
   ensureDir(FIXTURE_DIR);
 
   fs.writeFileSync(path.join(FIXTURE_DIR, "test.txt"), "Test TXT File\n\nThis is a test text file.\n".repeat(20));
@@ -192,7 +192,7 @@ startxref
   };
 
   for (const [filename, entries] of Object.entries(zipFiles)) {
-    writeZip(path.join(FIXTURE_DIR, filename), entries);
+    await writeZip(path.join(FIXTURE_DIR, filename), entries);
   }
 }
 

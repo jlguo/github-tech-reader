@@ -1,8 +1,9 @@
 import { X, BookOpen, Heart, Share2, Download, Trash2, Tag, Calendar, HardDrive, Pencil, Sparkles, Plus } from "lucide-react";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Book, typeConfig } from "./bookData";
 import { BookCover } from "./BookCover";
 import { useBookStatus, isProducing as checkIsProducing } from "../hooks/useBookStatus";
+import { getDataService } from "../../services/api";
 
 const PHASE_LABELS: Record<string, string> = {
   pending: "准备生成...",
@@ -13,6 +14,32 @@ const PHASE_LABELS: Record<string, string> = {
   reviewing: "正在审核内容...",
   publishing: "正在排版发布...",
 };
+
+const TYPE_EXTENSION: Record<string, string> = {
+  pdf: "pdf",
+  epub: "epub",
+  word: "docx",
+  ppt: "pptx",
+  excel: "xlsx",
+  txt: "txt",
+  html: "html",
+};
+
+function sanitizeFilename(name: string): string {
+  return (name || "download").replace(/[\\/:*?"<>|]/g, "_").trim() || "download";
+}
+
+function triggerBlobDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 
 interface BookDetailModalProps {
   book: Book | null;
@@ -32,12 +59,54 @@ export function BookDetailModal({ book, onClose, onToggleFavorite, onRead, onDel
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editDesc, setEditDesc] = useState("");
+  const [downloading, setDownloading] = useState(false);
+  const deleteConfirmRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (showDeleteConfirm) {
+      deleteConfirmRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [showDeleteConfirm]);
   const typeInfo = typeConfig[book.type] ?? { label: "FILE", color: "#5a5a5a", bg: "#f0f0f0" };
 
   const liveStatus = useBookStatus(!book.isDemo ? book.id : null, book.sourceType);
   const effectiveStatus = liveStatus?.status ?? book.genStatus;
   const effectivePhase = liveStatus?.current_phase ?? undefined;
   const producing = checkIsProducing(effectiveStatus);
+
+  const handleDownload = async () => {
+    if (downloading || producing) return;
+    setDownloading(true);
+    try {
+      const svc = await getDataService();
+      const baseName = sanitizeFilename(book.title);
+
+      if (book.sourceType === "file") {
+        const url = await svc.getImportedFileBlobUrl(book.id);
+        if (!url) throw new Error("文件不可用");
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`下载失败 (${res.status})`);
+        const blob = await res.blob();
+        const ext = TYPE_EXTENSION[book.type] ?? "bin";
+        triggerBlobDownload(blob, `${baseName}.${ext}`);
+        return;
+      }
+
+      const { html_content } =
+        book.category === "generated"
+          ? await svc.getBookByRepo(book.id)
+          : await svc.getBookContent(book.id);
+      if (!html_content) throw new Error("内容不可用");
+      triggerBlobDownload(
+        new Blob([html_content], { type: "text/html;charset=utf-8" }),
+        `${baseName}.html`,
+      );
+    } catch {
+      window.alert("下载失败，请稍后重试");
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
     <div
@@ -140,7 +209,9 @@ export function BookDetailModal({ book, onClose, onToggleFavorite, onRead, onDel
                 <Share2 size={16} />
               </button>
               <button
-                className="p-2 rounded-full transition-colors"
+                onClick={handleDownload}
+                disabled={downloading || producing}
+                className="p-2 rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{ background: "var(--muted)", color: "var(--muted-foreground)" }}
                 data-testid="book-detail-download"
               >
@@ -376,7 +447,7 @@ export function BookDetailModal({ book, onClose, onToggleFavorite, onRead, onDel
 
             {/* Delete confirmation */}
             {showDeleteConfirm && (
-              <div className="mt-3 p-3 rounded-xl border" style={{ borderColor: "var(--border)", background: "var(--muted)" }}>
+              <div ref={deleteConfirmRef} className="mt-3 p-3 rounded-xl border" style={{ borderColor: "var(--border)", background: "var(--muted)" }}>
                 <p className="text-xs mb-2" style={{ color: "var(--foreground)", fontFamily: "Inter, sans-serif" }}>确认删除？</p>
                 <div className="flex gap-2">
                   <button
