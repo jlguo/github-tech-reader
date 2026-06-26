@@ -1,0 +1,17 @@
+{
+  "_comment": "Shared cross-language contract. Backend (pytest) and frontend (Playwright/Node) both assert their tag-policy implementation matches these cases. Keep normalize_tags (Python) and normalizeTags (TS) identical.",
+  "normalize_cases": [
+    { "input": ["  React ", "react", "React", "", "Vue  JS"], "expected": ["React", "react", "Vue JS"] },
+    { "input": ["AI 生成", "AI  生成", " 导入内容 "], "expected": ["AI 生成", "导入内容"] },
+    { "input": [], "expected": [] },
+    { "input": ["  ", "\t", "\n"], "expected": [] },
+    { "input": ["a", "a", "a"], "expected": ["a"] }
+  ],
+  "system_categories": [
+    { "key": "generated", "label": "AI 生成", "labels": ["AI 生成"], "sort_order": 10 },
+    { "key": "documents", "label": "文档资料", "labels": ["文档资料"], "sort_order": 20 },
+    { "key": "imported", "label": "导入内容", "labels": ["导入内容"], "sort_order": 30 },
+    { "key": "youtube", "label": "视频", "labels": ["视频"], "sort_order": 40 },
+    { "key": "uncategorized", "label": "未分类", "labels": [], "sort_order": 90 }
+  ]
+}

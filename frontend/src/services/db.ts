@@ -1,4 +1,5 @@
 import initSqlJs, { Database as SqlJsDatabase, SqlValue } from 'sql.js';
+import { normalizeTags, TAG_GENERATED, TAG_IMPORTED } from './tagPolicy';
 
 // ---------------------------------------------------------------------------
 // ContentStore — OPFS-backed content file storage
@@ -224,6 +225,26 @@ const CATEGORY_UPDATE_COLS = new Set([
   "label", "icon", "color", "sort_order", "labels",
 ]);
 
+// sql.js cannot bind a JS array; these columns are stored as JSON strings.
+const JSON_STRING_COLS = new Set(["tags", "topics", "labels"]);
+
+function serializeColumnValue(key: string, value: unknown): SqlValue {
+  if (JSON_STRING_COLS.has(key) && Array.isArray(value)) {
+    return JSON.stringify(value);
+  }
+  return (value ?? null) as SqlValue;
+}
+
+function parseTagsJson(raw: SqlValue): string[] {
+  if (typeof raw !== "string" || !raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map((t) => String(t)) : [];
+  } catch {
+    return [];
+  }
+}
+
 function toCategoryRow(obj: Record<string, unknown>): CategoryRow {
   let labels: string[] = [];
   const raw = obj.labels;
@@ -442,6 +463,34 @@ export class BookDatabase {
       }
     }
 
+    // Migration: normalize tags + inject system tags on legacy rows (idempotent).
+    const doneRepoIds = new Set(
+      (db.exec("SELECT DISTINCT repo_id FROM book_generations WHERE status = 'done'")[0]?.values ?? [])
+        .map((r) => String(r[0])),
+    );
+    const repoRows = db.exec("SELECT id, tags FROM repos")[0]?.values ?? [];
+    for (const [id, rawTags] of repoRows) {
+      const current = parseTagsJson(rawTags);
+      let next = normalizeTags(current);
+      if (doneRepoIds.has(String(id)) && !next.includes(TAG_GENERATED)) {
+        next = normalizeTags([...next, TAG_GENERATED]);
+      }
+      if (JSON.stringify(next) !== JSON.stringify(current)) {
+        db.run("UPDATE repos SET tags = ? WHERE id = ?", [JSON.stringify(next), id as SqlValue]);
+      }
+    }
+    const importedRows = db.exec("SELECT id, tags FROM imported_books")[0]?.values ?? [];
+    for (const [id, rawTags] of importedRows) {
+      const current = parseTagsJson(rawTags);
+      let next = normalizeTags(current);
+      if (!next.includes(TAG_IMPORTED)) {
+        next = normalizeTags([...next, TAG_IMPORTED]);
+      }
+      if (JSON.stringify(next) !== JSON.stringify(current)) {
+        db.run("UPDATE imported_books SET tags = ? WHERE id = ?", [JSON.stringify(next), id as SqlValue]);
+      }
+    }
+
     const persistFn = makePersistFn(() => db);
     return new BookDatabase(db, persistFn);
   }
@@ -504,7 +553,7 @@ export class BookDatabase {
     for (const [key, value] of Object.entries(data)) {
       if (!REPO_UPDATE_COLS.has(key)) continue;
       setClauses.push(`${key} = ?`);
-      values.push(value ?? null);
+      values.push(serializeColumnValue(key, value));
     }
     if (setClauses.length === 0) return;
     values.push(id);
@@ -735,7 +784,7 @@ export class BookDatabase {
       if (key === 'id') continue;
       if (!IMPORTED_BOOK_UPDATE_COLS.has(key)) continue;
       setClauses.push(`${key} = ?`);
-      values.push(value ?? null);
+      values.push(serializeColumnValue(key, value));
     }
     if (setClauses.length === 0) return;
     values.push(id);
@@ -1044,11 +1093,11 @@ export class BookDatabase {
     for (const [key, value] of Object.entries(data)) {
       if (REPO_UPDATE_COLS.has(key)) {
         repoSetClauses.push(`${key} = ?`);
-        repoValues.push((value ?? null) as SqlValue);
+        repoValues.push(serializeColumnValue(key, value));
       }
       if (IMPORTED_BOOK_UPDATE_COLS.has(key)) {
         importedSetClauses.push(`${key} = ?`);
-        importedValues.push((value ?? null) as SqlValue);
+        importedValues.push(serializeColumnValue(key, value));
       }
     }
     if (repoSetClauses.length > 0) {

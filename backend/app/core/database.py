@@ -75,6 +75,7 @@ async def init_db():
 
         await _backfill_system_labels(session)
         await _reconcile_orphan_categories(session, existing_keys)
+        await _backfill_tags(session)
 
         # Reset stuck book generations: if the server crashed mid-generation,
         # rows may be left in an intermediate state (fetching/writing/reviewing).
@@ -123,4 +124,42 @@ async def _reconcile_orphan_categories(session, known_keys: set[str]):
         session.add(Category(key=key, label=key, is_system=False, sort_order=next_order))
         created = True
     if created:
+        await session.commit()
+
+
+async def _backfill_tags(session):
+    from app.models.repo import Repo, BookGeneration
+    from app.models.imported_book import ImportedBook
+    from app.models.category import TAG_GENERATED, TAG_IMPORTED
+    from app.core.tag_policy import normalize_tags
+
+    changed = False
+
+    done_repo_ids = set(
+        (
+            await session.execute(
+                select(BookGeneration.repo_id).where(BookGeneration.status == "done")
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    for repo in (await session.execute(select(Repo))).scalars().all():
+        tags = normalize_tags(repo.tags or [])
+        if repo.id in done_repo_ids and TAG_GENERATED not in tags:
+            tags = normalize_tags([*tags, TAG_GENERATED])
+        if tags != (repo.tags or []):
+            repo.tags = tags
+            changed = True
+
+    for book in (await session.execute(select(ImportedBook))).scalars().all():
+        tags = normalize_tags(book.tags or [])
+        if TAG_IMPORTED not in tags:
+            tags = normalize_tags([*tags, TAG_IMPORTED])
+        if tags != (book.tags or []):
+            book.tags = tags
+            changed = True
+
+    if changed:
         await session.commit()

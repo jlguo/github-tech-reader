@@ -27,3 +27,8 @@ SYSTEM_CATEGORIES = [
     {"key": "youtube", "label": "视频", "icon": "Youtube", "color": "#7a2e1e", "labels": ["视频"], "sort_order": 40},
     {"key": "uncategorized", "label": "未分类", "icon": "Folder", "color": "#8a8a8a", "labels": [], "sort_order": 90},
 ]
+
+TAG_GENERATED = "AI 生成"
+TAG_DOCUMENTS = "文档资料"
+TAG_IMPORTED = "导入内容"
+TAG_YOUTUBE = "视频"

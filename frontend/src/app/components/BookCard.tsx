@@ -2,6 +2,7 @@ import { memo } from "react";
 import { Heart, BookOpen } from "lucide-react";
 import { Book, typeConfig } from "./bookData";
 import { BookCover } from "./BookCover";
+import { isSystemTag } from "../../services/tagPolicy";
 
 interface BookCardProps {
   book: Book;
@@ -66,6 +67,39 @@ export const BookCard = memo(function BookCard({ book, viewMode, onToggleFavorit
               </button>
             </div>
           </div>
+          {(book.tags ?? []).length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1" data-testid={`book-card-tags-${book.id}`}>
+              {book.tags!.slice(0, 3).map(tag => {
+                const system = isSystemTag(tag);
+                return (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-full"
+                    style={{
+                      background: system ? "color-mix(in srgb, var(--accent) 14%, transparent)" : "var(--secondary)",
+                      color: system ? "var(--accent)" : "var(--secondary-foreground)",
+                      fontFamily: "Inter, sans-serif",
+                    }}
+                    data-testid={`book-card-tag-${book.id}-${tag}`}
+                  >
+                    {tag}
+                  </span>
+                );
+              })}
+              {(book.tags ?? []).length > 3 && (
+                <span
+                  className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-full"
+                  style={{
+                    background: "var(--secondary)",
+                    color: "var(--secondary-foreground)",
+                    fontFamily: "Inter, sans-serif",
+                  }}
+                >
+                  +{book.tags!.length - 3}
+                </span>
+              )}
+            </div>
+          )}
           {book.progress > 0 && (
             <div className="mt-2" data-testid={`book-progress-${book.id}`}>
               <div className="flex items-center justify-between mb-1">
@@ -127,6 +161,40 @@ export const BookCard = memo(function BookCard({ book, viewMode, onToggleFavorit
         <p className="text-xs mb-2 truncate" style={{ color: "var(--muted-foreground)", fontFamily: "Inter, sans-serif" }}>
           {book.author}
         </p>
+
+        {(book.tags ?? []).length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-1" data-testid={`book-card-tags-${book.id}`}>
+            {book.tags!.slice(0, 3).map(tag => {
+              const system = isSystemTag(tag);
+              return (
+                <span
+                  key={tag}
+                  className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-full"
+                  style={{
+                    background: system ? "color-mix(in srgb, var(--accent) 14%, transparent)" : "var(--secondary)",
+                    color: system ? "var(--accent)" : "var(--secondary-foreground)",
+                    fontFamily: "Inter, sans-serif",
+                  }}
+                  data-testid={`book-card-tag-${book.id}-${tag}`}
+                >
+                  {tag}
+                </span>
+              );
+            })}
+            {(book.tags ?? []).length > 3 && (
+              <span
+                className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-full"
+                style={{
+                  background: "var(--secondary)",
+                  color: "var(--secondary-foreground)",
+                  fontFamily: "Inter, sans-serif",
+                }}
+              >
+                +{book.tags!.length - 3}
+              </span>
+            )}
+          </div>
+        )}
 
         {book.progress > 0 && (
           <div className="mt-auto" data-testid={`book-progress-${book.id}`}>

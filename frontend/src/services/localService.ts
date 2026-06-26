@@ -12,6 +12,7 @@ import type {
 import { BookDatabase, ContentStore, type RepoRow } from "./db";
 import { GitHubApi, type RepoInfo } from "./githubApi";
 import { LlmClient } from "./llmClient";
+import { normalizeTags, TAG_GENERATED, TAG_IMPORTED } from "./tagPolicy";
 import {
   generateBookCover,
   generateBookContent,
@@ -156,7 +157,10 @@ export class LocalDataService implements IDataService {
   }
 
   async updateBook(bookId: string, data: Record<string, unknown>): Promise<void> {
-    await this.#db.updateBook(bookId, data);
+    const payload = "tags" in data
+      ? { ...data, tags: normalizeTags(data.tags as string[] | null | undefined) }
+      : data;
+    await this.#db.updateBook(bookId, payload);
     await this.#db.persist();
   }
 
@@ -235,7 +239,7 @@ export class LocalDataService implements IDataService {
       icon: data.icon,
       color: data.color,
       sort_order: data.sort_order,
-      labels: data.labels,
+      labels: data.labels ? normalizeTags(data.labels) : data.labels,
     });
     return {
       id: row.id,
@@ -255,7 +259,7 @@ export class LocalDataService implements IDataService {
       icon: data.icon,
       color: data.color,
       sort_order: data.sort_order,
-      labels: data.labels,
+      labels: data.labels ? normalizeTags(data.labels) : data.labels,
     });
     if (!row) throw new Error("Category not found");
     return {
@@ -364,6 +368,13 @@ export class LocalDataService implements IDataService {
         totalChapters: content.chapters.length,
         completedChapters: content.chapters.length,
       });
+
+      const currentTags = repo.tags ? JSON.parse(repo.tags) as string[] : [];
+      if (!currentTags.includes(TAG_GENERATED)) {
+        await this.#db.updateBook(repoId, {
+          tags: normalizeTags([...currentTags, TAG_GENERATED]),
+        });
+      }
     } catch (e) {
       await updateStatus("failed", { error_log: String(e) });
       throw e;
@@ -413,7 +424,7 @@ export class LocalDataService implements IDataService {
       author: author || "Unknown", source_type: "file", file_type: fileType,
       file_path: null, original_url: null,
       size_bytes: file.size, description: null,
-      category: "imported", tags: "[]", is_favorite: 0,
+      category: "imported", tags: JSON.stringify([TAG_IMPORTED]), is_favorite: 0,
       added_at: new Date().toISOString(),
     });
     await this.#db.persist();
@@ -435,7 +446,7 @@ export class LocalDataService implements IDataService {
       id, title: pageTitle, author: "Unknown", source_type: "url",
       file_type: "html", file_path: null, original_url: url,
       size_bytes: new Blob([html]).size,
-      description: null, category: "imported", tags: "[]",
+      description: null, category: "imported", tags: JSON.stringify([TAG_IMPORTED]),
       is_favorite: 0, added_at: new Date().toISOString(),
     });
     await this.#db.persist();

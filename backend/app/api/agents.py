@@ -2,10 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
+from sqlalchemy.orm import selectinload
 from datetime import datetime, timezone
 
 from app.core.database import get_db, async_session
 from app.models.repo import Repo, ContentSection, BookGeneration
+from app.models.category import TAG_GENERATED
+from app.core.tag_policy import normalize_tags
 from app.api.schemas import BookGenerationStatusResponse
 from app.agents.crew import generate_book_cover, generate_book_content
 from app.core.events import publish
@@ -116,7 +119,9 @@ async def _run_book_pipeline(
 
         async with async_session() as session:
             gen_result = await session.execute(
-                select(BookGeneration).where(BookGeneration.repo_id == repo_id)
+                select(BookGeneration)
+                .options(selectinload(BookGeneration.repo))
+                .where(BookGeneration.repo_id == repo_id)
             )
             gen = gen_result.scalar()
             if gen:
@@ -124,6 +129,8 @@ async def _run_book_pipeline(
                 gen.completed_chapters = len(chapters)
                 gen.current_phase = "done"
                 gen.updated_at = datetime.now(timezone.utc)
+                if gen.repo and TAG_GENERATED not in (gen.repo.tags or []):
+                    gen.repo.tags = normalize_tags([*(gen.repo.tags or []), TAG_GENERATED])
 
             await session.execute(
                 delete(ContentSection).where(

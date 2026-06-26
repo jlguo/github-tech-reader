@@ -4,6 +4,7 @@ import { Book, typeConfig } from "./bookData";
 import { BookCover } from "./BookCover";
 import { useBookStatus, isProducing as checkIsProducing } from "../hooks/useBookStatus";
 import { getDataService } from "../../services/api";
+import { isSystemTag } from "../../services/tagPolicy";
 
 const PHASE_LABELS: Record<string, string> = {
   pending: "准备生成...",
@@ -333,24 +334,33 @@ export const BookDetailModal = memo(function BookDetailModal({ book, onClose, on
               </span>
             </div>
             <div className="flex flex-wrap gap-1.5 mb-2">
-              {(book.tags ?? []).map(tag => (
-                <span
-                  key={tag}
-                  className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full"
-                  style={{ background: "var(--secondary)", color: "var(--secondary-foreground)", fontFamily: "Inter, sans-serif" }}
-                  data-testid={`book-detail-tag-${tag}`}
-                >
-                  {tag}
-                  <button
-                    onClick={() => onUpdate?.(book.id, { tags: (book.tags ?? []).filter(t => t !== tag) })}
-                    className="ml-0.5 rounded-full hover:opacity-70 transition-opacity inline-flex items-center justify-center"
-                    style={{ width: 14, height: 14, color: "var(--secondary-foreground)" }}
-                    data-testid={`book-detail-tag-remove-${tag}`}
+              {(book.tags ?? []).map(tag => {
+                const system = isSystemTag(tag);
+                return (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full"
+                    style={{
+                      background: system ? "color-mix(in srgb, var(--accent) 14%, transparent)" : "var(--secondary)",
+                      color: system ? "var(--accent)" : "var(--secondary-foreground)",
+                      fontFamily: "Inter, sans-serif",
+                    }}
+                    data-testid={`book-detail-tag-${tag}`}
                   >
-                    <X size={10} />
-                  </button>
-                </span>
-              ))}
+                    {tag}
+                    {!system && (
+                      <button
+                        onClick={() => onUpdate?.(book.id, { tags: (book.tags ?? []).filter(t => t !== tag) })}
+                        className="ml-0.5 rounded-full hover:opacity-70 transition-opacity inline-flex items-center justify-center"
+                        style={{ width: 14, height: 14, color: "var(--secondary-foreground)" }}
+                        data-testid={`book-detail-tag-remove-${tag}`}
+                      >
+                        <X size={10} />
+                      </button>
+                    )}
+                  </span>
+                );
+              })}
             </div>
             <div className="flex items-center gap-2">
               <input

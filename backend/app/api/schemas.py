@@ -1,5 +1,7 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from datetime import datetime
+
+from app.core.tag_policy import normalize_tags
 
 
 class RepoAddRequest(BaseModel):
@@ -10,6 +12,11 @@ class RepoUpdateRequest(BaseModel):
     category: str | None = None
     tags: list[str] | None = None
     is_favorite: bool | None = None
+
+    @field_validator("tags")
+    @classmethod
+    def _normalize_tags(cls, v: list[str] | None) -> list[str] | None:
+        return normalize_tags(v) if v is not None else None
 
 
 class ProgressUpdateRequest(BaseModel):
@@ -135,6 +142,11 @@ class CategoryCreateRequest(BaseModel):
     labels: list[str] = []
     sort_order: int | None = None
 
+    @field_validator("labels")
+    @classmethod
+    def _normalize_labels(cls, v: list[str]) -> list[str]:
+        return normalize_tags(v)
+
 
 class CategoryUpdateRequest(BaseModel):
     label: str | None = None
@@ -143,6 +155,11 @@ class CategoryUpdateRequest(BaseModel):
     labels: list[str] | None = None
     sort_order: int | None = None
 
+    @field_validator("labels")
+    @classmethod
+    def _normalize_labels(cls, v: list[str] | None) -> list[str] | None:
+        return normalize_tags(v) if v is not None else None
+
 
 class BookUpdateRequest(BaseModel):
     status: str | None = None
@@ -150,6 +167,11 @@ class BookUpdateRequest(BaseModel):
     category: str | None = None
     tags: list[str] | None = None
     is_favorite: bool | None = None
+
+    @field_validator("tags")
+    @classmethod
+    def _normalize_tags(cls, v: list[str] | None) -> list[str] | None:
+        return normalize_tags(v) if v is not None else None
 
 
 class BookmarkCreateRequest(BaseModel):
