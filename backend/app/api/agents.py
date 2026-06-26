@@ -1,6 +1,3 @@
-import asyncio
-import json
-
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,51 +8,14 @@ from app.core.database import get_db, async_session
 from app.models.repo import Repo, ContentSection, BookGeneration
 from app.api.schemas import BookGenerationStatusResponse
 from app.agents.crew import generate_book_cover, generate_book_content
-from app.events import publish, subscribe, unsubscribe
+from app.events import publish
 from app.services.file_storage import (
     load_readme, save_cover_html, save_book_html, save_chapter, save_outline,
     delete_book_content,
 )
+from app.services.book_generation import status_updater, book_status_stream
 
 router = APIRouter()
-
-
-async def _status_updater(repo_id: str):
-    async def update(
-        status: str,
-        total_chapters: int = 0,
-        completed_chapters: int = 0,
-        phase: str | None = None,
-        outline: list[dict] | None = None,
-    ):
-        async with async_session() as session:
-            result = await session.execute(
-                select(BookGeneration).where(BookGeneration.repo_id == repo_id)
-            )
-            gen = result.scalar()
-            if gen:
-                gen.status = status
-                gen.current_phase = phase
-                if total_chapters:
-                    gen.total_chapters = total_chapters
-                if completed_chapters:
-                    gen.completed_chapters = completed_chapters
-                if outline is not None:
-                    gen.outline = {"chapters": outline}
-                gen.updated_at = datetime.now(timezone.utc)
-                await session.commit()
-
-        # Capture values inside the session block to avoid detached instance access
-        gen_total = gen.total_chapters if gen else total_chapters
-        gen_completed = gen.completed_chapters if gen else completed_chapters
-
-        await publish(repo_id, {
-            "status": status,
-            "current_phase": phase,
-            "total_chapters": gen_total,
-            "completed_chapters": gen_completed,
-        })
-    return update
 
 
 @router.post("/generate-book/{repo_id}")
@@ -110,7 +70,7 @@ async def _run_book_pipeline(
     repo_description: str,
     readme_content: str,
 ):
-    update_status = await _status_updater(repo_id)
+    update_status = await status_updater(repo_id)
 
     try:
         cover_result = await generate_book_cover(
@@ -238,36 +198,8 @@ async def get_book_status(repo_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.get("/book-status/{repo_id}/stream")
 async def stream_book_status(repo_id: str, request: Request):
-    subscription_queue = await subscribe(repo_id)
-
-    async def event_generator():
-        try:
-            async with async_session() as session:
-                result = await session.execute(
-                    select(BookGeneration).where(BookGeneration.repo_id == repo_id)
-                )
-                gen = result.scalar()
-                if gen:
-                    yield f"data: {json.dumps({
-                        'status': gen.status,
-                        'current_phase': gen.current_phase,
-                        'total_chapters': gen.total_chapters,
-                        'completed_chapters': gen.completed_chapters,
-                    })}\n\n"
-
-            while True:
-                if await request.is_disconnected():
-                    break
-                try:
-                    message = await asyncio.wait_for(subscription_queue.get(), timeout=25)
-                    yield f"data: {message}\n\n"
-                except asyncio.TimeoutError:
-                    yield ": keepalive\n\n"
-        finally:
-            unsubscribe(repo_id, subscription_queue)
-
     return StreamingResponse(
-        event_generator(),
+        book_status_stream(repo_id, request),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

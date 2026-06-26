@@ -50,6 +50,22 @@ import { ImportDialog } from "./components/ImportDialog";
 import { CategoryManager } from "./components/CategoryManager";
 import { CategoryPicker } from "./components/CategoryPicker";
 
+const toColor = (s: string) => {
+  let hash = 0;
+  for (let i = 0; i < s.length; i++) hash = s.charCodeAt(i) + ((hash << 5) - hash);
+  return `hsl(${hash % 360}, 40%, ${30 + (hash % 20)}%)`;
+};
+
+const coverImageUrl = (cu: string | null | undefined): string => {
+  if (!cu) return "";
+  try {
+    const origin = new URL(API_BASE_URL).origin;
+    return `${origin}${cu}`;
+  } catch {
+    return cu;
+  }
+};
+
 export default function App() {
   const [bookList, setBookList] = useState(initialBooks);
   const [activeCategory, setActiveCategory] = useState<BookCategory>("all");
@@ -65,12 +81,17 @@ export default function App() {
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [categoryList, setCategoryList] = useState<RemoteCategory[]>([]);
-  const [service, setService] = useState<IDataService | null>(null);
+  const serviceRef = useRef<IDataService | null>(null);
+  const [, setServiceReady] = useState(false);
   const isMobile = useIsMobile();
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    getDataService().then(setService);
+    getDataService().then(svc => {
+      serviceRef.current = svc;
+      setServiceReady(true);
+      loadCategories(svc);
+    });
   }, []);
 
   useEffect(() => {
@@ -83,26 +104,6 @@ export default function App() {
 
   const loadCategories = (svc: IDataService) => {
     svc.getCategories().then(setCategoryList).catch(() => {});
-  };
-
-  useEffect(() => {
-    if (service) loadCategories(service);
-  }, [service]);
-
-  const toColor = (s: string) => {
-    let hash = 0;
-    for (let i = 0; i < s.length; i++) hash = s.charCodeAt(i) + ((hash << 5) - hash);
-    return `hsl(${hash % 360}, 40%, ${30 + (hash % 20)}%)`;
-  };
-
-  const coverImageUrl = (cu: string | null | undefined): string => {
-    if (!cu) return "";
-    try {
-      const origin = new URL(API_BASE_URL).origin;
-      return `${origin}${cu}`;
-    } catch {
-      return cu;
-    }
   };
 
   useEffect(() => {
@@ -230,55 +231,55 @@ export default function App() {
   };
 
   const handleDeleteBook = async (bookId: string) => {
-    if (!service) return;
+    if (!serviceRef.current) return;
     try {
-      await service.deleteBook(bookId);
+      await serviceRef.current.deleteBook(bookId);
     } catch {}
     setBookList(prev => prev.filter(b => b.id !== bookId));
     setSelectedBook(null);
   };
 
   const handleUpdateBook = async (bookId: string, data: Record<string, any>) => {
-    if (!service) return;
+    if (!serviceRef.current) return;
     setBookList(prev => prev.map(b => b.id === bookId ? { ...b, ...data } : b));
     setSelectedBook(prev => prev && prev.id === bookId ? { ...prev, ...data } : prev);
     try {
-      await service.updateBook(bookId, data);
+      await serviceRef.current.updateBook(bookId, data);
     } catch {}
   };
 
   const handleCreateCategory = async (data: { label: string; icon?: string; color?: string; labels?: string[] }) => {
-    if (!service) return;
-    const created = await service.createCategory(data);
+    if (!serviceRef.current) return;
+    const created = await serviceRef.current.createCategory(data);
     setCategoryList(prev => [...prev, created].sort((a, b) => a.sort_order - b.sort_order));
   };
 
   const handleUpdateCategory = async (id: string, data: Partial<{ label: string; icon: string; color: string; sort_order: number; labels: string[] }>) => {
-    if (!service) return;
-    const updated = await service.updateCategory(id, data);
+    if (!serviceRef.current) return;
+    const updated = await serviceRef.current.updateCategory(id, data);
     setCategoryList(prev => prev.map(c => c.id === id ? updated : c).sort((a, b) => a.sort_order - b.sort_order));
   };
 
   const handleDeleteCategory = async (id: string) => {
-    if (!service) return;
+    if (!serviceRef.current) return;
     const removed = categoryList.find(c => c.id === id);
-    await service.deleteCategory(id);
+    await serviceRef.current.deleteCategory(id);
     setCategoryList(prev => prev.filter(c => c.id !== id));
     if (removed && activeCategory === removed.key) setActiveCategory("all");
   };
 
   const handleGenerateBook = async (bookId: string) => {
-    if (!service) return;
+    if (!serviceRef.current) return;
     const book = bookList.find(b => b.id === bookId);
     setBookList(prev => prev.map(b => b.id === bookId ? { ...b, genStatus: "writing", size: "创作中...", progress: 0 } : b));
     setSelectedBook(prev => prev && prev.id === bookId ? { ...prev, genStatus: "writing", size: "创作中...", progress: 0 } : prev);
 
     try {
       if (book?.sourceType === "youtube") {
-        await service.generateYoutubeBook({ repo_id: bookId });
+        await serviceRef.current.generateYoutubeBook({ repo_id: bookId });
       } else {
-        await service.fetchReadme(bookId);
-        await service.generateBook(bookId);
+        await serviceRef.current.fetchReadme(bookId);
+        await serviceRef.current.generateBook(bookId);
       }
     } catch (e: any) {
       const errorMsg = e.message || "生成失败";

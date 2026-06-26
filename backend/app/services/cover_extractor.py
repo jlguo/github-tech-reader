@@ -110,7 +110,9 @@ def _extract_pdf_cover(file_path: str) -> bytes | None:
 
 
 def _normalize_to_png(data: bytes) -> bytes:
-    """Convert raw image bytes to PNG bytes via Pillow."""
+    """Convert raw image bytes to PNG bytes via Pillow. Skips re-encode if already PNG."""
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return data
     from PIL import Image
     img = Image.open(BytesIO(data))
     buf = BytesIO()

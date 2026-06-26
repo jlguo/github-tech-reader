@@ -43,7 +43,7 @@ class ReadingProgress(Base):
     __tablename__ = "reading_progress"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    repo_id: Mapped[str] = mapped_column(String(36), ForeignKey("repos.id"), nullable=False, index=True)
+    repo_id: Mapped[str] = mapped_column(String(36), ForeignKey("repos.id", ondelete="CASCADE"), nullable=False, index=True)
     section: Mapped[str | None] = mapped_column(String(256), nullable=True)
     position: Mapped[float] = mapped_column(Float, default=0.0)
     completed: Mapped[bool] = mapped_column(Boolean, default=False)
