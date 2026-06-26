@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Heart, BookOpen } from "lucide-react";
 import { Book, typeConfig } from "./bookData";
 import { BookCover } from "./BookCover";
@@ -9,7 +10,7 @@ interface BookCardProps {
   onOpen: (book: Book) => void;
 }
 
-export function BookCard({ book, viewMode, onToggleFavorite, onOpen }: BookCardProps) {
+export const BookCard = memo(function BookCard({ book, viewMode, onToggleFavorite, onOpen }: BookCardProps) {
   const typeInfo = typeConfig[book.type] ?? { label: "FILE", color: "#5a5a5a", bg: "#f0f0f0" };
 
   if (viewMode === "list") {
@@ -160,4 +161,4 @@ export function BookCard({ book, viewMode, onToggleFavorite, onOpen }: BookCardP
       </div>
     </div>
   );
-}
+});

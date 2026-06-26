@@ -76,6 +76,21 @@ async def init_db():
         await _backfill_system_labels(session)
         await _reconcile_orphan_categories(session, existing_keys)
 
+        # Reset stuck book generations: if the server crashed mid-generation,
+        # rows may be left in an intermediate state (fetching/writing/reviewing).
+        # Mark them as "failed" so the UI doesn't show them as perpetually busy.
+        from app.models.repo import BookGeneration
+        stuck_statuses = ("fetching", "planning", "cover", "writing", "reviewing", "publishing")
+        await session.execute(
+            text(
+                "UPDATE book_generations SET status = 'failed', "
+                "current_phase = NULL "
+                "WHERE status IN :stuck"
+            ),
+            {"stuck": stuck_statuses},
+        )
+        await session.commit()
+
 
 async def _backfill_system_labels(session):
     from app.models.category import Category, SYSTEM_CATEGORIES

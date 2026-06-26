@@ -1,5 +1,5 @@
+import { useState, useRef, useEffect, memo } from "react";
 import { X, BookOpen, Heart, Share2, Download, Trash2, Tag, Calendar, HardDrive, Pencil, Sparkles, Plus } from "lucide-react";
-import { useState, useRef, useEffect } from "react";
 import { Book, typeConfig } from "./bookData";
 import { BookCover } from "./BookCover";
 import { useBookStatus, isProducing as checkIsProducing } from "../hooks/useBookStatus";
@@ -52,7 +52,7 @@ interface BookDetailModalProps {
   allTags?: string[];
 }
 
-export function BookDetailModal({ book, onClose, onToggleFavorite, onRead, onDelete, onUpdate, onGenerate, allTags = [] }: BookDetailModalProps) {
+export const BookDetailModal = memo(function BookDetailModal({ book, onClose, onToggleFavorite, onRead, onDelete, onUpdate, onGenerate, allTags = [] }: BookDetailModalProps) {
   const [tagInput, setTagInput] = useState("");
   const [showAllTags, setShowAllTags] = useState(false);
   if (!book) return null;
@@ -472,4 +472,4 @@ export function BookDetailModal({ book, onClose, onToggleFavorite, onRead, onDel
           </div>
     </div>
   );
-}
+});

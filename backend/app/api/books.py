@@ -26,6 +26,8 @@ router = APIRouter()
 async def list_books(
     status: str | None = Query(default=None, description="Filter by status (comma-separated, e.g. 'writing,done')"),
     search: str | None = Query(default=None, description="Search in title, author, description"),
+    limit: int = Query(default=50, ge=1, le=500, description="Max books to return"),
+    offset: int = Query(default=0, ge=0, description="Number of books to skip"),
     db: AsyncSession = Depends(get_db),
 ):
     statuses = (
@@ -47,7 +49,7 @@ async def list_books(
             (Repo.name.ilike(like)) | (Repo.owner.ilike(like)) | (Repo.description.ilike(like))
         )
 
-    query = query.order_by(Repo.added_at.desc())
+    query = query.order_by(Repo.added_at.desc()).limit(limit).offset(offset)
 
     result = await db.execute(query)
     rows = result.all()
