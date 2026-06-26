@@ -111,11 +111,17 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
+    const abortControllerRef = { current: new AbortController() };
 
         const syncBooks = () => {
+      // Abort any in-flight request from a previous poll cycle
+      abortControllerRef.current.abort();
+      abortControllerRef.current = new AbortController();
+      const signal = abortControllerRef.current.signal;
+
       getDataService().then(svc => {
         if (cancelled) return;
-        svc.getBooks()
+        svc.getBooks(signal)
           .then((books: RemoteBook[]) => {
             if (cancelled) return;
           const generated: Book[] = books.map(b => {
@@ -187,6 +193,7 @@ export default function App() {
     const interval = setInterval(syncBooks, POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
+      abortControllerRef.current.abort();
       clearInterval(interval);
     };
   }, []);

@@ -122,7 +122,11 @@ async def add_repo(body: RepoAddRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{repo_id}", response_model=RepoDetailResponse)
-async def get_repo(repo_id: str, db: AsyncSession = Depends(get_db)):
+async def get_repo(
+    repo_id: str,
+    include_readme: bool = Query(default=True, description="Include full README content"),
+    db: AsyncSession = Depends(get_db),
+):
     result = await db.execute(
         select(Repo)
         .options(selectinload(Repo.reading_progress), selectinload(Repo.content_sections))
@@ -150,7 +154,7 @@ async def get_repo(repo_id: str, db: AsyncSession = Depends(get_db)):
         is_favorite=repo.is_favorite,
         added_at=repo.added_at,
         has_readme=has_readme(repo.id),
-        readme_content=load_readme(repo.id),
+        readme_content=load_readme(repo.id) if include_readme else None,
         reading_progress=[_progress_to_response(p) for p in repo.reading_progress],
         content_sections=[_section_to_response(s) for s in repo.content_sections],
     )

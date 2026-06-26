@@ -12,7 +12,7 @@ from app.core.database import get_db, async_session
 from app.models.repo import Repo, BookGeneration, ContentSection
 from app.api.schemas import BookGenerationStatusResponse
 from app.agents.crew import generate_book_plan, generate_book_content
-from app.events import publish
+from app.core.events import publish
 from app.services.youtube import (
     extract_video_id,
     extract_transcript,

@@ -18,24 +18,43 @@ rule below links to the relevant section.
    in config, CLI args, or env vars. CORS and the frontend client are hard-coded to these.
    See [README → 快速开始](./README.md#快速开始--quick-start).
 
-2. **Verify frontend changes with Playwright** — After ANY frontend change that affects UI
+2. **uv only for the backend** — All backend Python runs through `uv`. Never invoke raw
+   `python`/`pip`, never `pip install`, and never hand-activate a venv. Use:
+   - Run the server: `uv run uvicorn app.main:app --reload --port 8000` (from `backend/`).
+   - Run any script / one-off: `uv run python ...`, tests: `uv run pytest`.
+   - Add/upgrade deps: `uv add <pkg>` (edits `pyproject.toml` + `uv.lock`); sync with
+     `uv sync`. `pyproject.toml` and `uv.lock` are the source of truth — keep them in sync.
+   - **After adding a backend dependency, restart the backend and confirm `app.main`
+     imports cleanly** (`uv run python -c "import app.main"`) before claiming done. A dep
+     listed in `pyproject.toml` but not synced will crash a fresh start even if a stale
+     server still runs.
+
+3. **Verify frontend changes with Playwright** — After ANY frontend change that affects UI
    behavior, data flow, or API integration, run Playwright to verify. Never ship without
    Playwright confirmation. This is the project's primary verification mechanism.
+   - **How to run**: from `frontend/`, `pnpm test:e2e` (config: `tests/e2e`, chromium,
+     `baseURL` `http://localhost:5173`). The dev server is reused if already running on
+     `5173`; the backend on `8000` must be up for remote-mode specs. Set `CHROME_PATH` if a
+     specific Chrome binary is required. Run a single spec with
+     `pnpm test:e2e tests/e2e/<file>.spec.ts`.
    - **Scoped verification for small changes**: For a **small change** (a single bug fix or
      a specific, self-contained enhancement), **do NOT run the full e2e suite**. Instead,
      write (or reuse) **one specific e2e spec that covers exactly that change**, run only
      that spec, and confirm it passes. The full suite is reserved for broad/cross-cutting
      changes (shared state, data layer, routing, multi-reader, or anything touching several
      features). See [README → E2E Tests](./README.md#e2e-tests--playwright).
+   - **Interact like a real user**: never use `page.route` mocking or `page.goto` to bypass
+     the UI; never add/increase `waitForTimeout` without justification (debug the stuck step
+     with `console.log` first). See **Practices → Testing** below.
 
-3. **Delegate proactively** — Do not implement, explore, or research alone when a
+4. **Delegate proactively** — Do not implement, explore, or research alone when a
    specialized sub-agent can do it. Decompose first, dispatch in parallel
    (`run_in_background=true`) when units have no shared state. See **Delegation** below.
 
-4. **Never weaken type safety or swallow errors** — No `as any`, `@ts-ignore`,
+5. **Never weaken type safety or swallow errors** — No `as any`, `@ts-ignore`,
    `@ts-expect-error`, or empty `catch {}`. Never delete failing tests to make a suite pass.
 
-5. **Never commit unless explicitly requested.**
+6. **Never commit unless explicitly requested.**
 
 ---
 

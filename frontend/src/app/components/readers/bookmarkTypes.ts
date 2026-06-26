@@ -41,10 +41,19 @@ export function anchorDefaultLabel(anchor: BookmarkAnchor): string {
   }
 }
 
+export function isBookmarkAnchor(obj: unknown): obj is BookmarkAnchor {
+  if (!obj || typeof obj !== "object") return false;
+  const a = obj as Record<string, unknown>;
+  const kind = a.kind;
+  if (kind === "scroll" || kind === "cfi") return typeof a.percent === "number";
+  if (kind === "page" || kind === "sheet") return typeof a[kind] === "number" && typeof a.total === "number";
+  return false;
+}
+
 export function parseAnchor(raw: string): BookmarkAnchor | null {
   try {
-    const obj = JSON.parse(raw) as BookmarkAnchor;
-    if (obj && typeof obj === "object" && "kind" in obj) return obj;
+    const obj: unknown = JSON.parse(raw);
+    if (isBookmarkAnchor(obj)) return obj;
     return null;
   } catch {
     return null;

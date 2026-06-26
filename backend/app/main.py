@@ -1,17 +1,25 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
 from app.core.database import init_db
+from app.core.events import start_heartbeat, stop_heartbeat
 from app.api import repos, reading, agents, books, imports, youtube, categories, bookmarks
 from app.services.github import close_github_client
+
+limiter = Limiter(key_func=get_remote_address)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    start_heartbeat()
     yield
+    stop_heartbeat()
     await close_github_client()
 
 
@@ -20,6 +28,9 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -40,7 +51,8 @@ app.include_router(bookmarks.router, prefix="/api/bookmarks", tags=["bookmarks"]
 
 
 @app.get("/api/health")
-async def health():
+@limiter.limit("60/minute")
+async def health(request: Request):
     return {"status": "ok"}
 
 

@@ -21,6 +21,14 @@ import {
 
 const _blobUrls = new Map<string, string>();
 
+// Clean up all blob URLs on page unload to prevent memory leaks
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeunload", () => {
+    _blobUrls.forEach(url => URL.revokeObjectURL(url));
+    _blobUrls.clear();
+  });
+}
+
 const STORAGE_KEY_LLM_KEY = "bookshelf_llm_key";
 const STORAGE_KEY_LLM_URL = "bookshelf_llm_url";
 const STORAGE_KEY_LLM_MODEL = "bookshelf_llm_model";
@@ -114,7 +122,7 @@ export class LocalDataService implements IDataService {
 
   // ── Books ────────────────────────────────────────────────────────
 
-  async getBooks(): Promise<RemoteBook[]> {
+  async getBooks(_signal?: AbortSignal): Promise<RemoteBook[]> {
     const items = await this.#db.getBooks();
     return items.map((item) => ({
       repo_id: item.repo_id,

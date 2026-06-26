@@ -27,8 +27,8 @@ export class RemoteDataService implements IDataService {
 
   // ── Books ──────────────────────────────────────────────────────
 
-  async getBooks(): Promise<RemoteBook[]> {
-    const r = await fetch(`${this.#base}/books`);
+  async getBooks(signal?: AbortSignal): Promise<RemoteBook[]> {
+    const r = await fetch(`${this.#base}/books`, { signal });
     if (!r.ok) throw new Error(`GET /books failed: ${r.status}`);
     return r.json();
   }

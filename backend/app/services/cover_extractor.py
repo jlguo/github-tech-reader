@@ -19,11 +19,16 @@ def extract_cover(file_path: str, file_type: str) -> bytes | None:
 
     Returns PNG bytes on success, None on failure. Never raises.
     """
-    if file_type == "epub":
-        return _extract_epub_cover(file_path)
-    elif file_type == "pdf":
-        return _extract_pdf_cover(file_path)
-    return None
+    logger.info("Extracting cover: %s (type=%s)", file_path, file_type)
+    try:
+        if file_type == "epub":
+            return _extract_epub_cover(file_path)
+        elif file_type == "pdf":
+            return _extract_pdf_cover(file_path)
+        return None
+    except Exception:
+        logger.debug("Cover extraction failed", exc_info=True)
+        return None
 
 
 def _extract_epub_cover(file_path: str) -> bytes | None:

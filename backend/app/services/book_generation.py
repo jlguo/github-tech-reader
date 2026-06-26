@@ -13,7 +13,7 @@ from sqlalchemy import select
 
 from app.core.database import async_session
 from app.models.repo import BookGeneration
-from app.events import publish, subscribe, unsubscribe
+from app.core.events import publish, subscribe, unsubscribe
 
 
 async def status_updater(repo_id: str):

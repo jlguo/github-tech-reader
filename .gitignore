@@ -4,7 +4,10 @@ node_modules/
 
 # Build
 frontend/dist/
+
+# Build artifacts
 bookshelf.apk
+bookshelf.apk.idsig
 
 # Python
 __pycache__/
@@ -22,8 +25,8 @@ backend/data/covers/
 
 # Dev artifacts
 .playwright-mcp/
+frontend/test-results/
 .sisyphus/
-bookshelf.apk.idsig
 emulator-screen.png
 docs/*.pdf
 

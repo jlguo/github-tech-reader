@@ -21,7 +21,7 @@ export function useReadingProgress(bookId: string) {
     getDataService().then((svc) => {
       svc
         .updateReadingProgress(bookId, null, state.percent, state.completed, state.metadata)
-        .catch(() => {});
+        .catch((err) => console.error("[useReadingProgress] flush failed:", err));
     });
   }, [bookId]);
 

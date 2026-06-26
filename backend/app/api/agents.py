@@ -8,7 +8,7 @@ from app.core.database import get_db, async_session
 from app.models.repo import Repo, ContentSection, BookGeneration
 from app.api.schemas import BookGenerationStatusResponse
 from app.agents.crew import generate_book_cover, generate_book_content
-from app.events import publish
+from app.core.events import publish
 from app.services.file_storage import (
     load_readme, save_cover_html, save_book_html, save_chapter, save_outline,
     delete_book_content,

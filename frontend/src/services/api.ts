@@ -98,7 +98,7 @@ export interface ImportResult {
 
 export interface IDataService {
   // Books
-  getBooks(): Promise<RemoteBook[]>;
+  getBooks(signal?: AbortSignal): Promise<RemoteBook[]>;
   deleteBook(bookId: string): Promise<void>;
   updateBook(bookId: string, data: Record<string, unknown>): Promise<void>;
   getBookByRepo(repoId: string): Promise<BookContentResult>;
