@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as zlib from "zlib";
 import { fileURLToPath } from "url";
+import archiver from "archiver";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,8 +18,6 @@ export interface TestFile {
 }
 
 async function writeZip(filepath: string, entries: { name: string; data: Buffer | string; stored?: boolean }[]) {
-  const archiverMod = await import("archiver");
-  const archiver = archiverMod.default || archiverMod;
   ensureDir(path.dirname(filepath));
   const output = fs.createWriteStream(filepath);
   const archive = archiver("zip", { zlib: { level: 9 } });

@@ -103,7 +103,9 @@ export function MangaReader({ book, onBookmarkReady, restoreAnchor }: MangaReade
 
     return () => {
       cancelled = true;
-      urlsRef.current.forEach(u => URL.revokeObjectURL(u));
+      // Capture old URLs before cleanup to avoid stale closure on subsequent renders
+      const oldUrls = urlsRef.current;
+      oldUrls.forEach(u => URL.revokeObjectURL(u));
       urlsRef.current = [];
     };
   }, [book.id, isDemo]);

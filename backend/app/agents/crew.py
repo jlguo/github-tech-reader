@@ -45,6 +45,12 @@ _chapter_sem: asyncio.Semaphore | None = None
 _RATE_LIMIT_CODES = {429}
 _RATE_LIMIT_KEYWORDS = ("rate_limit", "rate limit", "too many requests", "quota exceeded")
 
+# Truncation limits for repository content
+README_TRUNCATION = 6000  # Max chars to include from the README
+FILE_CONTENT_TRUNCATION = 3000  # Max chars per file in the repository snapshot
+TOP_FILES_LIMIT = 60  # Max files included in the repository snapshot
+CHAPTER_TEXT_TRUNCATION = 30000  # Max chars for chapter text sent to the editor
+
 
 def _get_chapter_sem() -> asyncio.Semaphore:
     global _chapter_sem
@@ -118,10 +124,10 @@ def _determine_chapter_count(repo_info: dict, files: dict[str, str]) -> int:
 def _build_textual_snapshot(readme, files, issues) -> str:
     parts = []
     if readme:
-        parts.append(f"## README\n\n{readme[:6000]}")
+        parts.append(f"## README\n\n{readme[:README_TRUNCATION]}")
     parts.append("\n## Repository Files\n")
-    for path, content in sorted(files.items())[:60]:
-        parts.append(f"### {path}\n```\n{content[:3000]}\n```\n")
+    for path, content in sorted(files.items())[:TOP_FILES_LIMIT]:
+        parts.append(f"### {path}\n```\n{content[:FILE_CONTENT_TRUNCATION]}\n```\n")
     if issues:
         parts.append("\n## Top Issues\n")
         for i in issues[:5]:
@@ -256,7 +262,7 @@ async def _run_review_crew(chapters, repo_name) -> list[dict]:
                   "well-structured, and valuable.",
     )
     chapters_text = "\n\n".join(
-        f"### Chapter {ch['number']}: {ch['title']}\n\n{ch['content'][:3000]}"
+        f"### Chapter {ch['number']}: {ch['title']}\n\n{ch['content'][:FILE_CONTENT_TRUNCATION]}"
         for ch in chapters
     )
     task = Task(
@@ -289,7 +295,7 @@ async def _run_editor_crew(chapters, repo_name) -> str:
     task = Task(
         description=(
             f"Convert the following chapters into a complete HTML book for '{repo_name}'.\n\n"
-            f"{chapters_text[:30000]}\n\n"
+            f"{chapters_text[:CHAPTER_TEXT_TRUNCATION]}\n\n"
             f"Produce a single HTML document. {_LANG_INSTRUCTION} "
             "The document should have: title, table of contents, "
             "each chapter as <section>, code in <pre><code>, footer with date. "

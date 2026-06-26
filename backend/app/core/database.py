@@ -80,14 +80,12 @@ async def init_db():
         # rows may be left in an intermediate state (fetching/writing/reviewing).
         # Mark them as "failed" so the UI doesn't show them as perpetually busy.
         from app.models.repo import BookGeneration
+        from sqlalchemy import update as sa_update
         stuck_statuses = ("fetching", "planning", "cover", "writing", "reviewing", "publishing")
         await session.execute(
-            text(
-                "UPDATE book_generations SET status = 'failed', "
-                "current_phase = NULL "
-                "WHERE status IN :stuck"
-            ),
-            {"stuck": stuck_statuses},
+            sa_update(BookGeneration)
+            .where(BookGeneration.status.in_(stuck_statuses))
+            .values(status="failed", current_phase=None)
         )
         await session.commit()
 

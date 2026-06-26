@@ -81,6 +81,30 @@ def _validate_url(url: str) -> None:
     except ValueError:
         pass
 
+    # DNS rebinding protection: resolve hostname and check all resolved IPs
+    try:
+        addrinfo = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        raise HTTPException(status_code=400, detail="Could not resolve hostname")
+    for family, type_, proto, canonname, sockaddr in addrinfo:
+        resolved_ip = sockaddr[0]
+        try:
+            addr = ipaddress.ip_address(resolved_ip)
+        except ValueError:
+            continue
+        if (
+            addr.is_private
+            or addr.is_loopback
+            or addr.is_link_local
+            or addr.is_reserved
+            or addr.is_multicast
+            or addr.is_unspecified
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Access to private/reserved addresses is not allowed",
+            )
+
 
 async def _safe_fetch(client: httpx.AsyncClient, url: str, max_size: int) -> tuple[httpx.Response, str]:
     current_url = url

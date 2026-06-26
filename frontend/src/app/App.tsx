@@ -4,6 +4,7 @@ import { useIsMobile } from "./components/ui/use-mobile";
 import { books as initialBooks, Book, BookCategory, typeConfig, BookType } from "./components/bookData";
 import { API_BASE_URL, POLL_INTERVAL_MS } from "../config/api";
 import { getDataService, type IDataService, type RemoteBook, type RemoteCategory } from "../services/api";
+import { toast } from "sonner";
 
 const getTypeInfo = (type: BookType) => typeConfig[type] ?? { label: "FILE", color: "#5a5a5a", bg: "#f0f0f0" };
 
@@ -65,6 +66,8 @@ const coverImageUrl = (cu: string | null | undefined): string => {
     return cu;
   }
 };
+
+type BookUpdateData = Partial<Pick<Book, 'tags' | 'description'>>;
 
 export default function App() {
   const [bookList, setBookList] = useState(initialBooks);
@@ -232,14 +235,21 @@ export default function App() {
 
   const handleDeleteBook = async (bookId: string) => {
     if (!serviceRef.current) return;
+    let previous: Book[] = [];
+    setBookList(prev => {
+      previous = prev;
+      return prev.filter(b => b.id !== bookId);
+    });
+    setSelectedBook(null);
     try {
       await serviceRef.current.deleteBook(bookId);
-    } catch {}
-    setBookList(prev => prev.filter(b => b.id !== bookId));
-    setSelectedBook(null);
+    } catch {
+      setBookList(previous);
+      toast.error("Failed to delete book");
+    }
   };
 
-  const handleUpdateBook = async (bookId: string, data: Record<string, any>) => {
+  const handleUpdateBook = async (bookId: string, data: BookUpdateData) => {
     if (!serviceRef.current) return;
     setBookList(prev => prev.map(b => b.id === bookId ? { ...b, ...data } : b));
     setSelectedBook(prev => prev && prev.id === bookId ? { ...prev, ...data } : prev);

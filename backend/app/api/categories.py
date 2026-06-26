@@ -1,3 +1,4 @@
+import time
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, update
@@ -15,13 +16,30 @@ from app.utils.slugify import slugify
 
 router = APIRouter()
 
+_cache: list | None = None
+_cache_time: float = 0.0
+_CACHE_TTL = 60.0  # seconds
+
+
+def _invalidate_cache() -> None:
+    global _cache, _cache_time
+    _cache = None
+    _cache_time = 0.0
+
 
 @router.get("", response_model=list[CategoryResponse])
 async def list_categories(db: AsyncSession = Depends(get_db)):
+    global _cache, _cache_time
+    now = time.monotonic()
+    if _cache is not None and (now - _cache_time) < _CACHE_TTL:
+        return _cache
     result = await db.execute(
         select(Category).order_by(Category.sort_order, Category.label)
     )
-    return list(result.scalars())
+    categories = list(result.scalars())
+    _cache = categories
+    _cache_time = now
+    return categories
 
 
 @router.post("", response_model=CategoryResponse, status_code=201)
@@ -61,6 +79,7 @@ async def create_category(body: CategoryCreateRequest, db: AsyncSession = Depend
     db.add(category)
     await db.commit()
     await db.refresh(category)
+    _invalidate_cache()
     return category
 
 
@@ -96,6 +115,7 @@ async def update_category(category_id: str, body: CategoryUpdateRequest, db: Asy
 
     await db.commit()
     await db.refresh(category)
+    _invalidate_cache()
     return category
 
 
@@ -115,4 +135,5 @@ async def delete_category(category_id: str, db: AsyncSession = Depends(get_db)):
     )
     await db.delete(category)
     await db.commit()
+    _invalidate_cache()
     return {"status": "deleted", "reassigned_to": "uncategorized"}
