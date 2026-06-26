@@ -47,13 +47,8 @@ def extract_video_id(url: str) -> str:
     raise ValueError(f"Could not extract video ID from URL: {url}")
 
 
-async def extract_transcript(video_id: str) -> dict:
-    """Extract transcript text and metadata for a YouTube video.
-
-    Returns:
-        dict with keys: video_id, transcript_text, segments (list of
-        {start, duration, text}), language, video_title (if available)
-    """
+def _extract_transcript_sync(video_id: str) -> dict:
+    """Synchronous transcript extraction (runs in thread executor)."""
     from youtube_transcript_api import YouTubeTranscriptApi
 
     try:
@@ -95,6 +90,21 @@ async def extract_transcript(video_id: str) -> dict:
         "transcript_text": full_text,
         "segments": segments,
     }
+
+
+async def extract_transcript(video_id: str) -> dict:
+    """Extract transcript text and metadata for a YouTube video.
+
+    Runs the synchronous YouTubeTranscriptApi calls in a thread executor
+    to avoid blocking the asyncio event loop.
+
+    Returns:
+        dict with keys: video_id, transcript_text, segments (list of
+        {start, duration, text}), language, video_title (if available)
+    """
+    import asyncio
+
+    return await asyncio.to_thread(_extract_transcript_sync, video_id)
 
 
 def format_transcript_snapshot(

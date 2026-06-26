@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Integer, Float, Boolean, DateTime, Text, ForeignKey, JSON
+from sqlalchemy import String, Integer, Float, Boolean, DateTime, Text, ForeignKey, JSON, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.sqlite import JSON as SQLiteJSON
 
@@ -67,6 +67,15 @@ class ContentSection(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     repo = relationship("Repo", back_populates="content_sections")
+
+    __table_args__ = (
+        Index(
+            "ix_content_sections_repo_type_chapter",
+            "repo_id",
+            "section_type",
+            "chapter_number",
+        ),
+    )
 
 
 class BookGeneration(Base):

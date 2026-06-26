@@ -4,8 +4,22 @@ import os
 import re
 import asyncio
 import time
+import logging
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
+
+_BOOK_CSS = (
+    "body{background:#f5f0e8;color:#2c1a0e;"
+    "font-family:'Source Serif 4',Georgia,serif;max-width:800px;margin:0 auto;"
+    "padding:2rem;line-height:1.8}h1,h2{font-family:'Playfair Display',serif;"
+    "color:#5c3d1e}pre{background:#ede5d4;padding:1rem;border-radius:8px}"
+    "code{font-family:monospace} a{color:#c17f3a}.toc{background:#fffdf7;"
+    "padding:1.5rem;border-radius:12px;margin:2rem 0}.toc a{display:block;"
+    "padding:.25rem 0;text-decoration:none}.footer{text-align:center;"
+    "color:#7a6248;margin-top:3rem;font-size:.85em}"
+)
 
 os.environ.setdefault("OPENAI_API_KEY", settings.llm_api_key)
 os.environ.setdefault("OPENAI_BASE_URL", settings.llm_base_url_normalized)
@@ -279,14 +293,7 @@ async def _run_editor_crew(chapters, repo_name) -> str:
             f"Produce a single HTML document. {_LANG_INSTRUCTION} "
             "The document should have: title, table of contents, "
             "each chapter as <section>, code in <pre><code>, footer with date. "
-            "Use this CSS: body{background:#f5f0e8;color:#2c1a0e;"
-            "font-family:'Source Serif 4',Georgia,serif;max-width:800px;margin:0 auto;"
-            "padding:2rem;line-height:1.8}h1,h2{font-family:'Playfair Display',serif;"
-            "color:#5c3d1e}pre{background:#ede5d4;padding:1rem;border-radius:8px}"
-            "code{font-family:monospace} a{color:#c17f3a}.toc{background:#fffdf7;"
-            "padding:1.5rem;border-radius:12px;margin:2rem 0}.toc a{display:block;"
-            "padding:.25rem 0;text-decoration:none}.footer{text-align:center;"
-            "color:#7a6248;margin-top:3rem;font-size:.85em}\n"
+            f"Use this CSS: {_BOOK_CSS}\n"
             "Return ONLY the complete HTML document."
         ),
         expected_output="A complete, self-contained HTML book document.",
@@ -351,7 +358,7 @@ async def _run_cover_crew(repo_name: str, repo_description: str, outline: list[d
         has_color = any(c in extracted for c in ("#f5f0e8", "#c17f3a", "#5c3d1e"))
         if has_viewport and has_font and has_color:
             return extracted
-        print(f"[cover] Validation failed: viewport={has_viewport} font={has_font} color={has_color}")
+        logger.warning("Cover validation failed: viewport=%s font=%s color=%s", has_viewport, has_font, has_color)
         return ""
     div_match = re.search(r"<div[^>]*>.*?</div>", result, re.DOTALL | re.IGNORECASE)
     if div_match:
@@ -437,7 +444,7 @@ async def generate_book_cover(repo_id, repo_name, repo_description, readme_conte
     if cover_html:
         review_feedback = await _run_cover_review_crew(repo_name, cover_html)
         if review_feedback:
-            print(f"[cover] Review found issues: {review_feedback[:100]}")
+            logger.info("Cover review found issues: %s", review_feedback[:100])
             cover_html = await _run_cover_crew(repo_name, repo_description, outline, owner, review_feedback)
 
     cover_image_path = _render_png_cover(repo_name, repo_description, owner, repo_id)
@@ -475,7 +482,7 @@ def _render_png_cover(repo_name: str, repo_description: str, owner: str, repo_id
         }, out_path)
         return out_path
     except Exception as exc:
-        print(f"[cover] PNG rendering failed: {exc}")
+        logger.warning("Cover PNG rendering failed: %s", exc)
         return None
 
 

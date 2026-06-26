@@ -248,36 +248,6 @@ async def get_book_cover(book_id: str, db: AsyncSession = Depends(get_db)):
 
     raise HTTPException(status_code=404, detail="Cover not found")
 
-    chapters_result = await db.execute(
-        select(ContentSection)
-        .where(
-            ContentSection.repo_id == gen.repo_id,
-            ContentSection.section_type == "book_chapter",
-        )
-        .order_by(ContentSection.chapter_number)
-    )
-    chapters = chapters_result.scalars().all()
-
-    return BookContentResponse(
-        book_id=gen.id,
-        title=gen.repo.name if gen.repo else "Unknown",
-        html_content=load_book_html(gen.id) or "",
-        cover_html=load_cover_html(gen.id),
-        cover_url=f"/api/books/{gen.id}/cover" if gen.cover_path else None,
-        chapters=[
-            SectionResponse(
-                id=ch.id,
-                section_type=ch.section_type,
-                title=ch.title,
-                content=load_chapter(gen.id, ch.chapter_number or 0) or "",
-                order_index=ch.order_index,
-                metadata_=ch.metadata_,
-                created_at=ch.created_at,
-            )
-            for ch in chapters
-        ],
-    )
-
 
 @router.delete("/books/{repo_id}")
 async def delete_book(repo_id: str, db: AsyncSession = Depends(get_db)):
@@ -303,7 +273,6 @@ async def delete_book(repo_id: str, db: AsyncSession = Depends(get_db)):
         await db.commit()
 
     actual_repo_id = gen.repo_id if gen else repo_id
-    await db.execute(delete(Bookmark).where(Bookmark.book_id == actual_repo_id))
     repo_result = await db.execute(select(Repo).where(Repo.id == actual_repo_id))
     repo = repo_result.scalar()
     if not repo and gen:

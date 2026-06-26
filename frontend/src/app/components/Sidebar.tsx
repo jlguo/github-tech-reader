@@ -106,7 +106,7 @@ export function Sidebar({ activeCategory, onCategoryChange, activeSection, onSec
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all text-left"
               style={{
                 background: isActive ? "rgba(193,127,58,0.25)" : "transparent",
-                color: isActive ? "var(--accent)" : "rgba(245,240,232,0.65)",
+                color: isActive ? "var(--accent)" : "rgba(245,240,232,0.85)",
                 fontFamily: "Inter, sans-serif",
                 fontWeight: isActive ? 500 : 400,
               }}

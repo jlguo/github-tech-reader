@@ -7,14 +7,16 @@ test.beforeAll(async () => {
   testFiles = await generateTestFiles();
 });
 
+// ImportDialog derives title from filename (remove extension), so all
+// "test.{ext}" files get title "test". The dialog has no title input.
 const BOOK_TYPES: { ext: string; name: string; badge: string; testIdPrefix: string }[] = [
-  { ext: "txt", name: "test-txt", badge: "TXT", testIdPrefix: "txt-reader" },
-  { ext: "epub", name: "test-epub", badge: "EPUB", testIdPrefix: "epub-reader" },
-  { ext: "pdf", name: "test-pdf", badge: "PDF", testIdPrefix: "" },
-  { ext: "docx", name: "test-docx", badge: "WORD", testIdPrefix: "doc-reader" },
-  { ext: "xlsx", name: "test-xlsx", badge: "EXCEL", testIdPrefix: "excel-reader" },
-  { ext: "pptx", name: "test-pptx", badge: "PPT", testIdPrefix: "ppt-reader" },
-  { ext: "html", name: "test-html", badge: "HTML", testIdPrefix: "" },
+  { ext: "txt", name: "test", badge: "TXT", testIdPrefix: "txt-reader" },
+  { ext: "epub", name: "test", badge: "EPUB", testIdPrefix: "epub-reader" },
+  { ext: "pdf", name: "test", badge: "PDF", testIdPrefix: "" },
+  { ext: "docx", name: "test", badge: "WORD", testIdPrefix: "doc-reader" },
+  { ext: "xlsx", name: "test", badge: "XLSX", testIdPrefix: "excel-reader" },
+  { ext: "pptx", name: "test", badge: "PPT", testIdPrefix: "ppt-reader" },
+  { ext: "html", name: "test", badge: "HTML", testIdPrefix: "" },
 ];
 
 async function uploadBook(page: Page, file: TestFile, title: string) {
@@ -59,7 +61,9 @@ async function openReader(page: Page, title: string) {
 }
 
 async function closeReader(page: Page) {
-  await page.click('[data-testid="reader-back"]');
+  await page.evaluate(() => {
+    (document.querySelector('[data-testid="reader-back"]') as HTMLElement)?.click();
+  });
   await page.waitForTimeout(1000);
   await expect(page.locator('[data-testid="reader-modal"]')).not.toBeVisible();
   await page.keyboard.press("Escape");
@@ -94,9 +98,9 @@ test.describe("Readers - Local Mode", () => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await page.waitForSelector('[data-testid^="book-card-"]', { timeout: 15000 });
 
-    await uploadBook(page, testFiles.epub, "epub-toc-test");
+    await uploadBook(page, testFiles.epub, "test");
     await page.waitForTimeout(2000);
-    await openReader(page, "epub-toc-test");
+    await openReader(page, "test");
 
     const tocToggle = page.locator('[data-testid="epub-reader-toc-toggle"]');
     if (await tocToggle.isVisible({ timeout: 5000 }).catch(() => false)) {
@@ -119,9 +123,9 @@ test.describe("Readers - Local Mode", () => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await page.waitForSelector('[data-testid^="book-card-"]', { timeout: 15000 });
 
-    await uploadBook(page, testFiles.txt, "txt-settings-test");
+    await uploadBook(page, testFiles.txt, "test");
     await page.waitForTimeout(2000);
-    await openReader(page, "txt-settings-test");
+    await openReader(page, "test");
 
     const fontIncrease = page.locator('[data-testid="txt-reader-font-increase"]');
     if (await fontIncrease.isVisible({ timeout: 5000 }).catch(() => false)) {
@@ -142,9 +146,9 @@ test.describe("Readers - Local Mode", () => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await page.waitForSelector('[data-testid^="book-card-"]', { timeout: 15000 });
 
-    await uploadBook(page, testFiles.txt, "topbar-test");
+    await uploadBook(page, testFiles.txt, "test");
     await page.waitForTimeout(2000);
-    await openReader(page, "topbar-test");
+    await openReader(page, "test");
 
     await expect(page.locator('[data-testid="reader-topbar"]')).toBeVisible({ timeout: 5000 });
 

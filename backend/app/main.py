@@ -5,12 +5,14 @@ from contextlib import asynccontextmanager
 from app.core.config import settings
 from app.core.database import init_db
 from app.api import repos, reading, agents, books, imports, youtube, categories, bookmarks
+from app.services.github import close_github_client
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
     yield
+    await close_github_client()
 
 
 app = FastAPI(

@@ -52,3 +52,5 @@ docs/demo.gif
 docs/settings.pen
 frontend/demo-recording/demo-walkthrough-Product-D-24615-ture-happy-path-walkthrough-chromium/video.webm
 frontend/demo-recording/.last-run.json
+# Generated test fixtures
+frontend/tests/e2e/fixtures/test-files/test.*

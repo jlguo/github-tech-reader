@@ -21,7 +21,7 @@ RUN pip install --no-cache-dir uv
 WORKDIR /app
 
 COPY backend/pyproject.toml ./
-RUN uv sync --no-dev
+RUN uv sync --locked --no-dev
 
 COPY backend/ .
 COPY --from=frontend-build /app/dist /app/static

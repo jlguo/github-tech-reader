@@ -12,11 +12,16 @@ function ensureDir(dir: string) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
+export interface TestFile {
+  path: string;
+}
+
 async function writeZip(filepath: string, entries: { name: string; data: Buffer | string; stored?: boolean }[]) {
-  const archiver = await import("archiver");
+  const archiverMod = await import("archiver");
+  const archiver = archiverMod.default || archiverMod;
   ensureDir(path.dirname(filepath));
   const output = fs.createWriteStream(filepath);
-  const archive = archiver.default("zip", { zlib: { level: 9 } });
+  const archive = archiver("zip", { zlib: { level: 9 } });
   output.on("close", () => {});
   archive.pipe(output);
   for (const e of entries) {
@@ -26,7 +31,7 @@ async function writeZip(filepath: string, entries: { name: string; data: Buffer 
       archive.append(e.data, { name: e.name });
     }
   }
-  archive.finalize();
+  await archive.finalize();
 }
 
 function buildMultiPagePdf(nPages: number): string {
@@ -194,6 +199,16 @@ startxref
   for (const [filename, entries] of Object.entries(zipFiles)) {
     await writeZip(path.join(FIXTURE_DIR, filename), entries);
   }
+
+  return {
+    txt: { path: path.join(FIXTURE_DIR, "test.txt") },
+    epub: { path: path.join(FIXTURE_DIR, "test.epub") },
+    pdf: { path: path.join(FIXTURE_DIR, "test.pdf") },
+    docx: { path: path.join(FIXTURE_DIR, "test.docx") },
+    xlsx: { path: path.join(FIXTURE_DIR, "test.xlsx") },
+    pptx: { path: path.join(FIXTURE_DIR, "test.pptx") },
+    html: { path: path.join(FIXTURE_DIR, "test.html") },
+  };
 }
 
 export function getFixturePath(filename: string): string {

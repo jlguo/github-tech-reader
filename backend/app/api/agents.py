@@ -45,11 +45,15 @@ async def _status_updater(repo_id: str):
                 gen.updated_at = datetime.now(timezone.utc)
                 await session.commit()
 
+        # Capture values inside the session block to avoid detached instance access
+        gen_total = gen.total_chapters if gen else total_chapters
+        gen_completed = gen.completed_chapters if gen else completed_chapters
+
         await publish(repo_id, {
             "status": status,
             "current_phase": phase,
-            "total_chapters": gen.total_chapters if gen else total_chapters,
-            "completed_chapters": gen.completed_chapters if gen else completed_chapters,
+            "total_chapters": gen_total,
+            "completed_chapters": gen_completed,
         })
     return update
 

@@ -193,6 +193,7 @@ export function ReaderModal({ book, onClose }: ReaderModalProps) {
           pointerEvents: topbarVisible ? "auto" : "none",
           transition: "transform 220ms ease, opacity 220ms ease",
         }}
+        aria-hidden={!topbarVisible}
       >
         <button
           onClick={onClose}

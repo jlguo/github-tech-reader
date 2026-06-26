@@ -42,8 +42,14 @@ class Settings(BaseSettings):
 
     port: int = 8000
 
+    # Optional explicit database URL (e.g., for PostgreSQL in production).
+    # When empty, falls back to a SQLite file under data_dir.
+    database_url: str = ""
+
     @property
-    def database_url(self) -> str:
+    def resolved_database_url(self) -> str:
+        if self.database_url:
+            return self.database_url
         resolved_data_dir = self.data_dir or str(Path(__file__).parent.parent.parent / "data")
         return f"sqlite+aiosqlite:///{resolved_data_dir}/reader.db"
 

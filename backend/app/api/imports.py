@@ -3,6 +3,7 @@ import os
 import re
 import ipaddress
 import socket
+import logging
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
@@ -20,6 +21,8 @@ from app.services.cover_extractor import extract_cover
 from app.services.cover_renderer import render_cover
 
 _COVERS_DIR = Path(__file__).parent.parent.parent / "data" / "covers"
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -151,7 +154,6 @@ async def upload_book(
                 Image.open(BytesIO(data)).save(cover_out, "PNG")
                 cover_path = cover_out
         except Exception as exc:
-            logger = __import__("logging").getLogger(__name__)
             logger.warning("Cover extract failed for %s: %s", file_id, exc)
 
     if not cover_path:
@@ -166,7 +168,6 @@ async def upload_book(
             }, cover_out)
             cover_path = cover_out
         except Exception as exc:
-            logger = __import__("logging").getLogger(__name__)
             logger.warning("Cover render failed for %s: %s", file_id, exc)
 
     async with async_session() as session:
@@ -248,7 +249,6 @@ async def import_url(
         }, str(_COVERS_DIR / f"{book_id}.png"))
         cover_path = str(_COVERS_DIR / f"{book_id}.png")
     except Exception as exc:
-        logger = __import__("logging").getLogger(__name__)
         logger.warning("Cover render failed for URL import %s: %s", book_id, exc)
 
     async with async_session() as session:
