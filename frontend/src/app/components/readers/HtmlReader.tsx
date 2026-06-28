@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
-import { List } from "lucide-react";
+import { List, ChevronRight } from "lucide-react";
 import { Book } from "../bookData";
 import { htmlContent as mockContent } from "./readerData";
 import { getDataService, type IDataService } from "../../../services/api";
@@ -12,20 +12,87 @@ const SCROLL_DEBOUNCE_MS = 2000;
 interface HtmlReaderProps extends BookmarkCapableReaderProps { book: Book; }
 
 interface TocItem { id: string; title: string; level: number; }
+interface TocNode extends TocItem { children: TocNode[]; }
 
-const tocItemStyle = (level: number, active: boolean): React.CSSProperties => ({
-  paddingLeft: level === 1 ? "12px" : "24px",
-  fontFamily: "Inter, sans-serif",
-  fontSize: level === 1 ? "0.8rem" : "0.75rem",
-  fontWeight: level === 1 ? 600 : 400,
-  color: active ? "var(--accent)" : level === 1 ? "var(--foreground)" : "var(--muted-foreground)",
-  background: active ? "color-mix(in srgb, var(--accent) 8%, transparent)" : "transparent",
-  borderLeft: active ? "2px solid var(--accent)" : "2px solid transparent",
-  padding: `6px 12px 6px ${level === 1 ? 12 : 24}px`,
-  display: "block", width: "100%", textAlign: "left" as const,
-  cursor: "pointer", transition: "all 0.15s",
-  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-});
+function buildTocTree(items: TocItem[]): TocNode[] {
+  const root: TocNode[] = [];
+  const stack: TocNode[] = [];
+  for (const item of items) {
+    const node: TocNode = { ...item, children: [] };
+    while (stack.length > 0 && stack[stack.length - 1].level >= node.level) {
+      stack.pop();
+    }
+    if (stack.length === 0) {
+      root.push(node);
+    } else {
+      stack[stack.length - 1].children.push(node);
+    }
+    stack.push(node);
+  }
+  return root;
+}
+
+function TocTreeItem({
+  node,
+  depth,
+  activeId,
+  onSelect,
+}: {
+  node: TocNode;
+  depth: number;
+  activeId: string;
+  onSelect: (id: string) => void;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+  const hasChildren = node.children.length > 0;
+  const isActive = node.id === activeId;
+
+  return (
+    <div>
+      <button
+        onClick={() => (hasChildren ? setCollapsed((v) => !v) : onSelect(node.id))}
+        className="flex items-center gap-1.5 w-full text-left transition-colors hover:bg-black/5 dark:hover:bg-white/5"
+        style={{
+          paddingLeft: `${10 + depth * 16}px`,
+          paddingRight: 8,
+          paddingTop: 4,
+          paddingBottom: 4,
+          fontSize: depth === 0 ? "0.8rem" : "0.75rem",
+          fontWeight: depth === 0 ? 600 : 400,
+          color: isActive ? "var(--accent)" : depth === 0 ? "var(--foreground)" : "var(--muted-foreground)",
+          background: isActive ? "color-mix(in srgb, var(--accent) 8%, transparent)" : "transparent",
+          cursor: "pointer",
+          transition: "all 0.15s",
+        }}
+      >
+        {hasChildren && (
+          <ChevronRight
+            size={14}
+            style={{
+              flexShrink: 0,
+              transition: "transform 0.15s",
+              transform: collapsed ? "rotate(0deg)" : "rotate(90deg)",
+              color: "var(--muted-foreground)",
+            }}
+          />
+        )}
+        {!hasChildren && <span style={{ width: 14, flexShrink: 0 }} />}
+        <span className="truncate">{node.title}</span>
+      </button>
+      {!collapsed &&
+        hasChildren &&
+        node.children.map((child) => (
+          <TocTreeItem
+            key={child.id}
+            node={child}
+            depth={depth + 1}
+            activeId={activeId}
+            onSelect={onSelect}
+          />
+        ))}
+    </div>
+  );
+}
 
 function extractToc(html: string): TocItem[] {
   const items: TocItem[] = [];
@@ -92,11 +159,14 @@ export function HtmlReader({ book, onBookmarkReady, restoreAnchor }: HtmlReaderP
   useEffect(() => {
     if (!service) return;
 
-    if (book.category === "generated") {
+    const isRepoBook = book.sourceType === "github" || book.sourceType === "youtube";
+    const isImportedFile = book.sourceType === "file";
+
+    if (isRepoBook) {
       service.getBookByRepo(book.id)
         .then(d => { setRealHtml(d.html_content); setLoaded(true); })
         .catch(() => setLoaded(true));
-    } else if (book.category === "documents" && !book.isDemo) {
+    } else if (isImportedFile && !book.isDemo) {
       service.getBookContent(book.id)
         .then(d => { setRealHtml(d.html_content); setLoaded(true); })
         .catch(() => setLoaded(true));
@@ -104,7 +174,7 @@ export function HtmlReader({ book, onBookmarkReady, restoreAnchor }: HtmlReaderP
       setRealHtml(typeof mockContent === 'string' ? mockContent : (mockContent as {html: string}).html);
       setLoaded(true);
     }
-  }, [service, book.id, book.category, book.isDemo]);
+  }, [service, book.id, book.sourceType, book.isDemo]);
 
   const displayHtml = realHtml ? sanitizeHtml(realHtml) : "";
 
@@ -124,6 +194,7 @@ export function HtmlReader({ book, onBookmarkReady, restoreAnchor }: HtmlReaderP
   }, [displayHtml]);
   const anchoredHtml = injectAnchorIds(content);
   const tocItems = extractToc(content);
+  const tocTree = buildTocTree(tocItems);
 
   const scrollToSection = useCallback((id: string) => {
     setActiveId(id);
@@ -272,15 +343,14 @@ export function HtmlReader({ book, onBookmarkReady, restoreAnchor }: HtmlReaderP
               </p>
             </div>
             <div className="flex-1 overflow-y-auto py-2">
-              {tocItems.map(item => (
-                <button
-                  key={item.id}
-                  className="block transition-colors"
-                  style={tocItemStyle(item.level, item.id === activeId)}
-                  onClick={() => scrollToSection(item.id)}
-                >
-                  {item.title}
-                </button>
+              {tocTree.map((node) => (
+                <TocTreeItem
+                  key={node.id}
+                  node={node}
+                  depth={0}
+                  activeId={activeId}
+                  onSelect={scrollToSection}
+                />
               ))}
             </div>
           </aside>
@@ -298,15 +368,14 @@ export function HtmlReader({ book, onBookmarkReady, restoreAnchor }: HtmlReaderP
                   </p>
                 </div>
                 <div className="flex-1 overflow-y-auto py-2">
-                  {tocItems.map(item => (
-                    <button
-                      key={item.id}
-                      className="block transition-colors"
-                      style={tocItemStyle(item.level, item.id === activeId)}
-                      onClick={() => scrollToSection(item.id)}
-                    >
-                      {item.title}
-                    </button>
+                  {tocTree.map((node) => (
+                    <TocTreeItem
+                      key={node.id}
+                      node={node}
+                      depth={0}
+                      activeId={activeId}
+                      onSelect={scrollToSection}
+                    />
                   ))}
                 </div>
               </div>
