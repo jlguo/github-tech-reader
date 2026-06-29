@@ -378,7 +378,7 @@ function LabelPicker({
         />
       </div>
       {suggestions.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, maxHeight: 96, overflowY: "auto" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, maxHeight: 96, overflowY: "auto", scrollbarWidth: "none" }}>
           {suggestions.map((label) => (
             <button
               key={label}
@@ -613,6 +613,7 @@ export function CategoryManager({
             flex: 1,
             minHeight: 0,
             overflowY: "auto",
+            scrollbarWidth: "none",
           }}
         >
           <span

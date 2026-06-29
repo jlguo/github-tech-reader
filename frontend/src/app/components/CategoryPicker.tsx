@@ -67,7 +67,7 @@ export function CategoryPicker({
         {/* Category rows */}
         <div
           className="flex flex-col gap-1 px-3 overflow-y-auto"
-          style={{ maxHeight: "50vh", paddingBottom: 4 }}
+          style={{ maxHeight: "50vh", paddingBottom: 4, scrollbarWidth: "none" }}
         >
           {allCategories.map((cat) => {
             const Icon = resolveIcon(cat.icon);
