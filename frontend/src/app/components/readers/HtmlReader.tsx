@@ -114,6 +114,21 @@ function injectAnchorIds(html: string): string {
   });
 }
 
+const PRISM_CSS = `
+  code[class*="language-"],pre[class*="language-"]{color:#657b83;font-family:Consolas,Monaco,"Andale Mono","Ubuntu Mono",monospace;font-size:.9em;text-align:left;white-space:pre;word-spacing:normal;word-break:normal;word-wrap:normal;line-height:1.5;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-hyphens:none;-moz-hyphens:none;-ms-hyphens:none;hyphens:none}
+  pre[class*="language-"]{padding:1em;margin:.5em 0;overflow:auto;border-radius:.3em;background:#ede5d4}
+  :not(pre)>code[class*="language-"]{padding:.1em;border-radius:.3em;white-space:normal;background:#ede5d4}
+  .token.comment,.token.prolog,.token.doctype,.token.cdata{color:#93a1a1}
+  .token.punctuation{color:#586e75}
+  .token.namespace{opacity:.7}
+  .token.property,.token.tag,.token.boolean,.token.number,.token.constant,.token.symbol,.token.deleted{color:#268bd2}
+  .token.selector,.token.attr-name,.token.string,.token.char,.token.builtin,.token.url,.token.inserted{color:#2aa198}
+  .token.entity{color:#657b83;background:#eee8d5}
+  .token.atrule,.token.attr-value,.token.keyword{color:#859900}
+  .token.function,.token.class-name{color:#b58900}
+  .token.regex,.token.important,.token.variable{color:#cb4b16}
+`;
+
 const CONTENT_CSS = `
   :root{--bg:#f5f0e8;--fg:#2c1a0e;--primary:#5c3d1e;--accent:#c17f3a;--muted-fg:#7a6248;--muted:#ede5d4;--border:rgba(92,61,30,0.15)}
   html,body{height:100%;margin:0;padding:0}
@@ -298,7 +313,9 @@ export function HtmlReader({ book, onBookmarkReady, restoreAnchor }: HtmlReaderP
     }
   }, [showCover, tocItems, scrollToSection]);
 
-  const scopedHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${CONTENT_CSS}</style><script>${TAP_DETECT_SCRIPT}</script><script>${buildLinkHandlerScript(book.sourceUrl)}</script></head><body>${anchoredHtml}</body></html>`;
+  const PRISM_SCRIPT = `(function(){var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js';s.onload=function(){var languages=['typescript','bash','yaml','json','python','markdown','docker'];var loaded=0;languages.forEach(function(l){var ls=document.createElement('script');ls.src='https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-'+l+'.min.js';ls.onload=function(){loaded++;if(loaded===languages.length)Prism.highlightAll();};document.head.appendChild(ls);});};document.head.appendChild(s);})();`;
+
+  const scopedHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${CONTENT_CSS}</style><style>${PRISM_CSS}</style><script>${TAP_DETECT_SCRIPT}</script><script>${buildLinkHandlerScript(book.sourceUrl)}</script><script>${PRISM_SCRIPT}</script></head><body>${anchoredHtml}</body></html>`;
 
   if (!loaded) {
     return (

@@ -120,4 +120,19 @@ test.describe("Reader - link behavior (sandboxed iframe)", () => {
     expect(text).toContain("第1章");
     expect(text).not.toContain("Chapter 1:");
   });
+
+  test("Prism syntax highlighter is loaded in the reader iframe", async ({ page }) => {
+    test.skip(!(await openRepoBook(page)), "no repo book on shelf");
+    const frame = page.frameLocator('[data-testid="reader-content"] iframe');
+    await expect(frame.locator("body")).toBeVisible({ timeout: 10000 });
+    const srcdocFrame = page.frames().find((f) => f.url() === "about:srcdoc");
+    if (!srcdocFrame) throw new Error("reader srcdoc frame not found");
+    await expect.poll(async () => {
+      return srcdocFrame.evaluate(() => typeof (window as unknown as { Prism?: unknown }).Prism !== "undefined");
+    }, { timeout: 10000 }).toBe(true);
+    const hasPrismStyle = await srcdocFrame.evaluate(() =>
+      Array.from(document.querySelectorAll("style")).some((s) => s.textContent?.includes("language-") ?? false)
+    );
+    expect(hasPrismStyle).toBe(true);
+  });
 });
