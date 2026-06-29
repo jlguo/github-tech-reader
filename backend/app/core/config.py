@@ -24,10 +24,13 @@ class Settings(BaseSettings):
 
     # Book generation
     book_language: str = "zh"
-    book_max_chapters: int = 16
+    book_min_chapters: int = 3
+    book_max_chapters: int = 24
     book_max_files_to_fetch: int = 100
     book_chapter_min_words: int = 2000
     book_chapter_max_words: int = 5000
+    llm_planning_model: str = ""
+    llm_review_model: str = ""
 
     # LLM rate limiting
     llm_max_parallel_chapters: int = 3

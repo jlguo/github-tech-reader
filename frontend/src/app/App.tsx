@@ -166,6 +166,7 @@ export default function App() {
               genStatus: b.status as "pending" | "fetching" | "planning" | "cover" | "writing" | "reviewing" | "publishing" | "done" | "failed" | "no_book" | undefined,
               sourceType: b.source_type as "github" | "file" | "url" | "youtube",
               coverHtml: b.cover_html ?? undefined,
+              sourceUrl: b.html_url || undefined,
             };
           });
           setBookList(prev => {

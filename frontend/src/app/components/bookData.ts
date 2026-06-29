@@ -22,6 +22,7 @@ export interface Book {
   genStatus?: "pending" | "fetching" | "planning" | "cover" | "writing" | "reviewing" | "publishing" | "done" | "failed" | "no_book";
   sourceType?: "github" | "file" | "url" | "youtube";
   coverHtml?: string;
+  sourceUrl?: string;
 }
 
 export const books: Book[] = [

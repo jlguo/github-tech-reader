@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import math
 import asyncio
 import time
 import logging
@@ -36,6 +37,8 @@ except ImportError:
     _crewai_available = False
 
 llm = f"openai/{settings.llm_model}"
+_planning_llm = f"openai/{settings.llm_planning_model}" if settings.llm_planning_model else llm
+_review_llm = f"openai/{settings.llm_review_model}" if settings.llm_review_model else llm
 
 _LANG_INSTRUCTION = (
     "IMPORTANT: All output MUST be in Simplified Chinese (zh-CN). "
@@ -54,7 +57,6 @@ _RATE_LIMIT_KEYWORDS = ("rate_limit", "rate limit", "too many requests", "quota 
 README_TRUNCATION = 6000  # Max chars to include from the README
 FILE_CONTENT_TRUNCATION = 3000  # Max chars per file in the repository snapshot
 TOP_FILES_LIMIT = 60  # Max files included in the repository snapshot
-CHAPTER_TEXT_TRUNCATION = 30000  # Max chars for chapter text sent to the editor
 
 
 def _get_chapter_sem() -> asyncio.Semaphore:
@@ -106,11 +108,11 @@ def _ensure_crewai():
         raise RuntimeError("crewai not installed")
 
 
-def _make_agent(role: str, goal: str, backstory: str) -> Agent:
+def _make_agent(role: str, goal: str, backstory: str, llm_override: str | None = None) -> Agent:
     _ensure_crewai()
     return Agent(
         role=role, goal=goal, backstory=backstory,
-        verbose=True, allow_delegation=False, llm=llm,
+        verbose=True, allow_delegation=False, llm=llm_override or llm,
     )
 
 
@@ -118,12 +120,25 @@ def _count_words(text: str) -> int:
     return len(re.findall(r"\w+", text))
 
 
-def _determine_chapter_count(repo_info: dict, files: dict[str, str]) -> int:
-    file_count = len(files)
-    if file_count < 30: return 4
-    elif file_count < 80: return 8
-    elif file_count < 200: return 12
-    return min(settings.book_max_chapters, 16)
+def _clamp(value: int, lo: int, hi: int) -> int:
+    return max(lo, min(value, hi))
+
+
+def _plan_book_dimensions(scope: dict) -> dict:
+    est_loc = scope.get("est_loc", 0)
+    code_files = scope.get("code_files", 0)
+    dir_count = scope.get("dir_count", 0)
+    # Tuned sizing curve: LOC dominates (small repos stay near the floor, no
+    # padding), file/dir counts add modular breadth. Avoids a log term that over-inflated tiny repos.
+    raw_chapters = 2 + est_loc / 4000 + dir_count * 0.25 + code_files * 0.04
+    chapter_count = _clamp(round(raw_chapters), settings.book_min_chapters, settings.book_max_chapters)
+    approx_loc_per_chapter = est_loc / max(chapter_count, 1)
+    target = _clamp(int(approx_loc_per_chapter * 6),
+                    settings.book_chapter_min_words, settings.book_chapter_max_words)
+    max_files = _clamp(int(code_files * 0.8), 30, 200)
+    return {"chapter_count": chapter_count,
+            "target_words_per_chapter": target,
+            "max_files": max_files}
 
 
 def _build_textual_snapshot(readme, files, issues) -> str:
@@ -140,7 +155,8 @@ def _build_textual_snapshot(readme, files, issues) -> str:
     return "\n".join(parts)
 
 
-async def _run_planning_crew(repo_name, repo_description, chapter_count, snapshot) -> list[dict]:
+async def _run_planning_crew(repo_name, repo_description, chapter_count, snapshot,
+                             target_words_per_chapter: int = 2000) -> list[dict]:
     _ensure_crewai()
     planner = _make_agent(
         role="Book Planner",
@@ -148,12 +164,12 @@ async def _run_planning_crew(repo_name, repo_description, chapter_count, snapsho
              f"{_LANG_INSTRUCTION}",
         backstory="You are an experienced technical book editor who excels at structuring "
                   "complex software topics into logical, progressive chapters.",
+        llm_override=_planning_llm,
     )
     task = Task(
         description=(
             f"Repository: {repo_name}\nDescription: {repo_description}\n"
-            f"Target: {chapter_count} chapters, {settings.book_chapter_min_words}-"
-            f"{settings.book_chapter_max_words} words each.\n\n"
+            f"Target: {chapter_count} chapters, each chapter targets ~{target_words_per_chapter} words.\n\n"
             f"Repository content:\n{snapshot[:15000]}\n\n"
             f"Create a book outline. {_LANG_INSTRUCTION} "
             "Return ONLY a JSON array of chapter objects. "
@@ -191,8 +207,58 @@ def _fallback_outline(chapter_count, repo_name) -> list[dict]:
             for i in range(1, chapter_count + 1)]
 
 
-async def _run_chapter_research_writer(repo_name, chapter, snapshot) -> dict:
+def _build_chapter_context(chapter: dict, files: dict[str, str] | None, per_file_cap: int = 12000) -> str:
+    """Build a focused code-context string for a single chapter.
+
+    Matches the chapter's files_to_analyze against the available files dict.
+    Falls back to a generic sampling of the first files when nothing matches.
+    Returns '' when there are no files at all (transcript books).
+    """
+    if not files:
+        return ""
+    paths = chapter.get("files_to_analyze", [])
+    matched: dict[str, str] = {}
+    if paths:
+        for requested in paths:
+            matched_path = None
+            # exact match
+            if requested in files:
+                matched_path = requested
+            else:
+                # fuzzy: files key ends with requested path, or basename equality
+                for key in files:
+                    if key.endswith(requested) or key.split("/")[-1] == requested.split("/")[-1]:
+                        matched_path = key
+                        break
+            if matched_path:
+                matched[matched_path] = files[matched_path][:per_file_cap]
+        logger.info("_build_chapter_context: matched %d/%d requested files for chapter %s",
+                     len(matched), len(paths), chapter.get("number", "?"))
+    if not matched:
+        # fall back to first ~8 files
+        for key in list(files.keys())[:8]:
+            matched[key] = files[key][:per_file_cap]
+    parts = []
+    for key, content in matched.items():
+        parts.append(f"### {key}\n```\n{content}\n```\n")
+    return "\n".join(parts)
+
+
+_FAITH_INSTRUCTION = (
+    "Ground EVERY technical claim in the provided source files below. "
+    "The code is the source of truth. If the code does not support a statement, do NOT make it. "
+    "Reference real file paths, class names, and function names that appear in the provided code. "
+    "Do not invent APIs, parameters, or behavior."
+)
+
+
+async def _run_chapter_research_writer(repo_name, chapter, snapshot, files: dict[str, str] | None = None,
+                                        target_words_per_chapter: int | None = None) -> dict:
     _ensure_crewai()
+    target_wc = target_words_per_chapter or settings.book_chapter_min_words
+    chapter_code = _build_chapter_context(chapter, files)
+    chapter_code_section = chapter_code if chapter_code else snapshot[:12000]
+
     researcher = _make_agent(
         role="Chapter Researcher",
         goal=f"Research Chapter {chapter['number']}: '{chapter['title']}' of the {repo_name} book. "
@@ -203,8 +269,7 @@ async def _run_chapter_research_writer(repo_name, chapter, snapshot) -> dict:
     writer = _make_agent(
         role="Chapter Writer",
         goal=f"Write Chapter {chapter['number']}: '{chapter['title']}' as a polished "
-             f"educational chapter ({settings.book_chapter_min_words}-"
-             f"{settings.book_chapter_max_words} words) in Markdown. {_LANG_INSTRUCTION}",
+             f"educational chapter targeting ~{target_wc} words in Markdown. {_LANG_INSTRUCTION}",
         backstory="Skilled technical book author who transforms raw research into "
                   "compelling, educational prose for intermediate developers.",
     )
@@ -212,8 +277,10 @@ async def _run_chapter_research_writer(repo_name, chapter, snapshot) -> dict:
         description=(
             f"Chapter {chapter['number']}: {chapter['title']}\nFocus: {chapter['focus']}\n"
             f"Key files: {chapter.get('files_to_analyze', [])}\n\n"
-            f"Repository content:\n{snapshot[:12000]}\n\n"
-            f"Provide structured research notes in Chinese: key concepts, architecture decisions, "
+            f"## Project Overview\n{snapshot[:3000]}\n\n"
+            f"## Source Code Context\n{chapter_code_section}\n\n"
+            f"{_FAITH_INSTRUCTION}\n\n"
+            "Provide structured research notes in Chinese: key concepts, architecture decisions, "
             "code patterns with references, edge cases, educational value."
         ),
         expected_output="Structured research notes with code references.",
@@ -222,10 +289,14 @@ async def _run_chapter_research_writer(repo_name, chapter, snapshot) -> dict:
     writing_task = Task(
         description=(
             f"Write Chapter {chapter['number']}: '{chapter['title']}' "
-            f"({settings.book_chapter_min_words}-{settings.book_chapter_max_words} words). "
+            f"targeting ~{target_wc} words. "
             f"{_LANG_INSTRUCTION} "
+            f"{_FAITH_INSTRUCTION}\n\n"
+            f"## Source Code Context\n{chapter_code_section}\n\n"
             "Use clear section headers (##), include code snippets, explain WHY not just WHAT, "
-            "add practical examples, end with summary and further reading."
+            "add practical examples, end with summary and further reading. "
+            "Do NOT include the chapter title or a top-level (#) heading — start directly "
+            "with the body; the chapter title is added separately."
         ),
         expected_output="A complete book chapter in Markdown.",
         agent=writer,
@@ -237,12 +308,17 @@ async def _run_chapter_research_writer(repo_name, chapter, snapshot) -> dict:
             "content": result, "word_count": _count_words(result)}
 
 
-async def _run_chapters_parallel(repo_name, outline, snapshot) -> list[dict]:
+async def _run_chapters_parallel(repo_name, outline, snapshot,
+                                 files: dict[str, str] | None = None,
+                                 target_words_per_chapter: int | None = None) -> list[dict]:
     sem = _get_chapter_sem()
 
     async def _chapter_with_limit(ch):
         async with sem:
-            return await _run_chapter_research_writer(repo_name, ch, snapshot)
+            result = await _run_chapter_research_writer(repo_name, ch, snapshot, files, target_words_per_chapter)
+            result["files_to_analyze"] = ch.get("files_to_analyze", [])
+            result["_target_wc"] = target_words_per_chapter or settings.book_chapter_min_words
+            return result
 
     tasks = [_chapter_with_limit(ch) for ch in outline]
     results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -250,89 +326,169 @@ async def _run_chapters_parallel(repo_name, outline, snapshot) -> list[dict]:
     for i, result in enumerate(results):
         if isinstance(result, Exception):
             chapters.append({"number": outline[i]["number"], "title": outline[i]["title"],
-                            "content": f"Chapter generation failed: {result}", "word_count": 0})
+                            "content": f"Chapter generation failed: {result}", "word_count": 0,
+                            "files_to_analyze": outline[i].get("files_to_analyze", [])})
         else:
             chapters.append(result)
     chapters.sort(key=lambda c: c["number"])
     return chapters
 
 
-async def _run_review_crew(chapters, repo_name) -> list[dict]:
+async def _run_review_crew(chapters, repo_name, files: dict[str, str] | None = None) -> list[dict]:
     _ensure_crewai()
     reviewer = _make_agent(
         role="Technical Reviewer",
-        goal=f"Review all book chapters for technical accuracy, clarity, completeness, and consistency. "
+        goal=f"Review each chapter for technical accuracy, grounding, and correctness. "
              f"{_LANG_INSTRUCTION}",
         backstory="Senior engineer and editor who ensures technical books are accurate, "
                   "well-structured, and valuable.",
+        llm_override=_review_llm,
     )
-    chapters_text = "\n\n".join(
-        f"### Chapter {ch['number']}: {ch['title']}\n\n{ch['content'][:FILE_CONTENT_TRUNCATION]}"
-        for ch in chapters
+    writer = _make_agent(
+        role="Chapter Writer",
+        goal="Rewrite a chapter to fix identified issues while preserving structure and length.",
+        backstory="Skilled technical book author who can surgically fix issues in existing chapters.",
     )
-    task = Task(
-        description=(
-            f"Review the following chapters for '{repo_name}'.\n\n{chapters_text[:20000]}\n\n"
-            f"For each chapter: PASS or NEEDS_FIX, list issues, list suggestions. "
-            f"{_LANG_INSTRUCTION}"
-        ),
-        expected_output="Per-chapter review with PASS/NEEDS_FIX verdicts.",
-        agent=reviewer,
+    sem = _get_chapter_sem()
+
+    async def _review_one(chapter: dict) -> dict:
+        chapter_code = _build_chapter_context(chapter, files or {})
+        ch_content = chapter.get("content", "")[:15000]
+        async with sem:
+            verdict_text = await _kickoff_with_retry(Crew(
+                agents=[reviewer],
+                tasks=[Task(
+                    description=(
+                        f"Review Chapter {chapter['number']}: '{chapter['title']}' of '{repo_name}'.\n\n"
+                        f"Chapter content:\n{ch_content}\n\n"
+                        f"Reference source code:\n{chapter_code[:15000] if chapter_code else '(none)'}\n\n"
+                        f"{_FAITH_INSTRUCTION}\n\n"
+                        "Return STRICT JSON with no extra text:\n"
+                        '{"verdict":"PASS|NEEDS_FIX","issues":["..."],"unsupported_claims":["..."]}\n'
+                        "Verdict PASS if chapter is factually accurate and grounded. NEEDS_FIX if it contains "
+                        "unsupported claims, hallucinated APIs, or factual errors."
+                    ),
+                    expected_output="JSON verdict object.",
+                    agent=reviewer,
+                )],
+                process=Process.sequential, verbose=True,
+            ))
+        # Parse JSON verdict robustly
+        try:
+            obj_match = re.search(r"\{.*\}", verdict_text, re.DOTALL)
+            if obj_match:
+                import json as _json
+                verdict = _json.loads(obj_match.group())
+            else:
+                verdict = {"verdict": "PASS", "issues": [], "unsupported_claims": []}
+        except Exception:
+            verdict = {"verdict": "PASS", "issues": [], "unsupported_claims": []}
+
+        if verdict.get("verdict") == "NEEDS_FIX":
+            issues_text = "\n".join(verdict.get("issues", []))
+            claims_text = "\n".join(verdict.get("unsupported_claims", []))
+            fix_prompt = (
+                f"Rewrite Chapter {chapter['number']}: '{chapter['title']}' to fix these issues.\n\n"
+                f"## Issues\n{issues_text}\n\n"
+                f"## Unsupported claims to remove\n{claims_text}\n\n"
+                f"## Original chapter\n{ch_content}\n\n"
+                f"## Reference source code\n{chapter_code[:15000] if chapter_code else '(none)'}\n\n"
+                f"{_FAITH_INSTRUCTION}\n\n"
+                f"Preserve the chapter structure, section headers, and target length (~{chapter.get('_target_wc', settings.book_chapter_min_words)} words). "
+                "Remove unsupported claims and correct inaccuracies against the provided source code."
+            )
+            async with sem:
+                fixed = await _kickoff_with_retry(Crew(
+                    agents=[writer],
+                    tasks=[Task(
+                        description=fix_prompt,
+                        expected_output="Corrected chapter in Markdown.",
+                        agent=writer,
+                    )],
+                    process=Process.sequential, verbose=True,
+                ))
+            chapter["content"] = fixed
+            chapter["word_count"] = _count_words(fixed)
+        return chapter
+
+    tasks = [_review_one(ch) for ch in chapters]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    out = []
+    for original, result in zip(chapters, results):
+        if isinstance(result, Exception):
+            logger.warning("Review failed for chapter %s: %s — keeping original",
+                           original.get("number", "?"), result)
+            out.append(original)
+        else:
+            out.append(result)
+    return out
+
+
+def _html_escape(text: str) -> str:
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _strip_outer_code_fence(md: str) -> str:
+    text = (md or "").strip()
+    m = re.match(r"^```[a-zA-Z]*\n(.*)\n```$", text, re.DOTALL)
+    return m.group(1) if m else md
+
+
+def _markdown_to_html(md: str) -> str:
+    import markdown
+    return markdown.markdown(
+        _strip_outer_code_fence(md),
+        extensions=["fenced_code", "tables", "sane_lists", "nl2br", "toc"],
+        output_format="html5",
     )
-    crew = Crew(agents=[reviewer], tasks=[task], process=Process.sequential, verbose=True)
-    await _kickoff_with_retry(crew)
-    return chapters
+
+
+def _strip_leading_title(md: str) -> str:
+    text = (md or "").lstrip("\n")
+    # Writers often repeat the chapter title as the first heading; the editor
+    # already emits the canonical <h1>, so drop a single leading ATX heading.
+    m = re.match(r"^#{1,3}[ \t]+[^\n]*\n+", text)
+    return text[m.end():] if m else text
 
 
 async def _run_editor_crew(chapters, repo_name) -> str:
-    _ensure_crewai()
-    editor = _make_agent(
-        role="Book Editor",
-        goal=f"Merge all chapters into a polished, publication-ready HTML book for '{repo_name}'. "
-             f"{_LANG_INSTRUCTION}",
-        backstory="Professional book editor who takes raw chapters and turns them "
-                  "into a cohesive, beautifully formatted book.",
+    from datetime import date
+    chapter_sections: list[str] = []
+    toc_items: list[str] = []
+    for ch in chapters:
+        n = ch["number"]
+        title = ch.get("title", f"Chapter {n}")
+        body_md = _strip_leading_title(_strip_outer_code_fence(ch.get("content", "")))
+        body_html = _markdown_to_html(body_md)
+        chapter_sections.append(
+            f'<section id="chapter-{n}">\n'
+            f'<h1>Chapter {n}: {_html_escape(title)}</h1>\n'
+            f'{body_html}\n'
+            f"</section>\n"
+        )
+        toc_items.append(
+            f'<li class="toc-item"><a href="#chapter-{n}">Chapter {n}: {_html_escape(title)}</a></li>\n'
+        )
+    toc_html = '<ul class="toc">\n' + "".join(toc_items) + "</ul>\n"
+    chapters_html = "".join(chapter_sections)
+    today = date.today().isoformat()
+    full_html = (
+        "<!DOCTYPE html>\n"
+        f'<html lang="zh-CN">\n'
+        "<head>\n"
+        '<meta charset="UTF-8">\n'
+        f"<title>{_html_escape(repo_name)}</title>\n"
+        f"<style>{_BOOK_CSS}</style>\n"
+        "</head>\n"
+        "<body>\n"
+        f"<h1>{_html_escape(repo_name)}</h1>\n"
+        f"{toc_html}\n"
+        f"{chapters_html}\n"
+        f'<div class="footer">Generated on {today}</div>\n'
+        "</body>\n"
+        "</html>"
     )
-    chapters_text = "\n\n".join(
-        f"CHAPTER_{ch['number']}_MARKER\n# Chapter {ch['number']}: {ch['title']}\n\n{ch['content']}"
-        for ch in chapters
-    )
-    task = Task(
-        description=(
-            f"Convert the following chapters into a complete HTML book for '{repo_name}'.\n\n"
-            f"{chapters_text[:CHAPTER_TEXT_TRUNCATION]}\n\n"
-            f"Produce a single HTML document. {_LANG_INSTRUCTION} "
-            "The document should have: title, table of contents, "
-            "each chapter as <section id=\"chapter-N\"> (where N is the chapter number), "
-            "code in <pre><code>, footer with date.\n\n"
-            "Table of contents format: use a nested <ul class=\"toc\"> tree. "
-            "Each chapter is a <li class=\"toc-item\"> with an <a href=\"#chapter-N\"> link. "
-            "Sections within a chapter are nested <ul class=\"toc-sub\"> lists with "
-            "<li><a> links to heading anchors. "
-            "Sub-sections nest further inside their parent <li>. "
-            "Example structure:\n"
-            "<ul class=\"toc\">\n"
-            "  <li class=\"toc-item\"><a href=\"#chapter-1\">Chapter 1: Title</a>\n"
-            "    <ul class=\"toc-sub\">\n"
-            "      <li><a href=\"#s1-1\">Section 1.1</a>\n"
-            "        <ul class=\"toc-sub\"><li><a href=\"#s1-1-1\">Sub 1.1.1</a></li></ul>\n"
-            "      </li>\n"
-            "    </ul>\n"
-            "  </li>\n"
-            "</ul>\n\n"
-            f"Use this CSS: {_BOOK_CSS}\n"
-            "Return ONLY the complete HTML document."
-        ),
-        expected_output="A complete, self-contained HTML book document.",
-        agent=editor,
-    )
-    crew = Crew(agents=[editor], tasks=[task], process=Process.sequential, verbose=True)
-    result = await _kickoff_with_retry(crew)
-    html_match = re.search(r"<!DOCTYPE html>.*?</html>", result, re.DOTALL | re.IGNORECASE)
-    if html_match: return html_match.group()
-    html_match = re.search(r"<html.*?</html>", result, re.DOTALL | re.IGNORECASE)
-    if html_match: return "<!DOCTYPE html>\n" + html_match.group()
-    return result
+    return full_html
 
 
 async def _run_cover_crew(repo_name: str, repo_description: str, outline: list[dict], repo_owner: str, review_feedback: str = "") -> str:
@@ -415,7 +571,8 @@ async def generate_book_plan(
     """
     _ensure_crewai()
     return await _run_planning_crew(
-        content_title, content_description, chapter_count, snapshot
+        content_title, content_description, chapter_count, snapshot,
+        target_words_per_chapter=settings.book_chapter_min_words,
     )
 
 
@@ -455,15 +612,18 @@ async def generate_book_cover(repo_id, repo_name, repo_description, readme_conte
 
     await status_updater("fetching")
     owner = repo_name.split("/")[0] if "/" in repo_name else ""
-    from app.services.github import fetch_key_files, fetch_top_issues
-    files = await fetch_key_files(repo_name)
+    from app.services.github import fetch_key_files, fetch_top_issues, measure_repo_scope
+    scope = await measure_repo_scope(repo_name)
+    dims = _plan_book_dimensions(scope)
+    files = await fetch_key_files(repo_name, max_files=dims["max_files"])
     issues = await fetch_top_issues(repo_name)
-    repo_info = {"repo_name": repo_name, "file_count": len(files)}
-    chapter_count = _determine_chapter_count(repo_info, files)
+    chapter_count = dims["chapter_count"]
+    target_words_per_chapter = dims["target_words_per_chapter"]
     snapshot = _build_textual_snapshot(readme_content, files, issues)
 
     await status_updater("planning", total_chapters=chapter_count, phase="planning")
-    outline = await _run_planning_crew(repo_name, repo_description, chapter_count, snapshot)
+    outline = await _run_planning_crew(repo_name, repo_description, chapter_count, snapshot,
+                                       target_words_per_chapter)
 
     await status_updater("cover", phase="cover")
     cover_html = await _run_cover_crew(repo_name, repo_description, outline, owner)
@@ -478,7 +638,8 @@ async def generate_book_cover(repo_id, repo_name, repo_description, readme_conte
 
     return {"outline": outline, "cover_html": cover_html, "snapshot": snapshot,
             "chapter_count": chapter_count, "repo_name": repo_name,
-            "cover_image_path": cover_image_path}
+            "cover_image_path": cover_image_path, "files": files,
+            "target_words_per_chapter": target_words_per_chapter}
 
 
 def _render_png_cover(repo_name: str, repo_description: str, owner: str, repo_id: str) -> str | None:
@@ -514,14 +675,21 @@ def _render_png_cover(repo_name: str, repo_description: str, owner: str, repo_id
 
 
 async def generate_book_content(repo_name: str, outline: list[dict], snapshot: str,
-                                 status_updater) -> dict:
+                                 files: dict[str, str] | None = None,
+                                 target_words_per_chapter: int | None = None,
+                                 status_updater=None) -> dict:
     _ensure_crewai()
+    if status_updater is None:
+        async def _noop(*args, **kwargs): pass
+        status_updater = _noop
+
+    tgt = target_words_per_chapter or settings.book_chapter_min_words
 
     await status_updater("writing", outline=outline, phase="writing")
-    chapters = await _run_chapters_parallel(repo_name, outline, snapshot)
+    chapters = await _run_chapters_parallel(repo_name, outline, snapshot, files, tgt)
 
     await status_updater("reviewing", completed_chapters=len(chapters), phase="reviewing")
-    chapters = await _run_review_crew(chapters, repo_name)
+    chapters = await _run_review_crew(chapters, repo_name, files)
 
     await status_updater("publishing", phase="publishing")
     html = await _run_editor_crew(chapters, repo_name)

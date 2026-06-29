@@ -132,6 +132,14 @@ const CONTENT_CSS = `
 
 const TAP_DETECT_SCRIPT = `(function(){var s=null;document.addEventListener('pointerdown',function(e){s={x:e.clientX,y:e.clientY,t:Date.now()}});document.addEventListener('pointerup',function(e){if(!s)return;var dx=e.clientX-s.x,dy=e.clientY-s.y,d=Math.sqrt(dx*dx+dy*dy),dt=Date.now()-s.t;s=null;if(dt>=300||d>=10)return;var w=window.innerWidth,h=window.innerHeight;if(e.clientX/w<0.3||e.clientX/w>0.7||e.clientY/h<0.3||e.clientY/h>0.7)return;parent.postMessage({type:'reader-center-tap'},'*')});})();`;
 
+// A srcdoc iframe's base URL is about:srcdoc, so any non-anchor link navigation destroys
+// the book. Intercept clicks: # anchors scroll natively, everything else opens in a new tab.
+// Relative repo paths are resolved to the source repo's blob URL when known.
+function buildLinkHandlerScript(repoBase: string | undefined): string {
+  const base = JSON.stringify(repoBase ? repoBase.replace(/\/+$/, "") : "");
+  return `(function(){var BASE=${base};document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&e.target.closest('a');if(!a)return;var href=a.getAttribute('href');if(!href)return;if(href.charAt(0)==='#')return;e.preventDefault();var url;if(/^[a-z][a-z0-9+.-]*:/i.test(href)){url=href;}else if(BASE){var p=href.replace(/^\\.?\\//,'');url=BASE+'/blob/HEAD/'+p;}else{return;}window.open(url,'_blank','noopener,noreferrer');});})();`;
+}
+
 function wrapCoverHtml(html: string): string {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>html,body{margin:0;padding:0;height:100%;overflow:hidden}body{display:flex;align-items:center;justify-content:center}</style>
@@ -178,10 +186,12 @@ export function HtmlReader({ book, onBookmarkReady, restoreAnchor }: HtmlReaderP
 
   const displayHtml = realHtml ? sanitizeHtml(realHtml) : "";
 
-  // Cover detection — extract and strip COVER_START/COVER_END markers
   let content = displayHtml;
   if (content) {
     content = content.replace(/<!--COVER_START-->[\s\S]*?<!--COVER_END-->/, "");
+    content = content.replace(/<ul class="toc">[\s\S]*?<\/ul>/, "");
+    content = content.replace(/<h1[^>]*>[^<]*\/[^<]*<\/h1>/, "");
+    content = content.replace(/Chapter (\d+): /g, "第$1章 ");
   }
 
   useLayoutEffect(() => {
@@ -288,7 +298,7 @@ export function HtmlReader({ book, onBookmarkReady, restoreAnchor }: HtmlReaderP
     }
   }, [showCover, tocItems, scrollToSection]);
 
-  const scopedHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${CONTENT_CSS}</style><script>${TAP_DETECT_SCRIPT}</script></head><body>${anchoredHtml}</body></html>`;
+  const scopedHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${CONTENT_CSS}</style><script>${TAP_DETECT_SCRIPT}</script><script>${buildLinkHandlerScript(book.sourceUrl)}</script></head><body>${anchoredHtml}</body></html>`;
 
   if (!loaded) {
     return (

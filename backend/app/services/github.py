@@ -1,11 +1,15 @@
 import httpx
 from datetime import datetime
+from collections import Counter
 
 from app.core.config import settings
 
 # Module-level shared client for connection pooling across all GitHub API calls.
 # Created lazily on first use; closed via shutdown event in main.py.
 _shared_client: httpx.AsyncClient | None = None
+
+# Priority file extensions used by fetch_key_files and measure_repo_scope.
+PRIORITY_EXTENSIONS = {".py", ".ts", ".tsx", ".js", ".go", ".rs", ".md", ".yml", ".yaml", ".toml"}
 
 
 def _get_client() -> httpx.AsyncClient:
@@ -92,6 +96,43 @@ async def fetch_repo_tree(full_name: str) -> list[dict]:
     ]
 
 
+async def measure_repo_scope(full_name: str) -> dict:
+    tree = await fetch_repo_tree(full_name)
+    total_files = len(tree)
+
+    code_files_list = [
+        f for f in tree
+        if any(f["path"].endswith(ext) for ext in PRIORITY_EXTENSIONS)
+    ]
+    code_files = len(code_files_list)
+    total_bytes = sum(f.get("size") or 0 for f in code_files_list)
+    est_loc = total_bytes // 40
+
+    dirs: set[str] = set()
+    top_segments: Counter[str] = Counter()
+    lang_counter: Counter[str] = Counter()
+
+    for f in code_files_list:
+        p = f["path"]
+        if "/" in p:
+            dirs.add(p.rsplit("/", 1)[0])
+            top_segments[p.split("/", 1)[0]] += 1
+        else:
+            top_segments["."] += 1
+        ext = next(e for e in PRIORITY_EXTENSIONS if p.endswith(e))
+        lang_counter[ext] += 1
+
+    return {
+        "total_files": total_files,
+        "code_files": code_files,
+        "total_bytes": total_bytes,
+        "est_loc": est_loc,
+        "dir_count": len(dirs),
+        "top_dirs": [seg for seg, _ in top_segments.most_common(10)],
+        "language_mix": dict(lang_counter),
+    }
+
+
 async def fetch_file_content(full_name: str, path: str) -> str | None:
     url = f"{settings.github_api_base}/repos/{full_name}/contents/{path}"
     headers = {"Accept": "application/vnd.github.raw+json"}
@@ -105,21 +146,81 @@ async def fetch_file_content(full_name: str, path: str) -> str | None:
     return resp.text
 
 
-async def fetch_key_files(full_name: str) -> dict[str, str]:
+def _relevance_score(path: str, size: int) -> float:
+    """Rank a file's relevance for code analysis (higher = more valuable to read)."""
+    score = 0.0
+
+    filename = path.rsplit("/", 1)[-1] if "/" in path else path
+    segments = path.split("/")
+    lower_path = path.lower()
+    path_segments = lower_path.split("/")
+
+    # +++ BOOSTS +++
+
+    # Entrypoint filenames — these are the most valuable files to understand a project
+    if any(filename.startswith(p) for p in ("main.", "app.", "index.", "cli.")):
+        score += 50
+    if filename in ("__init__.py", "lib.rs", "mod.rs"):
+        score += 50
+
+    # Shallow paths — fewer segments = closer to root = more likely structural
+    score += max(0, 10 - len(segments)) * 5
+
+    # Files under core source directories
+    if segments[0] in {"src", "app", "lib", "pkg", "internal"}:
+        score += 20
+
+    # README and top-level markdown
+    if filename.upper() == "README" or (path.endswith(".md") and len(segments) == 1):
+        score += 15
+
+    # --- PENALTIES ---
+
+    # Tests, fixtures, mocks, examples, e2e
+    test_keywords = {"test", "tests", "__tests__", "spec", "fixture", "mock",
+                     "example", "examples", "e2e"}
+    if any(seg in test_keywords for seg in path_segments):
+        score -= 30
+
+    # Generated / vendored directories
+    generated_dirs = {"dist", "build", "node_modules", "vendor", "__pycache__",
+                      "migrations"}
+    if any(seg in generated_dirs for seg in path_segments):
+        score -= 20
+    if ".min." in lower_path or ".generated." in lower_path:
+        score -= 20
+
+    # Lockfiles — almost never useful for analysis
+    if path.endswith(".lock") or filename in (
+        "package-lock.json", "poetry.lock", "uv.lock", "yarn.lock", "Cargo.lock"
+    ):
+        score -= 100
+
+    # Very large single files are unlikely to be useful as a whole
+    if size > 50000:
+        score -= 20
+
+    return score
+
+
+async def fetch_key_files(full_name: str, max_files: int | None = None) -> dict[str, str]:
     tree = await fetch_repo_tree(full_name)
     if not tree:
         return {}
 
-    priority_extensions = {".py", ".ts", ".tsx", ".js", ".go", ".rs", ".md", ".yml", ".yaml", ".toml"}
     max_size = 100000
 
     files = [
         f for f in tree
-        if any(f["path"].endswith(ext) for ext in priority_extensions)
+        if any(f["path"].endswith(ext) for ext in PRIORITY_EXTENSIONS)
         and (f.get("size") or 0) < max_size
     ]
-    files.sort(key=lambda f: f.get("size") or 0, reverse=True)
-    files = files[:settings.book_max_files_to_fetch]
+    files.sort(
+        key=lambda f: _relevance_score(f["path"], f.get("size") or 0),
+        reverse=True,
+    )
+    limit = max_files if max_files is not None else settings.book_max_files_to_fetch
+    files = files[:limit]
 
     result = {}
     client = _get_client()

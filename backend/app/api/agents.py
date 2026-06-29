@@ -84,6 +84,8 @@ async def _run_book_pipeline(
         snapshot = cover_result["snapshot"]
         cover_html = cover_result["cover_html"]
         cover_image_path = cover_result.get("cover_image_path")
+        files = cover_result.get("files", {})
+        target_words_per_chapter = cover_result.get("target_words_per_chapter")
 
         async with async_session() as session:
             gen_result = await session.execute(
@@ -111,7 +113,8 @@ async def _run_book_pipeline(
         })
 
         content_result = await generate_book_content(
-            repo_name, outline, snapshot, update_status
+            repo_name, outline, snapshot, status_updater=update_status,
+            files=files, target_words_per_chapter=target_words_per_chapter,
         )
 
         chapters = content_result["chapters"]
