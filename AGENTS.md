@@ -56,6 +56,18 @@ rule below links to the relevant section.
 
 6. **Never commit unless explicitly requested.**
 
+7. **Clean test books after every e2e test run** — E2E tests create books (imported files,
+   demo repos) that accumulate in the database and `data/` directories. After ANY `pnpm
+   test:e2e` run (full suite or single spec), clean up test data immediately so the shelf
+   stays clean for the next run. Running tests on a dirty shelf causes flakes and pollutes
+   the database.
+   - **How to clean**: from `backend/`, run `uv run python scripts/cleanup_test_books.py`.
+     The backend must be running on `8000` for the API-based cleanup to work.
+   - **Convenience script**: from `frontend/`, `pnpm test:e2e:clean` runs cleanup via curl
+     (requires backend on `8000`) and is available as a standalone command.
+   - See [README → E2E Tests](./README.md#e2e-tests--playwright) and
+     `backend/scripts/cleanup_test_books.py` for details.
+
 ---
 
 ## Delegation — HARD RULE
@@ -94,6 +106,7 @@ rule below links to the relevant section.
 - New features get Playwright tests covering happy path, edge cases, and error states.
 - For visual verification, use `console.log` + `innerText()` — do not rely on screenshots
   alone. Full practices: [README → Smoke Test Practices](./README.md#smoke-test-practices).
+- **Clean test books after every e2e run** — see Hard Rule #7.
 
 ### Security (backend is hardened — keep it that way)
 - The backend enforces SSRF blocking, upload caps, extension whitelist, path-traversal

@@ -8,7 +8,8 @@
     "build:local": "VITE_DATA_SOURCE=local vite build",
     "dev": "vite",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:clean": "curl -s http://localhost:8000/api/books?limit=500 | python3 -c \"import sys,json,urllib.request; books=json.load(sys.stdin); [urllib.request.urlopen(urllib.request.Request(f'http://localhost:8000/api/books/{b[\\\"repo_id\\\"]}', method='DELETE')) for b in books]\" && echo 'All books cleaned.'"
   },
   "dependencies": {
     "@embedpdf/pdfium": "2.14.4",
