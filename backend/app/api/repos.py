@@ -5,6 +5,7 @@ from sqlalchemy import select, func, delete
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
+from app.core.tag_policy import normalize_tags
 from app.api.schemas import (
     RepoAddRequest,
     RepoUpdateRequest,
@@ -15,6 +16,7 @@ from app.api.schemas import (
     SectionResponse,
 )
 from app.models.repo import Repo, ReadingProgress, ContentSection, BookGeneration
+from app.models.category import TAG_GENERATED
 from app.services.github import fetch_repo_info, fetch_readme
 from app.services.file_storage import save_readme, load_readme, has_readme, delete_repo_content, delete_book_content
 
@@ -115,6 +117,7 @@ async def add_repo(body: RepoAddRequest, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Repo not found on GitHub")
 
     repo = Repo(**info)
+    repo.tags = normalize_tags([TAG_GENERATED])
     db.add(repo)
     await db.commit()
     await db.refresh(repo)

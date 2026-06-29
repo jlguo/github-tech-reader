@@ -93,10 +93,10 @@ export const BookDetailModal = memo(function BookDetailModal({ book, onClose, on
         return;
       }
 
-      const { html_content } =
-        book.category === "generated"
-          ? await svc.getBookByRepo(book.id)
-          : await svc.getBookContent(book.id);
+      const isRepoBook = book.sourceType === "github" || book.sourceType === "youtube";
+      const { html_content } = isRepoBook
+        ? await svc.getBookByRepo(book.id)
+        : await svc.getBookContent(book.id);
       if (!html_content) throw new Error("内容不可用");
       triggerBlobDownload(
         new Blob([html_content], { type: "text/html;charset=utf-8" }),
