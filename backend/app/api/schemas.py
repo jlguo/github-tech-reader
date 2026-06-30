@@ -92,6 +92,8 @@ class BookGenerationStatusResponse(BaseModel):
     current_phase: str | None
     total_chapters: int
     completed_chapters: int
+    phase_items_total: int
+    phase_items_completed: int
     error_log: str | None
     updated_at: datetime
 

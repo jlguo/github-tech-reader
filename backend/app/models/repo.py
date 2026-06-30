@@ -88,6 +88,8 @@ class BookGeneration(Base):
     )
     total_chapters: Mapped[int] = mapped_column(Integer, default=0)
     completed_chapters: Mapped[int] = mapped_column(Integer, default=0)
+    phase_items_total: Mapped[int] = mapped_column(Integer, default=0)
+    phase_items_completed: Mapped[int] = mapped_column(Integer, default=0)
     current_phase: Mapped[str | None] = mapped_column(String(64), nullable=True)
     outline: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     cover_path: Mapped[str | None] = mapped_column(String(512), nullable=True)

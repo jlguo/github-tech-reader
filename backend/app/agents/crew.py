@@ -309,9 +309,11 @@ async def _run_chapter_research_writer(repo_name, chapter, snapshot, files: dict
 
 
 async def _run_chapters_parallel(repo_name, outline, snapshot,
-                                 files: dict[str, str] | None = None,
-                                 target_words_per_chapter: int | None = None) -> list[dict]:
+                                  files: dict[str, str] | None = None,
+                                  target_words_per_chapter: int | None = None,
+                                  status_updater=None) -> list[dict]:
     sem = _get_chapter_sem()
+    total = len(outline)
 
     async def _chapter_with_limit(ch):
         async with sem:
@@ -330,11 +332,14 @@ async def _run_chapters_parallel(repo_name, outline, snapshot,
                             "files_to_analyze": outline[i].get("files_to_analyze", [])})
         else:
             chapters.append(result)
+        if status_updater:
+            await status_updater("writing", completed_chapters=i + 1, total_chapters=total,
+                               phase="writing", phase_items_total=total, phase_items_completed=i + 1)
     chapters.sort(key=lambda c: c["number"])
     return chapters
 
 
-async def _run_review_crew(chapters, repo_name, files: dict[str, str] | None = None) -> list[dict]:
+async def _run_review_crew(chapters, repo_name, files: dict[str, str] | None = None, status_updater=None) -> list[dict]:
     _ensure_crewai()
     reviewer = _make_agent(
         role="Technical Reviewer",
@@ -414,13 +419,17 @@ async def _run_review_crew(chapters, repo_name, files: dict[str, str] | None = N
     tasks = [_review_one(ch) for ch in chapters]
     results = await asyncio.gather(*tasks, return_exceptions=True)
     out = []
-    for original, result in zip(chapters, results):
+    total = len(chapters)
+    for i, (original, result) in enumerate(zip(chapters, results)):
         if isinstance(result, Exception):
             logger.warning("Review failed for chapter %s: %s — keeping original",
                            original.get("number", "?"), result)
             out.append(original)
         else:
             out.append(result)
+        if status_updater:
+            await status_updater("reviewing", completed_chapters=i + 1, total_chapters=total,
+                               phase="reviewing", phase_items_total=total, phase_items_completed=i + 1)
     return out
 
 
@@ -610,22 +619,27 @@ async def _run_cover_review_crew(repo_name: str, cover_html: str) -> str:
 async def generate_book_cover(repo_id, repo_name, repo_description, readme_content, status_updater) -> dict:
     _ensure_crewai()
 
-    await status_updater("fetching")
+    await status_updater("fetching", phase_items_total=0, phase_items_completed=0)
     owner = repo_name.split("/")[0] if "/" in repo_name else ""
     from app.services.github import fetch_key_files, fetch_top_issues, measure_repo_scope
     scope = await measure_repo_scope(repo_name)
     dims = _plan_book_dimensions(scope)
-    files = await fetch_key_files(repo_name, max_files=dims["max_files"])
+
+    async def _fetch_progress(phase_items_total, phase_items_completed):
+        await status_updater("fetching", phase_items_total=phase_items_total, phase_items_completed=phase_items_completed)
+
+    files = await fetch_key_files(repo_name, max_files=dims["max_files"], progress_callback=_fetch_progress)
     issues = await fetch_top_issues(repo_name)
     chapter_count = dims["chapter_count"]
     target_words_per_chapter = dims["target_words_per_chapter"]
     snapshot = _build_textual_snapshot(readme_content, files, issues)
 
-    await status_updater("planning", total_chapters=chapter_count, phase="planning")
+    await status_updater("planning", total_chapters=chapter_count, phase="planning", phase_items_total=1, phase_items_completed=0)
     outline = await _run_planning_crew(repo_name, repo_description, chapter_count, snapshot,
                                        target_words_per_chapter)
+    await status_updater("planning", total_chapters=chapter_count, phase="planning", phase_items_total=1, phase_items_completed=1)
 
-    await status_updater("cover", phase="cover")
+    await status_updater("cover", phase="cover", phase_items_total=1, phase_items_completed=0)
     cover_html = await _run_cover_crew(repo_name, repo_description, outline, owner)
 
     if cover_html:
@@ -634,6 +648,7 @@ async def generate_book_cover(repo_id, repo_name, repo_description, readme_conte
             logger.info("Cover review found issues: %s", review_feedback[:100])
             cover_html = await _run_cover_crew(repo_name, repo_description, outline, owner, review_feedback)
 
+    await status_updater("cover", phase="cover", phase_items_total=1, phase_items_completed=1)
     cover_image_path = _render_png_cover(repo_name, repo_description, owner, repo_id)
 
     return {"outline": outline, "cover_html": cover_html, "snapshot": snapshot,
@@ -685,13 +700,14 @@ async def generate_book_content(repo_name: str, outline: list[dict], snapshot: s
 
     tgt = target_words_per_chapter or settings.book_chapter_min_words
 
-    await status_updater("writing", outline=outline, phase="writing")
-    chapters = await _run_chapters_parallel(repo_name, outline, snapshot, files, tgt)
+    await status_updater("writing", outline=outline, phase="writing", phase_items_total=len(outline), phase_items_completed=0)
+    chapters = await _run_chapters_parallel(repo_name, outline, snapshot, files, tgt, status_updater)
 
-    await status_updater("reviewing", completed_chapters=len(chapters), phase="reviewing")
-    chapters = await _run_review_crew(chapters, repo_name, files)
+    await status_updater("reviewing", completed_chapters=len(chapters), phase="reviewing", phase_items_total=len(chapters), phase_items_completed=0)
+    chapters = await _run_review_crew(chapters, repo_name, files, status_updater)
 
-    await status_updater("publishing", phase="publishing")
+    await status_updater("publishing", phase="publishing", phase_items_total=len(chapters), phase_items_completed=0)
     html = await _run_editor_crew(chapters, repo_name)
+    await status_updater("publishing", phase="publishing", phase_items_total=len(chapters), phase_items_completed=len(chapters))
 
     return {"chapters": chapters, "html": html}

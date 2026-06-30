@@ -76,6 +76,8 @@ export interface BookGenStatus {
   current_phase: string | null;
   total_chapters: number;
   completed_chapters: number;
+  phase_items_total: number;
+  phase_items_completed: number;
 }
 
 export interface AddRepoResult {

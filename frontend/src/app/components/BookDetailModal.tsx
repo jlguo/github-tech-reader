@@ -6,6 +6,19 @@ import { useBookStatus, isProducing as checkIsProducing } from "../hooks/useBook
 import { getDataService } from "../../services/api";
 import { isSystemTag } from "../../services/tagPolicy";
 
+const PHASE_BASE_PROGRESS: Record<string, number> = {
+  pending: 0,
+  fetching: 5,
+  planning: 15,
+  cover: 25,
+  writing: 30,
+  reviewing: 90,
+  publishing: 95,
+  done: 100,
+  failed: 0,
+  no_book: 0,
+};
+
 const PHASE_LABELS: Record<string, string> = {
   pending: "准备生成...",
   fetching: "正在获取仓库文件...",
@@ -74,6 +87,10 @@ export const BookDetailModal = memo(function BookDetailModal({ book, onClose, on
   const effectiveStatus = liveStatus?.status ?? book.genStatus;
   const effectivePhase = liveStatus?.current_phase ?? undefined;
   const producing = checkIsProducing(effectiveStatus);
+  const genProgress =
+    producing && liveStatus && liveStatus.phase_items_total > 0
+      ? Math.round((liveStatus.phase_items_completed / liveStatus.phase_items_total) * 100)
+      : 0;
 
   const handleDownload = async () => {
     if (downloading || producing) return;
@@ -173,12 +190,27 @@ export const BookDetailModal = memo(function BookDetailModal({ book, onClose, on
               <button
                 onClick={() => onRead?.(book)}
                 disabled={producing}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{ background: "var(--primary)", color: "var(--primary-foreground)", fontFamily: "Inter, sans-serif" }}
+                className="relative flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed overflow-hidden"
+                style={{ background: producing ? "var(--muted)" : "var(--primary)", fontFamily: "Inter, sans-serif" }}
                 data-testid="book-detail-read"
               >
-                <BookOpen size={14} />
-                {producing ? (effectivePhase && PHASE_LABELS[effectivePhase]) || "生成中..." : book.progress === 0 ? "开始阅读" : book.progress === 100 ? "重新阅读" : "继续阅读"}
+                {producing && (
+                  <div
+                    className="absolute inset-y-0 left-0 transition-all duration-500"
+                    style={{
+                      width: `${genProgress}%`,
+                      background: "var(--primary)",
+                    }}
+                  />
+                )}
+                <div className="relative flex items-center gap-1.5" style={{ color: "var(--primary-foreground)" }}>
+                  <BookOpen size={14} />
+                  {producing
+                    ? `${(effectivePhase && PHASE_LABELS[effectivePhase]) || "生成中..."} (${genProgress}%)`
+                    : book.progress === 0 ? "开始阅读"
+                    : book.progress === 100 ? "重新阅读"
+                    : "继续阅读"}
+                </div>
               </button>
               {!book.isDemo && !producing && (effectiveStatus === "no_book" || effectiveStatus === undefined || effectiveStatus === "failed") && (
                 <button

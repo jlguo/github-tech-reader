@@ -203,7 +203,7 @@ def _relevance_score(path: str, size: int) -> float:
     return score
 
 
-async def fetch_key_files(full_name: str, max_files: int | None = None) -> dict[str, str]:
+async def fetch_key_files(full_name: str, max_files: int | None = None, progress_callback=None) -> dict[str, str]:
     tree = await fetch_repo_tree(full_name)
     if not tree:
         return {}
@@ -222,9 +222,12 @@ async def fetch_key_files(full_name: str, max_files: int | None = None) -> dict[
     limit = max_files if max_files is not None else settings.book_max_files_to_fetch
     files = files[:limit]
 
+    if progress_callback:
+        await progress_callback(phase_items_total=len(files), phase_items_completed=0)
+
     result = {}
     client = _get_client()
-    for f in files:
+    for i, f in enumerate(files):
         url = f"{settings.github_api_base}/repos/{full_name}/contents/{f['path']}"
         headers = {"Accept": "application/vnd.github.raw+json"}
         if settings.github_token:
@@ -232,6 +235,8 @@ async def fetch_key_files(full_name: str, max_files: int | None = None) -> dict[
         resp = await client.get(url, headers=headers)
         if resp.status_code == 200:
             result[f["path"]] = resp.text
+        if progress_callback:
+            await progress_callback(phase_items_total=len(files), phase_items_completed=i + 1)
     return result
 
 
